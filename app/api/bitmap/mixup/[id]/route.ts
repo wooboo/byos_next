@@ -1,5 +1,7 @@
+import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import sharp from "sharp";
+import { auth } from "@/lib/auth/auth";
 import { db } from "@/lib/database/db";
 import { withExplicitUserScope } from "@/lib/database/scoped-db";
 import { checkDbConnection } from "@/lib/database/utils";
@@ -32,7 +34,7 @@ export async function GET(
 		const height = heightParam
 			? parseInt(heightParam, 10)
 			: DEFAULT_IMAGE_HEIGHT;
-		const grayscaleLevels = grayscaleParam ? parseInt(grayscaleParam, 10) : 2;
+		const grayscaleLevels = grayscaleParam ? parseInt(grayscaleParam, 10) : 16;
 
 		const { ready } = await checkDbConnection();
 		if (!ready) {
@@ -40,46 +42,77 @@ export async function GET(
 			return new Response("Database not available", { status: 503 });
 		}
 
-		if (!accessToken) {
+		let userId: string | null = null;
+
+		// Try device API key first
+		if (accessToken) {
+			const device = await db
+				.selectFrom("devices")
+				.select(["user_id", "mixup_id"])
+				.where("api_key", "=", accessToken)
+				.executeTakeFirst();
+
+			if (!device || device.mixup_id !== mixupId || !device.user_id) {
+				return new Response("Mixup not found", { status: 404 });
+			}
+			userId = device.user_id;
+		} else if (auth) {
+			// Fallback: session-based auth (web UI preview)
+			const session = await auth.api.getSession({
+				headers: await headers(),
+			});
+			if (!session?.user?.id) {
+				return new Response("Access token is required", { status: 401 });
+			}
+			// Verify the mixup belongs to this user
+			const mixup = await db
+				.selectFrom("mixups")
+				.select(["user_id"])
+				.where("id", "=", mixupId)
+				.executeTakeFirst();
+			if (!mixup || mixup.user_id !== session.user.id) {
+				return new Response("Mixup not found", { status: 404 });
+			}
+			userId = session.user.id;
+		} else if (process.env.AUTH_ENABLED === "false") {
+			// Auth disabled (mono-user dev mode): allow any mixup access
+			const mixup = await db
+				.selectFrom("mixups")
+				.select(["user_id"])
+				.where("id", "=", mixupId)
+				.executeTakeFirst();
+			if (!mixup || !mixup.user_id) {
+				return new Response("Mixup not found", { status: 404 });
+			}
+			userId = mixup.user_id;
+		} else {
 			return new Response("Access token is required", { status: 401 });
 		}
 
-		const device = await db
-			.selectFrom("devices")
-			.select(["user_id", "mixup_id"])
-			.where("api_key", "=", accessToken)
-			.executeTakeFirst();
-
-		if (!device || device.mixup_id !== mixupId || !device.user_id) {
-			return new Response("Mixup not found", { status: 404 });
-		}
-
 		// Fetch mixup and its slots (join with recipes to get slug)
-		const [mixup, slots] = await withExplicitUserScope(
-			device.user_id,
-			(scopedDb) =>
-				Promise.all([
-					scopedDb
-						.selectFrom("mixups")
-						.selectAll()
-						.where("id", "=", mixupId)
-						.executeTakeFirst(),
-					scopedDb
-						.selectFrom("mixup_slots")
-						.leftJoin("recipes", "recipes.id", "mixup_slots.recipe_id")
-						.select([
-							"mixup_slots.id",
-							"mixup_slots.mixup_id",
-							"mixup_slots.slot_id",
-							"mixup_slots.recipe_slug",
-							"mixup_slots.recipe_id",
-							"mixup_slots.order_index",
-							"recipes.slug as resolved_slug",
-						])
-						.where("mixup_slots.mixup_id", "=", mixupId)
-						.orderBy("mixup_slots.order_index", "asc")
-						.execute(),
-				]),
+		const [mixup, slots] = await withExplicitUserScope(userId!, (scopedDb) =>
+			Promise.all([
+				scopedDb
+					.selectFrom("mixups")
+					.selectAll()
+					.where("id", "=", mixupId)
+					.executeTakeFirst(),
+				scopedDb
+					.selectFrom("mixup_slots")
+					.leftJoin("recipes", "recipes.id", "mixup_slots.recipe_id")
+					.select([
+						"mixup_slots.id",
+						"mixup_slots.mixup_id",
+						"mixup_slots.slot_id",
+						"mixup_slots.recipe_slug",
+						"mixup_slots.recipe_id",
+						"mixup_slots.order_index",
+						"recipes.slug as resolved_slug",
+					])
+					.where("mixup_slots.mixup_id", "=", mixupId)
+					.orderBy("mixup_slots.order_index", "asc")
+					.execute(),
+			]),
 		);
 
 		if (!mixup) {
@@ -110,7 +143,7 @@ export async function GET(
 			width,
 			height,
 			grayscaleLevels,
-			device.user_id,
+			userId!,
 		);
 
 		return new Response(new Uint8Array(compositeBuffer), {

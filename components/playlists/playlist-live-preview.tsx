@@ -3,6 +3,7 @@
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
+import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import { Button } from "@/components/ui/button";
 import {
 	DEFAULT_IMAGE_HEIGHT,
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils";
 export interface PreviewFrame {
 	id: string;
 	screen_id: string;
+	screen_type?: string;
 	duration: number;
 	label: string;
 }
@@ -106,11 +108,21 @@ export function PlaylistLivePreview({
 					) : (
 						<picture key={active.id}>
 							<source
-								srcSet={`/api/bitmap/${active.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
+								srcSet={playlistFrameBmpUrl(
+									active.screen_id,
+									active.screen_type,
+									DEFAULT_IMAGE_WIDTH,
+									DEFAULT_IMAGE_HEIGHT,
+								)}
 								type="image/bmp"
 							/>
 							<img
-								src={`/api/bitmap/${active.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
+								src={playlistFrameBmpUrl(
+									active.screen_id,
+									active.screen_type,
+									DEFAULT_IMAGE_WIDTH,
+									DEFAULT_IMAGE_HEIGHT,
+								)}
 								alt={active.label}
 								width={DEFAULT_IMAGE_WIDTH}
 								height={DEFAULT_IMAGE_HEIGHT}

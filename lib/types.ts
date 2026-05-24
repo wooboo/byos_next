@@ -60,6 +60,7 @@ export type PlaylistItem = {
 	id: string;
 	playlist_id: string | null;
 	screen_id: string;
+	screen_type: string;
 	duration: number;
 	start_time: string | null;
 	end_time: string | null;

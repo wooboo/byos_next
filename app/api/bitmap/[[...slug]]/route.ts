@@ -38,7 +38,7 @@ export async function GET(
 		// Validate width and height are positive numbers
 		const validWidth = width > 0 ? width : DEFAULT_IMAGE_WIDTH;
 		const validHeight = height > 0 ? height : DEFAULT_IMAGE_HEIGHT;
-		const grayscaleLevels = grayscaleParam ? parseInt(grayscaleParam, 10) : 2;
+		const grayscaleLevels = grayscaleParam ? parseInt(grayscaleParam, 10) : 16;
 
 		logger.info(
 			`Bitmap request for: ${bitmapPath} in ${validWidth}x${validHeight} with ${grayscaleLevels} gray levels`,
@@ -92,7 +92,7 @@ const renderRecipeBitmap = cache(
 		recipeId: string,
 		width: number,
 		height: number,
-		grayscaleLevels: number = 2,
+		grayscaleLevels: number = 16,
 		userId: string | null = null,
 		cookies?: string,
 	) => {

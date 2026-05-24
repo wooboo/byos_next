@@ -190,6 +190,7 @@ export async function createPlaylistItem(
 				.insertInto("playlist_items")
 				.values({
 					playlist_id: playlistId,
+					screen_type: item.screen_type || "recipe",
 					screen_id: item.screen_id,
 					duration: item.duration,
 					start_time: item.start_time,
@@ -289,6 +290,7 @@ export async function savePlaylistWithItems(playlistData: {
 	items: Array<{
 		id?: string;
 		screen_id: string;
+		screen_type?: string;
 		duration: number;
 		order_index: number;
 		start_time?: string;
@@ -343,6 +345,7 @@ export async function savePlaylistWithItems(playlistData: {
 			if (playlistData.items.length > 0) {
 				const itemsToInsert = playlistData.items.map((item) => ({
 					playlist_id: playlistId,
+					screen_type: item.screen_type || "recipe",
 					screen_id: item.screen_id,
 					duration: item.duration,
 					start_time: item.start_time || null,

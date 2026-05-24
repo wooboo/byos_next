@@ -344,7 +344,7 @@ export const renderRecipeOutputs = cache(
 		if (needsBitmap) {
 			try {
 				results.bitmap = await renderBmp(pngBuffer, {
-					ditheringMethod: DitheringMethod.FLOYD_STEINBERG,
+					ditheringMethod: DitheringMethod.JARVIS_JUDICE_NINKE,
 					width: imageWidth,
 					height: imageHeight,
 					applyEdgeSnap: config?.renderSettings?.applyEdgeSnap ?? true,

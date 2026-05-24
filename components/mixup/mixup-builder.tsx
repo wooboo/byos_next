@@ -271,11 +271,11 @@ export function MixupBuilder({
 												{recipe ? (
 													<picture>
 														<source
-															srcSet={`/api/bitmap/${recipe.slug}.bmp?width=${slot.width}&height=${slot.height}`}
+															srcSet={`/api/bitmap/${recipe.slug}.bmp?width=${slot.width}&height=${slot.height}&grayscale=16`}
 															type="image/bmp"
 														/>
 														<img
-															src={`/api/bitmap/${recipe.slug}.bmp`}
+															src={`/api/bitmap/${recipe.slug}.bmp?grayscale=16`}
 															alt={`${recipe.title} preview`}
 															className="absolute inset-0 h-full w-full object-cover"
 															style={{ imageRendering: "pixelated" }}

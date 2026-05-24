@@ -148,7 +148,9 @@
 			"name": "rbouteiller",
 			"github": ""
 		},
-		"renderSettings": {},
+		"renderSettings": {
+			"doubleSizeForSharperText": true
+		},
 		"version": "0.1.0",
 		"category": "display-components"
 	},
@@ -168,6 +170,112 @@
 			"github": ""
 		},
 		"renderSettings": {},
+		"version": "0.1.0",
+		"category": "display-components"
+	},
+	"calibration-square": {
+		"title": "Kalibracja — Kwadrat",
+		"published": true,
+		"createdAt": "2026-05-23T00:00:00Z",
+		"updatedAt": "2026-05-23T00:00:00Z",
+		"description": "Biały kwadrat 200×200px na czarnym tle do kalibracji aspect ratio.",
+		"componentPath": "./screens/calibration-square",
+		"hasDataFetch": false,
+		"props": {},
+		"params": {},
+		"tags": ["calibration", "utility"],
+		"author": {
+			"name": "wooboo",
+			"github": ""
+		},
+		"renderSettings": {},
+		"version": "0.1.0",
+		"category": "display-components"
+	},
+	"calendar-monthly": {
+		"title": "Kalendarz — Miesiąc",
+		"published": true,
+		"createdAt": "2026-05-24T00:00:00Z",
+		"updatedAt": "2026-05-24T00:00:00Z",
+		"description": "Widok miesięczny kalendarza z Nextcloud (ICS). Podaj URL pliku .ics w parametrach.",
+		"componentPath": "./screens/calendar-monthly",
+		"hasDataFetch": true,
+		"props": {},
+		"params": {
+			"icsUrl": {
+				"type": "string",
+				"label": "ICS URL(e)",
+				"description": "Link(i) do .ics z Nextcloud. Można podać kilka oddzielonych przecinkiem.",
+				"default": "",
+				"placeholder": "https://..."
+			}
+		},
+		"tags": ["calendar", "ics"],
+		"author": {
+			"name": "wooboo",
+			"github": ""
+		},
+		"renderSettings": {
+			"doubleSizeForSharperText": true
+		},
+		"version": "0.1.0",
+		"category": "display-components"
+	},
+	"calendar-weekly": {
+		"title": "Kalendarz — Tydzień",
+		"published": true,
+		"createdAt": "2026-05-24T00:00:00Z",
+		"updatedAt": "2026-05-24T00:00:00Z",
+		"description": "Widok tygodniowy kalendarza z Nextcloud (ICS). Podaj URL pliku .ics w parametrach.",
+		"componentPath": "./screens/calendar-weekly",
+		"hasDataFetch": true,
+		"props": {},
+		"params": {
+			"icsUrl": {
+				"type": "string",
+				"label": "ICS URL(e)",
+				"description": "Link(i) do .ics z Nextcloud. Można podać kilka oddzielonych przecinkiem.",
+				"default": "",
+				"placeholder": "https://..."
+			}
+		},
+		"tags": ["calendar", "ics"],
+		"author": {
+			"name": "wooboo",
+			"github": ""
+		},
+		"renderSettings": {
+			"doubleSizeForSharperText": true
+		},
+		"version": "0.1.0",
+		"category": "display-components"
+	},
+	"calendar-daily": {
+		"title": "Kalendarz — Dzień",
+		"published": true,
+		"createdAt": "2026-05-24T00:00:00Z",
+		"updatedAt": "2026-05-24T00:00:00Z",
+		"description": "Widok dzienny kalendarza z Nextcloud (ICS). Podaj URL pliku .ics w parametrach.",
+		"componentPath": "./screens/calendar-daily",
+		"hasDataFetch": true,
+		"props": {},
+		"params": {
+			"icsUrl": {
+				"type": "string",
+				"label": "ICS URL(e)",
+				"description": "Link(i) do .ics z Nextcloud. Można podać kilka oddzielonych przecinkiem.",
+				"default": "",
+				"placeholder": "https://..."
+			}
+		},
+		"tags": ["calendar", "ics"],
+		"author": {
+			"name": "wooboo",
+			"github": ""
+		},
+		"renderSettings": {
+			"doubleSizeForSharperText": true
+		},
 		"version": "0.1.0",
 		"category": "display-components"
 	},

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchPlaylistWithItems } from "@/app/actions/playlist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { Recipe } from "@/lib/types";
+import type { Mixup, Recipe } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { PlaylistFilmstrip } from "./playlist-filmstrip";
 import {
@@ -21,6 +21,7 @@ interface PlaylistBuilderProps {
 		items?: FrameData[];
 	};
 	recipes: Recipe[];
+	mixups: Mixup[];
 	onSave: (data: { id?: string; name: string; items: FrameData[] }) => void;
 	onCancel: () => void;
 	isSaving?: boolean;
@@ -29,6 +30,7 @@ interface PlaylistBuilderProps {
 export function PlaylistBuilder({
 	playlist,
 	recipes,
+	mixups,
 	onSave,
 	onCancel,
 	isSaving = false,
@@ -39,15 +41,37 @@ export function PlaylistBuilder({
 	const [isLoading, setIsLoading] = useState(false);
 
 	const screenOptions = useMemo(
-		() => recipes.map((r) => ({ id: r.slug, name: r.name })),
-		[recipes],
+		() => [
+			{
+				label: "Recipes",
+				options: recipes.map((r) => ({
+					id: r.slug,
+					name: r.name,
+					type: "recipe" as const,
+				})),
+			},
+			...(mixups.length > 0
+				? [
+						{
+							label: "Mixups",
+							options: mixups.map((m) => ({
+								id: m.id,
+								name: m.name,
+								type: "mixup" as const,
+							})),
+						},
+					]
+				: []),
+		],
+		[recipes, mixups],
 	);
 
 	const nameByScreenId = useMemo(() => {
 		const map = new Map<string, string>();
 		for (const r of recipes) map.set(r.slug, r.name);
+		for (const m of mixups) map.set(m.id, m.name);
 		return map;
-	}, [recipes]);
+	}, [recipes, mixups]);
 
 	// Hydrate items if editing and we don't have them yet
 	useEffect(() => {
@@ -87,6 +111,7 @@ export function PlaylistBuilder({
 		const newItem: FrameData = {
 			id: `temp-${Date.now()}`,
 			screen_id: defaultSlug,
+			screen_type: "recipe",
 			duration: 30,
 			order_index: items.length,
 			start_time: undefined,
@@ -135,6 +160,7 @@ export function PlaylistBuilder({
 	const previewFrames = items.map((item) => ({
 		id: item.id,
 		screen_id: item.screen_id,
+		screen_type: item.screen_type,
 		duration: item.duration,
 		label: nameByScreenId.get(item.screen_id) || item.screen_id,
 	}));

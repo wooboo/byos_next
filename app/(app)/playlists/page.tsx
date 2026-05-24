@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { fetchRecipes } from "@/app/actions/mixup";
+import { fetchMixups, fetchRecipes } from "@/app/actions/mixup";
 import { PageTemplate } from "@/components/common/page-template";
 import { getInitData } from "@/lib/getInitData";
 import PlaylistsClientPage from "./client-page";
@@ -10,9 +10,10 @@ export const metadata = {
 };
 
 export default async function PlaylistsPage() {
-	const [{ playlists, playlistItems }, recipes] = await Promise.all([
+	const [{ playlists, playlistItems }, recipes, mixups] = await Promise.all([
 		getInitData(),
 		fetchRecipes(),
+		fetchMixups(),
 	]);
 
 	return (
@@ -25,6 +26,7 @@ export default async function PlaylistsPage() {
 					initialPlaylists={playlists}
 					initialPlaylistItems={playlistItems}
 					recipes={recipes}
+					mixups={mixups}
 				/>
 			</Suspense>
 		</PageTemplate>

@@ -380,8 +380,10 @@ export default function DeviceClientPage({
 		if (editedDevice.playlist_id) {
 			const playlistScreens = playlistItems
 				.filter((item) => item.playlist_id === editedDevice.playlist_id)
+				.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
 				.map((item) => ({
 					screen: item.screen_id,
+					screen_type: item.screen_type,
 					duration: item.duration,
 				}));
 			setPlaylistScreens(playlistScreens);

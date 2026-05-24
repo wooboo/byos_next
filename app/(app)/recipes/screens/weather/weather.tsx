@@ -29,105 +29,204 @@ interface WeatherProps {
 	pressure?: string;
 	sunset?: string;
 	sunrise?: string;
-	latitude?: number;
-	longitude?: number;
 	width?: number;
 	height?: number;
 }
 
+// ─── Layout ──────────────────────────────────────────────────────────────
+// Keep one canonical weather layout. Larger displays (TRMNL X) should render
+// the same composition at higher resolution instead of reflowing/re-scaling
+// individual pieces from the physical width.
+const BASE_W = 800;
+const BASE_H = 480;
+function sc() {
+	return {
+		f: (n: number) => Math.round(n),
+		p: (n: number) => Math.round(n),
+		b: (n: number) => Math.max(1, Math.round(n)),
+		g: (n: number) => Math.round(n),
+	};
+}
+function t(
+	s: ReturnType<typeof sc>,
+	size: number,
+	weight = 400,
+	more: Record<string, unknown> = {},
+) {
+	return {
+		fontFamily: "inter",
+		fontSize: s.f(size),
+		fontWeight: weight,
+		lineHeight: 1.15,
+		...more,
+	};
+}
+const fr = { display: "flex", flexDirection: "row" } as const;
+const fc = { display: "flex", flexDirection: "column" } as const;
+
+// ─── Component ───────────────────────────────────────────────────────────
 export default function Weather({
-	temperature = "Loading...",
-	feelsLike = "Loading...",
-	humidity = "Loading...",
-	windSpeed = "Loading...",
-	description = "Loading...",
-	location = "Loading...",
-	lastUpdated = "Loading...",
-	highTemp = "Loading...",
-	lowTemp = "Loading...",
-	pressure = "Loading...",
-	sunset = "Loading...",
-	sunrise = "Loading...",
+	temperature = "N/A",
+	feelsLike = "N/A",
+	humidity = "N/A",
+	windSpeed = "N/A",
+	description = "N/A",
+	location = "N/A",
+	lastUpdated = "",
+	highTemp = "N/A",
+	lowTemp = "N/A",
+	pressure = "N/A",
+	sunset = "N/A",
+	sunrise = "N/A",
 	width = 800,
 	height = 480,
 }: WeatherProps) {
-	// Weather statistics
-	const weatherStats = [
-		{ label: "Feels Like", value: `${feelsLike}°C`, icon: tempIcon },
-		{ label: "Humidity", value: `${humidity}%`, icon: humidityIcon },
-		{ label: "Wind Speed", value: `${windSpeed} km/h`, icon: windIcon },
-		{ label: "Pressure", value: `${pressure} hPa`, icon: pressureIcon },
-		{ label: "Sunrise", value: `${sunrise}`, icon: sunriseIcon },
-		{ label: "Sunset", value: `${sunset}`, icon: sunsetIcon },
+	const s = sc();
+	const layoutScale = Math.min(width / BASE_W, height / BASE_H);
+	const offsetX = Math.round((width - BASE_W * layoutScale) / 2);
+	const offsetY = Math.round((height - BASE_H * layoutScale) / 2);
+
+	const stats = [
+		{ label: "Feels Like", value: `${feelsLike}°`, Icon: tempIcon },
+		{ label: "Humidity", value: `${humidity}%`, Icon: humidityIcon },
+		{ label: "Wind", value: `${windSpeed} km/h`, Icon: windIcon },
+		{ label: "Pressure", value: `${pressure} hPa`, Icon: pressureIcon },
+		{ label: "Sunrise", value: sunrise, Icon: sunriseIcon },
+		{ label: "Sunset", value: sunset, Icon: sunsetIcon },
 	];
 
-	// Get weather icon based on description
-	const getWeatherIcon = (desc: string) => {
-		const lowerDesc = desc.toLowerCase();
-		if (lowerDesc.includes("rain") || lowerDesc.includes("drizzle"))
-			return RainIcon;
-		if (lowerDesc.includes("snow")) return SnowIcon;
-		if (lowerDesc.includes("cloud")) return CloudIcon;
-		if (lowerDesc.includes("clear") || lowerDesc.includes("sun"))
-			return SunIcon;
-		if (lowerDesc.includes("fog") || lowerDesc.includes("mist")) return FogIcon;
-		if (lowerDesc.includes("thunder")) return ThunderIcon;
-		return CloudIcon; // default
-	};
-
-	const isHalfScreen = width === 400 && height === 480;
+	const d = description.toLowerCase();
+	let MainIcon = CloudIcon;
+	if (d.includes("rain") || d.includes("drizzle")) MainIcon = RainIcon;
+	else if (d.includes("snow")) MainIcon = SnowIcon;
+	else if (d.includes("clear") || d.includes("sun")) MainIcon = SunIcon;
+	else if (d.includes("fog") || d.includes("mist")) MainIcon = FogIcon;
+	else if (d.includes("thunder")) MainIcon = ThunderIcon;
 
 	return (
-		<PreSatori width={width} height={height}>
-			<div className="flex flex-col w-full h-full bg-white text-black">
+		<PreSatori useDoubling={true} width={width} height={height}>
+			<div
+				style={{
+					display: "flex",
+					width: "100%",
+					height: "100%",
+					backgroundColor: "#fff",
+					overflow: "hidden",
+				}}
+			>
 				<div
-					className={`flex p-4 sm:flex-row items-center justify-between ${isHalfScreen ? "flex-row" : "flex-col sm:flex-row"}`}
+					style={{
+						...fc,
+						width: BASE_W,
+						height: BASE_H,
+						backgroundColor: "#fff",
+						transform: `translate(${offsetX}px, ${offsetY}px) scale(${layoutScale})`,
+						transformOrigin: "top left",
+					}}
 				>
-					<h2
-						className={`font-inter ${isHalfScreen ? "text-8xl" : "text-9xl"}`}
-					>
-						{temperature}°C
-					</h2>
-					<div className="flex flex-col items-center justify-center">
-						{getWeatherIcon(description)}
-						{!isHalfScreen && (
-							<div className="text-4xl mt-4 font-blockkie">
-								<div className="flex flex-row items-center">
-									{tempUp} {highTemp}°C
-									{tempDown} {lowTemp}°C
-								</div>
-							</div>
-						)}
-					</div>
-				</div>
-				<div className="p-4 flex flex-col flex-1">
+					{/* ── TOP ROW ── */}
 					<div
-						className={`w-full flex flex-col flex-1 mb-4 ${isHalfScreen ? "gap-2" : "gap-4"} grid grid-cols-2 sm:grid-cols-3`}
+						style={{
+							...fr,
+							alignItems: "center",
+							justifyContent: "space-between",
+							padding: s.p(6),
+							flexShrink: 0,
+							gap: s.g(8),
+						}}
 					>
-						{weatherStats.map((stat, index) => (
-							<div
-								key={index}
-								className=" rounded-xl border border-black flex-1 flex flex-row items-center"
-							>
-								<div className="p-2 max-h-16">{stat.icon}</div>
-								<div className="flex flex-col sm:ml-2">
-									<div
-										className={`leading-none m-0 ${isHalfScreen ? "text-2xl" : "text-3xl"}`}
-									>
-										{stat.label}
-									</div>
-									<div
-										className={`leading-none m-0 ${isHalfScreen ? "text-2xl" : "text-3xl"}`}
-									>
-										{stat.value}
+						<div
+							style={{ display: "flex", alignItems: "baseline", gap: s.g(4) }}
+						>
+							<span style={t(s, 56, 700, { lineHeight: 1 })}>
+								{temperature}
+							</span>
+							<span style={t(s, 26, 400, { lineHeight: 1 })}>°C</span>
+						</div>
+						<div style={{ ...fc, alignItems: "center", gap: s.g(4) }}>
+							<MainIcon size={s.f(BASE_W * 0.14)} />
+							<div style={{ ...fr, gap: s.g(14) }}>
+								<span
+									style={{ display: "flex", alignItems: "center", gap: s.g(4) }}
+								>
+									{tempUp({ size: s.f(24) })}
+									<span style={t(s, 18, 600)}>{highTemp}°</span>
+								</span>
+								<span
+									style={{ display: "flex", alignItems: "center", gap: s.g(4) }}
+								>
+									{tempDown({ size: s.f(24) })}
+									<span style={t(s, 18, 600)}>{lowTemp}°</span>
+								</span>
+							</div>
+						</div>
+					</div>
+
+					{/* ── STAT CARDS: fill remaining space ── */}
+					<div
+						style={{
+							...fc,
+							flex: "1 1 0",
+							justifyContent: "center",
+							padding: s.p(4),
+							minHeight: 0,
+						}}
+					>
+						<div
+							style={{
+								...fr,
+								flexWrap: "wrap",
+								gap: s.g(6),
+								alignContent: "stretch",
+								flex: "1 1 0",
+							}}
+						>
+							{stats.map((stat) => (
+								<div
+									key={stat.label}
+									style={{
+										...fr,
+										alignItems: "center",
+										borderRadius: s.p(8),
+										borderWidth: s.b(2),
+										borderStyle: "solid",
+										borderColor: "#000",
+										padding: s.p(6),
+										gap: s.g(8),
+										flex: "1 1 calc(50% - 6px)",
+										minWidth: s.p(200),
+									}}
+								>
+									<stat.Icon size={s.f(30)} />
+									<div style={{ ...fc, justifyContent: "center", minWidth: 0 }}>
+										<span style={t(s, 15, 600, { color: "#444" })}>
+											{stat.label}
+										</span>
+										<span style={t(s, 19, 700)}>{stat.value}</span>
 									</div>
 								</div>
-							</div>
-						))}
+							))}
+						</div>
 					</div>
-					<div className="w-full flex flex-col sm:flex-row  sm:justify-between items-center text-2xl text-white p-2 rounded-xl bg-gray-500">
-						<div>{location}</div>
-						<div>{lastUpdated && <span>Last updated: {lastUpdated}</span>}</div>
+
+					{/* ── FOOTER ── */}
+					<div
+						style={{
+							...fr,
+							justifyContent: "space-between",
+							alignItems: "center",
+							backgroundColor: "#000",
+							color: "#fff",
+							padding: s.p(10),
+							borderRadius: s.p(8),
+							margin: s.p(4),
+							flexShrink: 0,
+						}}
+					>
+						<span style={t(s, 14, 600)}>{location}</span>
+						{lastUpdated && (
+							<span style={t(s, 13, 400)}>Updated: {lastUpdated}</span>
+						)}
 					</div>
 				</div>
 			</div>

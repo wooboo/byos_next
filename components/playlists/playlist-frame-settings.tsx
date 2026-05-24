@@ -17,6 +17,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 export interface FrameData {
 	id: string;
 	screen_id: string;
+	screen_type?: string;
 	duration: number;
 	order_index: number;
 	start_time?: string;
@@ -27,7 +28,7 @@ export interface FrameData {
 interface PlaylistFrameSettingsProps {
 	frame: FrameData;
 	index: number;
-	screenOptions: { id: string; name: string }[];
+	screenOptions: { label: string; options: { id: string; name: string }[] }[];
 	onUpdate: (id: string, data: Partial<FrameData>) => void;
 	onDelete: (id: string) => void;
 }
@@ -73,16 +74,32 @@ export function PlaylistFrameSettings({
 				<Label htmlFor={`screen-${frame.id}`}>Screen</Label>
 				<Select
 					value={frame.screen_id}
-					onValueChange={(value) => onUpdate(frame.id, { screen_id: value })}
+					onValueChange={(value) => {
+						// Detect if this is a mixup (UUID) or recipe (slug)
+						const isMixup = screenOptions.some((g) =>
+							g.options.some((o) => o.id === value && g.label === "Mixups"),
+						);
+						onUpdate(frame.id, {
+							screen_id: value,
+							screen_type: isMixup ? "mixup" : "recipe",
+						});
+					}}
 				>
 					<SelectTrigger id={`screen-${frame.id}`}>
 						<SelectValue placeholder="Select a screen" />
 					</SelectTrigger>
 					<SelectContent>
-						{screenOptions.map((screen) => (
-							<SelectItem key={screen.id} value={screen.id}>
-								{screen.name}
-							</SelectItem>
+						{screenOptions.map((group) => (
+							<div key={group.label}>
+								<div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+									{group.label}
+								</div>
+								{group.options.map((screen) => (
+									<SelectItem key={screen.id} value={screen.id}>
+										{screen.name}
+									</SelectItem>
+								))}
+							</div>
 						))}
 					</SelectContent>
 				</Select>

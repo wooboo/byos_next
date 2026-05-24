@@ -1,9 +1,48 @@
 import { betterAuth } from "better-auth";
 import { admin } from "better-auth/plugins";
+import { networkInterfaces } from "os";
 import { Pool } from "pg";
 import { sendEmail } from "@/lib/email";
 
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";
+
+function getLanTrustedOrigins() {
+	const ports = new Set([
+		process.env.PORT || "3001",
+		process.env.NEXT_PUBLIC_PORT || "3001",
+		"3000",
+		"3001",
+	]);
+	const hosts = new Set(["localhost", "127.0.0.1"]);
+	const origins = new Set<string>();
+
+	for (const entries of Object.values(networkInterfaces())) {
+		for (const entry of entries ?? []) {
+			if (entry.family === "IPv4" && !entry.internal) {
+				hosts.add(entry.address);
+			}
+		}
+	}
+
+	for (const host of hosts) {
+		for (const port of ports) {
+			origins.add(`http://${host}:${port}`);
+		}
+	}
+
+	if (process.env.BETTER_AUTH_URL) {
+		origins.add(process.env.BETTER_AUTH_URL);
+	}
+
+	for (const value of (process.env.ALLOWED_SERVER_ACTION_ORIGINS || "")
+		.split(",")
+		.map((origin) => origin.trim())
+		.filter(Boolean)) {
+		origins.add(value.startsWith("http") ? value : `http://${value}`);
+	}
+
+	return Array.from(origins);
+}
 
 function createAuth() {
 	if (!AUTH_ENABLED) {
@@ -18,6 +57,7 @@ function createAuth() {
 
 	return betterAuth({
 		database: pool,
+		trustedOrigins: getLanTrustedOrigins(),
 		emailAndPassword: {
 			enabled: true,
 			sendResetPassword: async ({

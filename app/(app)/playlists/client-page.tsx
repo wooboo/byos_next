@@ -8,18 +8,20 @@ import { deletePlaylist, savePlaylistWithItems } from "@/app/actions/playlist";
 import { PlaylistBuilder } from "@/components/playlists/playlist-builder";
 import { PlaylistList } from "@/components/playlists/playlist-list";
 import { Button } from "@/components/ui/button";
-import type { Playlist, PlaylistItem, Recipe } from "@/lib/types";
+import type { Mixup, Playlist, PlaylistItem, Recipe } from "@/lib/types";
 
 interface PlaylistsClientPageProps {
 	initialPlaylists: Playlist[];
 	initialPlaylistItems: PlaylistItem[];
 	recipes: Recipe[];
+	mixups: Mixup[];
 }
 
 export default function PlaylistsClientPage({
 	initialPlaylists,
 	initialPlaylistItems,
 	recipes,
+	mixups,
 }: PlaylistsClientPageProps) {
 	const router = useRouter();
 	const [showEditor, setShowEditor] = useState(false);
@@ -52,6 +54,7 @@ export default function PlaylistsClientPage({
 		items: Array<{
 			id: string;
 			screen_id: string;
+			screen_type?: string;
 			duration: number;
 			order_index: number;
 			start_time?: string;
@@ -123,7 +126,11 @@ export default function PlaylistsClientPage({
 								id: editingPlaylist.id,
 								name: editingPlaylist.name,
 								items: editingPlaylist.items?.map((item) => ({
-									...item,
+									id: item.id,
+									screen_id: item.screen_id,
+									screen_type: item.screen_type,
+									duration: item.duration,
+									order_index: item.order_index,
 									start_time: item.start_time ?? undefined,
 									end_time: item.end_time ?? undefined,
 									days_of_week: item.days_of_week ?? undefined,
@@ -132,6 +139,7 @@ export default function PlaylistsClientPage({
 						: undefined
 				}
 				recipes={recipes}
+				mixups={mixups}
 				onSave={handleSavePlaylist}
 				onCancel={handleCancel}
 				isSaving={isLoading}
@@ -152,6 +160,7 @@ export default function PlaylistsClientPage({
 				playlists={initialPlaylists}
 				playlistItems={initialPlaylistItems}
 				recipes={recipes}
+				mixups={mixups}
 				onEditPlaylist={handleEditPlaylist}
 				onDeletePlaylist={handleDeletePlaylist}
 				onCreatePlaylist={handleCreatePlaylist}

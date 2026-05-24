@@ -94,7 +94,7 @@ export default function DashboardClientPage({
 							>
 								<DeviceFrame size="lg" portrait={isPortrait}>
 									<Image
-										src={`/api/bitmap/${lastUpdatedDevice.screen}.bmp?width=${deviceWidth}&height=${deviceHeight}`}
+										src={`/api/bitmap/${lastUpdatedDevice.screen}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=16`}
 										alt={`${lastUpdatedDevice.name} screen`}
 										fill
 										className="absolute inset-0 h-full w-full object-cover"

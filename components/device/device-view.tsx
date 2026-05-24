@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
+import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
@@ -70,7 +71,7 @@ const getGrayscaleLevels = (grayscale: number | null | undefined): number => {
 
 interface DeviceViewProps {
 	device: Device & { status?: string; type?: string };
-	playlistScreens: { screen: string; duration: number }[];
+	playlistScreens: { screen: string; screen_type?: string; duration: number }[];
 }
 
 function PanelHeader({
@@ -162,7 +163,12 @@ export default function DeviceView({
 	const isMixup =
 		device.display_mode === DeviceDisplayMode.MIXUP && device.mixup_id;
 	const heroSrc = isPlaylist
-		? `/api/bitmap/${playlistScreens[0].screen || "simple-text"}.bmp?width=${deviceWidth}&height=${deviceHeight}`
+		? playlistFrameBmpUrl(
+				playlistScreens[0].screen || "simple-text",
+				playlistScreens[0].screen_type,
+				deviceWidth,
+				deviceHeight,
+			)
 		: isMixup
 			? `/api/bitmap/mixup/${device.mixup_id}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`
 			: `/api/bitmap/${device?.screen || "simple-text"}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`;
@@ -219,7 +225,7 @@ export default function DeviceView({
 								>
 									<DeviceFrame size="sm" portrait={isPortrait} flat>
 										<Image
-											src={`/api/bitmap/${screen.screen || "simple-text"}.bmp?width=${deviceWidth}&height=${deviceHeight}`}
+											src={`${playlistFrameBmpUrl(screen.screen || "simple-text", (screen as any).screen_type, deviceWidth, deviceHeight)}`}
 											alt={`Frame ${i + 1}`}
 											fill
 											className="absolute inset-0 h-full w-full object-cover"

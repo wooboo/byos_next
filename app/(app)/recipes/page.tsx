@@ -25,9 +25,12 @@ const RecipeCard = ({ recipe }: { recipe: Recipe }) => {
 				}}
 			>
 				<picture>
-					<source srcSet={`/api/bitmap/${recipe.slug}.bmp`} type="image/bmp" />
+					<source
+						srcSet={`/api/bitmap/${recipe.slug}.bmp?grayscale=16`}
+						type="image/bmp"
+					/>
 					<img
-						src={`/api/bitmap/${recipe.slug}.bmp`}
+						src={`/api/bitmap/${recipe.slug}.bmp?grayscale=16`}
 						alt={`${recipe.name} preview`}
 						width={DEFAULT_IMAGE_WIDTH}
 						height={DEFAULT_IMAGE_HEIGHT}

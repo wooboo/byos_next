@@ -9,6 +9,7 @@ import {
 } from "@/lib/recipes/constants";
 import type { Playlist, PlaylistItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 
 interface PlaylistReelCardProps {
 	playlist: Playlist;
@@ -82,11 +83,21 @@ export function PlaylistReelCard({
 							>
 								<picture>
 									<source
-										srcSet={`/api/bitmap/${item.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
+										srcSet={playlistFrameBmpUrl(
+											item.screen_id,
+											item.screen_type,
+											DEFAULT_IMAGE_WIDTH,
+											DEFAULT_IMAGE_HEIGHT,
+										)}
 										type="image/bmp"
 									/>
 									<img
-										src={`/api/bitmap/${item.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
+										src={playlistFrameBmpUrl(
+											item.screen_id,
+											item.screen_type,
+											DEFAULT_IMAGE_WIDTH,
+											DEFAULT_IMAGE_HEIGHT,
+										)}
 										alt={getRecipeName(item.screen_id)}
 										width={DEFAULT_IMAGE_WIDTH}
 										height={DEFAULT_IMAGE_HEIGHT}

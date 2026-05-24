@@ -66,7 +66,7 @@ export async function GET(request: Request) {
 		// Use header dimensions if provided
 		const width = headers.width || DEFAULT_IMAGE_WIDTH;
 		const height = headers.height || DEFAULT_IMAGE_HEIGHT;
-		const noDbQueryParams = `width=${width}&height=${height}&grayscale=2${headers.base64 ? "&base64=true" : ""}`;
+		const noDbQueryParams = `width=${width}&height=${height}&grayscale=16${headers.base64 ? "&base64=true" : ""}`;
 
 		return buildDisplayResponse(
 			`${baseUrl}/${DEFAULT_SCREEN}.bmp?${noDbQueryParams}`,
@@ -134,6 +134,13 @@ export async function GET(request: Request) {
 							.set({ current_playlist_index: activeItem.order_index })
 							.where("id", "=", device.id.toString())
 							.execute();
+
+						// Mixup items need the mixup API endpoint
+						if (activeItem.screen_type === "mixup") {
+							imageUrl = `${baseUrl}/mixup/${screenToDisplay}.bmp?${baseQueryParams}&access_token=${encodeURIComponent(headers.apiKey)}`;
+							dynamicRefreshRate = Math.max(dynamicRefreshRate, 30);
+							break; // skip the default URL below
+						}
 					} else {
 						logInfo("No active playlist item found, using fallback", {
 							source: "api/display",

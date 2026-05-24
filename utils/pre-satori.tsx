@@ -39,7 +39,10 @@ export const PreSatori: React.FC<PreSatoriProps> = ({
 				children?: React.ReactNode;
 				[key: string]: unknown;
 			};
-			const fontFamily = extractFontFamily(className);
+			const fontFamily = extractFontFamily(
+				className,
+				style as Record<string, unknown>,
+			);
 			const newStyle: React.CSSProperties = {
 				...style,
 				fontSmooth: "always",
