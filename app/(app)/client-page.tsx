@@ -5,6 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { DeviceFrame } from "@/components/common/device-frame";
 import { StatusIndicator } from "@/components/common/status-indicator";
+import {
+	ScreenPreviewControls,
+	screenPreviewSummary,
+	useScreenPreviewControls,
+} from "@/components/preview/screen-preview-controls";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -15,10 +20,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import {
-	DEFAULT_IMAGE_HEIGHT,
-	DEFAULT_IMAGE_WIDTH,
-} from "@/lib/recipes/constants";
+import { DeviceDisplayMode } from "@/lib/mixup/constants";
+import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import type { Device, SystemLog } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { formatDate, getDeviceStatus } from "@/utils/helpers";
@@ -28,10 +31,21 @@ interface DashboardClientPageProps {
 	systemLogs: SystemLog[];
 }
 
+function isUuid(value: string | null | undefined): boolean {
+	return (
+		!!value &&
+		/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+			value,
+		)
+	);
+}
+
 export default function DashboardClientPage({
 	devices,
 	systemLogs,
 }: DashboardClientPageProps) {
+	const preview = useScreenPreviewControls();
+
 	const processedDevices = devices.map((device) => ({
 		...device,
 		status: getDeviceStatus(device),
@@ -49,13 +63,41 @@ export default function DashboardClientPage({
 				)[0]
 			: null;
 
-	const isPortrait = lastUpdatedDevice?.screen_orientation === "portrait";
+	const sourcePortrait = lastUpdatedDevice?.screen_orientation === "portrait";
+	const isPortrait = preview.isPortrait || sourcePortrait;
 	const deviceWidth = isPortrait
-		? lastUpdatedDevice?.screen_height || DEFAULT_IMAGE_HEIGHT
-		: lastUpdatedDevice?.screen_width || DEFAULT_IMAGE_WIDTH;
+		? preview.sizePreset.height
+		: preview.sizePreset.width;
 	const deviceHeight = isPortrait
-		? lastUpdatedDevice?.screen_width || DEFAULT_IMAGE_WIDTH
-		: lastUpdatedDevice?.screen_height || DEFAULT_IMAGE_HEIGHT;
+		? preview.sizePreset.width
+		: preview.sizePreset.height;
+	const rawPreviewId =
+		lastUpdatedDevice?.screen_id || lastUpdatedDevice?.screen || "simple-text";
+	const previewType =
+		(lastUpdatedDevice?.screen_type === "screen" || isUuid(rawPreviewId)) &&
+		rawPreviewId
+			? "screen"
+			: "recipe";
+	const previewId =
+		previewType === "screen"
+			? rawPreviewId
+			: lastUpdatedDevice?.screen_id ||
+				lastUpdatedDevice?.screen ||
+				"simple-text";
+	const isMixup =
+		lastUpdatedDevice?.display_mode === DeviceDisplayMode.MIXUP &&
+		lastUpdatedDevice.mixup_id;
+	const bitmapSrc = isMixup
+		? `/api/bitmap/mixup/${lastUpdatedDevice.mixup_id}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${preview.grayscale}`
+		: playlistFrameBmpUrl(
+				previewId || "simple-text",
+				previewType,
+				deviceWidth,
+				deviceHeight,
+				preview.grayscale,
+			);
+	const pngSrc = `/api/png/${previewType}/${previewId}?width=${deviceWidth}&height=${deviceHeight}`;
+	const reactSrc = `/preview/${previewType}/${previewId}?width=${deviceWidth}&height=${deviceHeight}`;
 
 	return (
 		<div className="space-y-4">
@@ -83,6 +125,18 @@ export default function DashboardClientPage({
 							</div>
 						)}
 					</header>
+					{lastUpdatedDevice && (
+						<ScreenPreviewControls
+							format={preview.format}
+							onFormatChange={preview.setFormat}
+							sizeIndex={preview.sizeIndex}
+							onSizeIndexChange={preview.setSizeIndex}
+							paletteIndex={preview.paletteIndex}
+							onPaletteIndexChange={preview.setPaletteIndex}
+							isPortrait={isPortrait}
+							onPortraitChange={preview.setIsPortrait}
+						/>
+					)}
 
 					<div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] p-6">
 						{lastUpdatedDevice ? (
@@ -93,14 +147,27 @@ export default function DashboardClientPage({
 								)}
 							>
 								<DeviceFrame size="lg" portrait={isPortrait}>
-									<Image
-										src={`/api/bitmap/${lastUpdatedDevice.screen}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=16`}
-										alt={`${lastUpdatedDevice.name} screen`}
-										fill
-										className="absolute inset-0 h-full w-full object-cover"
-										style={{ imageRendering: "pixelated" }}
-										unoptimized
-									/>
+									{isMixup && preview.format !== "bmp" ? (
+										<div className="absolute inset-0 flex items-center justify-center bg-background px-4 text-center text-sm text-muted-foreground">
+											{preview.format.toUpperCase()} preview is not available
+											for mixups yet.
+										</div>
+									) : preview.format === "react" ? (
+										<iframe
+											title={`${lastUpdatedDevice.name} React preview`}
+											src={reactSrc}
+											className="absolute inset-0 h-full w-full border-0 bg-white"
+										/>
+									) : (
+										<Image
+											src={preview.format === "png" ? pngSrc : bitmapSrc}
+											alt={`${lastUpdatedDevice.name} screen`}
+											fill
+											className="absolute inset-0 h-full w-full object-cover"
+											style={{ imageRendering: "pixelated" }}
+											unoptimized
+										/>
+									)}
 								</DeviceFrame>
 							</div>
 						) : (
@@ -108,12 +175,23 @@ export default function DashboardClientPage({
 						)}
 					</div>
 
-					<footer className="flex items-center gap-2 border-t bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground">
-						<AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-						<span>
+					<footer className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground">
+						<span className="inline-flex items-center gap-2">
+							<AlertTriangle className="h-3.5 w-3.5 shrink-0" />
 							Passive device — this preview may be newer than what&apos;s
 							currently on the screen.
 						</span>
+						{lastUpdatedDevice && (
+							<span className="tabular-nums">
+								{preview.format.toUpperCase()} pipeline ·{" "}
+								{screenPreviewSummary({
+									format: preview.format,
+									width: deviceWidth,
+									height: deviceHeight,
+									grayscale: preview.grayscale,
+								})}
+							</span>
+						)}
 					</footer>
 				</section>
 

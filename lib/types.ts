@@ -26,6 +26,8 @@ export type Device = {
 	api_key: string;
 	friendly_id: string;
 	screen: string | null;
+	screen_id: string | null;
+	screen_type: string | null;
 	refresh_schedule: RefreshSchedule | null;
 	timezone: string;
 	last_update_time: string | null;
@@ -83,8 +85,20 @@ export type MixupSlot = {
 	slot_id: string;
 	recipe_slug: string | null;
 	recipe_id: string | null;
+	ref_type: string | null;
+	ref_id: string | null;
 	order_index: number;
 	created_at: string | null;
+};
+
+export type Screen = {
+	id: string;
+	user_id: string;
+	name: string;
+	recipe_id: string;
+	params: Json;
+	created_at: string | null;
+	updated_at: string | null;
 };
 
 export type Recipe = {

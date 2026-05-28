@@ -15,6 +15,7 @@ interface PlaylistsClientPageProps {
 	initialPlaylistItems: PlaylistItem[];
 	recipes: Recipe[];
 	mixups: Mixup[];
+	screens: { id: string; name: string; recipe_name: string }[];
 }
 
 export default function PlaylistsClientPage({
@@ -22,6 +23,7 @@ export default function PlaylistsClientPage({
 	initialPlaylistItems,
 	recipes,
 	mixups,
+	screens,
 }: PlaylistsClientPageProps) {
 	const router = useRouter();
 	const [showEditor, setShowEditor] = useState(false);
@@ -140,6 +142,7 @@ export default function PlaylistsClientPage({
 				}
 				recipes={recipes}
 				mixups={mixups}
+				screens={screens}
 				onSave={handleSavePlaylist}
 				onCancel={handleCancel}
 				isSaving={isLoading}

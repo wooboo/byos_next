@@ -8,31 +8,41 @@ interface BmpPreviewProps {
 	width: number;
 	height: number;
 	bpp: number;
+	bitmapUrl?: string;
 }
 
 /**
  * Fetches and displays a BMP preview from the API with given size/bpp params.
  * Re-fetches whenever params change.
  */
-export function BmpPreview({ slug, width, height, bpp }: BmpPreviewProps) {
+export function BmpPreview({
+	slug,
+	width,
+	height,
+	bpp,
+	bitmapUrl,
+}: BmpPreviewProps) {
 	const [src, setSrc] = useState("");
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(false);
 
 	useEffect(() => {
 		let cancelled = false;
+		let objectUrl = "";
 		setLoading(true);
 		setError(false);
 
-		const url = `/api/bitmap/${slug}.bmp?width=${width}&height=${height}&grayscale=${bpp}`;
+		const url = bitmapUrl ?? `/api/bitmap/${slug}.bmp`;
+		const separator = url.includes("?") ? "&" : "?";
+		const requestUrl = `${url}${separator}width=${width}&height=${height}&grayscale=${bpp}`;
 
-		fetch(url)
+		fetch(requestUrl)
 			.then(async (res) => {
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 				const blob = await res.blob();
 				if (cancelled) return;
-				const dataUrl = URL.createObjectURL(blob);
-				setSrc(dataUrl);
+				objectUrl = URL.createObjectURL(blob);
+				setSrc(objectUrl);
 				setLoading(false);
 			})
 			.catch(() => {
@@ -44,9 +54,9 @@ export function BmpPreview({ slug, width, height, bpp }: BmpPreviewProps) {
 
 		return () => {
 			cancelled = true;
-			if (src) URL.revokeObjectURL(src);
+			if (objectUrl) URL.revokeObjectURL(objectUrl);
 		};
-	}, [slug, width, height, bpp]);
+	}, [slug, width, height, bpp, bitmapUrl]);
 
 	if (loading) {
 		return (

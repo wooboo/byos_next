@@ -36,6 +36,10 @@ export async function fetchCalendarEvents(
 	return allEvents;
 }
 
+function optionalString(value: unknown): string | undefined {
+	return typeof value === "string" ? value : undefined;
+}
+
 async function fetchSingleCalendar(
 	icsUrl: string,
 	rangeStart: Date,
@@ -74,8 +78,8 @@ async function fetchSingleCalendar(
 					dtstart: ICAL.Time.fromJSDate(rangeStart),
 				});
 
-				let occ;
-				while ((occ = expand.next())) {
+				let occ = expand.next();
+				while (occ) {
 					const jsDate = occ.toJSDate();
 					if (jsDate > rangeEnd) break;
 					if (jsDate < rangeStart) continue;
@@ -88,9 +92,11 @@ async function fetchSingleCalendar(
 						),
 						isAllDay: event.startDate.isDate,
 						location: event.location || undefined,
-						calendarName:
-							comp.getFirstPropertyValue("x-wr-calname") || undefined,
+						calendarName: optionalString(
+							comp.getFirstPropertyValue("x-wr-calname"),
+						),
 					});
+					occ = expand.next();
 				}
 			} catch {
 				// RecurExpansion might fail for non-standard RRULEs
@@ -108,7 +114,9 @@ async function fetchSingleCalendar(
 					end,
 					isAllDay: event.startDate.isDate,
 					location: event.location || undefined,
-					calendarName: comp.getFirstPropertyValue("x-wr-calname") || undefined,
+					calendarName: optionalString(
+						comp.getFirstPropertyValue("x-wr-calname"),
+					),
 				});
 			}
 		}

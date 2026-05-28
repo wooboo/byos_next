@@ -258,6 +258,7 @@ export enum DitheringMethod {
 	ATKINSON = "atkinson",
 	BAYER = "bayer",
 	JARVIS_JUDICE_NINKE = "jarvis-judice-ninke",
+	RANDOM = "random",
 	NONE = "none",
 }
 
@@ -338,17 +339,17 @@ export function applyDithering(
 			);
 			break;
 		}
-		case DitheringMethod.JARVIS_JUDICE_NINKE:
-			{
-				const [resolvedWidth, resolvedHeight] = requireDimensions();
-				result = ditherJarvisJudiceNinke(
-					grayscale,
-					resolvedWidth,
-					resolvedHeight,
-					levels,
-				);
-				break;
-			}
+		case DitheringMethod.JARVIS_JUDICE_NINKE: {
+			const [resolvedWidth, resolvedHeight] = requireDimensions();
+			result = ditherJarvisJudiceNinke(
+				grayscale,
+				resolvedWidth,
+				resolvedHeight,
+				levels,
+			);
+			break;
+		}
+		case DitheringMethod.RANDOM:
 			result = ditherRandom(grayscale, levels);
 			break;
 		case DitheringMethod.NONE:

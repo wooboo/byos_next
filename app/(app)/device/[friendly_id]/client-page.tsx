@@ -5,12 +5,14 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { fetchDeviceByFriendlyId, updateDevice } from "@/app/actions/device";
+import { createScreenFromRecipe } from "@/app/actions/screens";
 import { PageTemplate } from "@/components/common/page-template";
 import { StatusIndicator } from "@/components/common/status-indicator";
 import DeviceEditForm from "@/components/device/device-edit-form";
 import DeviceView from "@/components/device/device-view";
 import DeviceLogsContainer from "@/components/device-logs/device-logs-container";
 import { Button } from "@/components/ui/button";
+import { DeviceDisplayMode } from "@/lib/mixup/constants";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
@@ -28,6 +30,7 @@ import {
 const DEVICE_SIZE_PRESETS = {
 	"800x480": { width: 800, height: 480 },
 	"1872x1404": { width: 1872, height: 1404 },
+	"2048x1536": { width: 2048, height: 1536 },
 	custom: null,
 } as const;
 
@@ -36,6 +39,7 @@ type DeviceSizePreset = keyof typeof DEVICE_SIZE_PRESETS;
 interface DeviceClientPageProps {
 	initialDevice: Device & { status?: string; type?: string };
 	availableScreens: { id: string; title: string }[];
+	availableRecipes: { id: string; title: string }[];
 	availablePlaylists: Playlist[];
 	availableMixups: Mixup[];
 	playlistItems: PlaylistItem[];
@@ -44,6 +48,7 @@ interface DeviceClientPageProps {
 export default function DeviceClientPage({
 	initialDevice,
 	availableScreens,
+	availableRecipes,
 	availablePlaylists,
 	availableMixups,
 	playlistItems,
@@ -56,7 +61,7 @@ export default function DeviceClientPage({
 		Device & { status?: string; type?: string }
 	>(JSON.parse(JSON.stringify(initialDevice)));
 	const [playlistScreens, setPlaylistScreens] = useState<
-		{ screen: string; duration: number }[]
+		{ screen: string; screen_type?: string | null; duration: number }[]
 	>([]);
 	const [isSaving, setIsSaving] = useState(false);
 
@@ -73,6 +78,7 @@ export default function DeviceClientPage({
 			// Check if current dimensions match a preset
 			if (width === 800 && height === 480) return "800x480";
 			if (width === 1872 && height === 1404) return "1872x1404";
+			if (width === 2048 && height === 1536) return "2048x1536";
 			return "custom";
 		},
 	);
@@ -89,7 +95,7 @@ export default function DeviceClientPage({
 		if (name === "api_key") {
 			if (!isValidApiKey(value)) {
 				setApiKeyError(
-					"API Key must be alphanumeric and between 20 to 60 characters long.",
+					"API Key must be alphanumeric and between 8 to 60 characters long.",
 				);
 			} else {
 				setApiKeyError(null);
@@ -192,12 +198,53 @@ export default function DeviceClientPage({
 		}
 	};
 
-	// Handle screen change
-	const handleScreenChange = (screenId: string | null) => {
-		setEditedDevice({
-			...editedDevice,
-			screen: screenId,
-		});
+	const handleContentRefChange = async (
+		kind: "recipe" | "screen" | "playlist" | "mixup" | "none",
+		id: string | null,
+	) => {
+		if (kind === "recipe" && id) {
+			const recipeName = availableRecipes.find(
+				(recipe) => recipe.id === id,
+			)?.title;
+			const name = window.prompt(
+				"Name this screen",
+				recipeName || "New screen",
+			);
+			if (!name?.trim()) return;
+
+			const result = await createScreenFromRecipe(id, name);
+			if (!result.success || !result.screen) {
+				toast.error("Could not create screen", { description: result.error });
+				return;
+			}
+
+			toast.success("Screen created", {
+				description: `Assigned ${result.screen.name} to this device.`,
+			});
+			setEditedDevice((prev) => ({
+				...prev,
+				display_mode: DeviceDisplayMode.SCREEN,
+				playlist_id: null,
+				mixup_id: null,
+				screen_type: "screen",
+				screen_id: result.screen.id,
+			}));
+			return;
+		}
+
+		setEditedDevice((prev) => ({
+			...prev,
+			display_mode:
+				kind === "playlist"
+					? DeviceDisplayMode.PLAYLIST
+					: kind === "mixup"
+						? DeviceDisplayMode.MIXUP
+						: DeviceDisplayMode.SCREEN,
+			playlist_id: kind === "playlist" ? id : null,
+			mixup_id: kind === "mixup" ? id : null,
+			screen_type: kind === "screen" ? "screen" : "recipe",
+			screen_id: kind === "screen" ? id : null,
+		}));
 	};
 
 	// Handle device size preset change
@@ -237,21 +284,26 @@ export default function DeviceClientPage({
 				: editedDevice.screen_height || DEFAULT_IMAGE_HEIGHT;
 		if (
 			!(width === 800 && height === 480) &&
-			!(width === 1872 && height === 1404)
+			!(width === 1872 && height === 1404) &&
+			!(width === 2048 && height === 1536)
 		) {
 			setDeviceSizePreset("custom");
 		}
 	};
 
 	// Handle form submission
-	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
+	const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+		e?.preventDefault();
 
 		// Validate API key
 		if (!isValidApiKey(editedDevice.api_key)) {
 			setApiKeyError(
-				"API Key must be alphanumeric and between 20 to 60 characters long.",
+				"API Key must be alphanumeric and between 8 to 60 characters long.",
 			);
+			toast.error("Cannot save device", {
+				description:
+					"API Key must be alphanumeric and between 8 to 60 characters long.",
+			});
 			return;
 		}
 
@@ -260,6 +312,10 @@ export default function DeviceClientPage({
 			setFriendlyIdError(
 				"Friendly ID must be exactly 6 uppercase alphanumeric characters.",
 			);
+			toast.error("Cannot save device", {
+				description:
+					"Friendly ID must be exactly 6 uppercase alphanumeric characters.",
+			});
 			return;
 		}
 
@@ -276,6 +332,8 @@ export default function DeviceClientPage({
 				timezone: editedDevice.timezone,
 				refresh_schedule: editedDevice.refresh_schedule,
 				screen: editedDevice.screen,
+				screen_id: editedDevice.screen_id,
+				screen_type: editedDevice.screen_type,
 				playlist_id: editedDevice.playlist_id,
 				mixup_id: editedDevice.mixup_id,
 				display_mode: editedDevice.display_mode,
@@ -455,6 +513,7 @@ export default function DeviceClientPage({
 				<DeviceEditForm
 					editedDevice={editedDevice}
 					availableScreens={availableScreens}
+					availableRecipes={availableRecipes}
 					availablePlaylists={availablePlaylists}
 					availableMixups={availableMixups}
 					deviceSizePreset={deviceSizePreset}
@@ -464,7 +523,7 @@ export default function DeviceClientPage({
 					onInputChange={handleInputChange}
 					onNestedInputChange={handleNestedInputChange}
 					onSelectChange={handleSelectChange}
-					onScreenChange={handleScreenChange}
+					onContentRefChange={handleContentRefChange}
 					onDeviceSizePresetChange={handleDeviceSizePresetChange}
 					onCustomSizeChange={handleCustomSizeChange}
 					onRegenerateApiKey={handleRegenerateApiKey}

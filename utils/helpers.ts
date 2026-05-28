@@ -105,7 +105,7 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
 
 // Add validation functions for API key and friendly ID
 export const isValidApiKey = (key: string): boolean => {
-	const regex = /^[a-zA-Z0-9]{20,60}$/; // Alphanumeric, 20-60 characters
+	const regex = /^[a-zA-Z0-9]{8,60}$/; // Alphanumeric, 8-60 characters
 	return regex.test(key);
 };
 

@@ -204,6 +204,9 @@ export async function updateDevice(
 			? JSON.stringify(device.refresh_schedule)
 			: null;
 	if (device.screen !== undefined) updateData.screen = device.screen;
+	if (device.screen_id !== undefined) updateData.screen_id = device.screen_id;
+	if (device.screen_type !== undefined)
+		updateData.screen_type = device.screen_type;
 	if (device.playlist_id !== undefined)
 		updateData.playlist_id = device.playlist_id;
 	if (device.mixup_id !== undefined) updateData.mixup_id = device.mixup_id;

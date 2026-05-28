@@ -1,18 +1,25 @@
 "use client";
 
-import { Clock, Trash2 } from "lucide-react";
+import { Check, ChevronsUpDown, Clock, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
+	Command,
+	CommandEmpty,
+	CommandGroup,
+	CommandInput,
+	CommandItem,
+	CommandList,
+} from "@/components/ui/command";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 
 export interface FrameData {
 	id: string;
@@ -28,7 +35,10 @@ export interface FrameData {
 interface PlaylistFrameSettingsProps {
 	frame: FrameData;
 	index: number;
-	screenOptions: { label: string; options: { id: string; name: string }[] }[];
+	screenOptions: {
+		label: string;
+		options: { id: string; name: string; type: string }[];
+	}[];
 	onUpdate: (id: string, data: Partial<FrameData>) => void;
 	onDelete: (id: string) => void;
 }
@@ -50,6 +60,13 @@ export function PlaylistFrameSettings({
 	onUpdate,
 	onDelete,
 }: PlaylistFrameSettingsProps) {
+	const selectedValue = `${frame.screen_type || "recipe"}:${frame.screen_id}`;
+	const selectedLabel =
+		screenOptions
+			.flatMap((group) => group.options)
+			.find((option) => `${option.type}:${option.id}` === selectedValue)
+			?.name ?? "Select content";
+
 	return (
 		<div className="flex h-full flex-col gap-5 rounded-2xl border bg-card p-5">
 			<div className="flex items-start justify-between">
@@ -71,38 +88,55 @@ export function PlaylistFrameSettings({
 			</div>
 
 			<div className="space-y-2">
-				<Label htmlFor={`screen-${frame.id}`}>Screen</Label>
-				<Select
-					value={frame.screen_id}
-					onValueChange={(value) => {
-						// Detect if this is a mixup (UUID) or recipe (slug)
-						const isMixup = screenOptions.some((g) =>
-							g.options.some((o) => o.id === value && g.label === "Mixups"),
-						);
-						onUpdate(frame.id, {
-							screen_id: value,
-							screen_type: isMixup ? "mixup" : "recipe",
-						});
-					}}
-				>
-					<SelectTrigger id={`screen-${frame.id}`}>
-						<SelectValue placeholder="Select a screen" />
-					</SelectTrigger>
-					<SelectContent>
-						{screenOptions.map((group) => (
-							<div key={group.label}>
-								<div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-									{group.label}
-								</div>
-								{group.options.map((screen) => (
-									<SelectItem key={screen.id} value={screen.id}>
-										{screen.name}
-									</SelectItem>
+				<Label>Content</Label>
+				<Popover>
+					<PopoverTrigger asChild>
+						<Button variant="outline" className="w-full justify-between">
+							<span className="truncate">{selectedLabel}</span>
+							<ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+						</Button>
+					</PopoverTrigger>
+					<PopoverContent
+						className="w-[--radix-popover-trigger-width] p-0"
+						align="start"
+					>
+						<Command>
+							<CommandInput placeholder="Search content…" />
+							<CommandList>
+								<CommandEmpty>No results found.</CommandEmpty>
+								{screenOptions.map((group) => (
+									<CommandGroup key={group.label} heading={group.label}>
+										{group.options.map((option) => {
+											const value = `${option.type}:${option.id}`;
+											return (
+												<CommandItem
+													key={value}
+													value={`${group.label} ${option.name}`}
+													onSelect={() =>
+														onUpdate(frame.id, {
+															screen_id: option.id,
+															screen_type: option.type,
+														})
+													}
+												>
+													<Check
+														className={cn(
+															"mr-2 h-4 w-4",
+															selectedValue === value
+																? "opacity-100"
+																: "opacity-0",
+														)}
+													/>
+													{option.name}
+												</CommandItem>
+											);
+										})}
+									</CommandGroup>
 								))}
-							</div>
-						))}
-					</SelectContent>
-				</Select>
+							</CommandList>
+						</Command>
+					</PopoverContent>
+				</Popover>
 			</div>
 
 			<div className="space-y-3">

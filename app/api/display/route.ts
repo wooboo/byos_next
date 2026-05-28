@@ -111,9 +111,21 @@ export async function GET(request: Request) {
 
 		// Build common query params for image URLs
 		const baseQueryParams = `width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}${headers.base64 ? "&base64=true" : ""}`;
+		const accessTokenParam = `access_token=${encodeURIComponent(headers.apiKey)}`;
 
 		let dynamicRefreshRate = 180;
 		let imageUrl: string;
+		const singleScreenType = device.screen_type || "recipe";
+		const singleScreenId = device.screen_id || device.screen || "not-found";
+		const isUuid = (value: string) =>
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+				value,
+			);
+		const isScreenUuid = isUuid(singleScreenId);
+		const singleScreenPath =
+			singleScreenType === "screen" && isScreenUuid
+				? `screen/${singleScreenId}`
+				: singleScreenId;
 
 		switch (device.display_mode) {
 			case DeviceDisplayMode.PLAYLIST:
@@ -135,11 +147,18 @@ export async function GET(request: Request) {
 							.where("id", "=", device.id.toString())
 							.execute();
 
-						// Mixup items need the mixup API endpoint
+						// Mixup and named screen items need explicit API endpoints
 						if (activeItem.screen_type === "mixup") {
-							imageUrl = `${baseUrl}/mixup/${screenToDisplay}.bmp?${baseQueryParams}&access_token=${encodeURIComponent(headers.apiKey)}`;
+							imageUrl = `${baseUrl}/mixup/${screenToDisplay}.bmp?${baseQueryParams}&${accessTokenParam}`;
 							dynamicRefreshRate = Math.max(dynamicRefreshRate, 30);
 							break; // skip the default URL below
+						}
+						if (
+							activeItem.screen_type === "screen" ||
+							isUuid(screenToDisplay)
+						) {
+							imageUrl = `${baseUrl}/screen/${screenToDisplay}.bmp?${baseQueryParams}&${accessTokenParam}`;
+							break;
 						}
 					} else {
 						logInfo("No active playlist item found, using fallback", {
@@ -155,7 +174,7 @@ export async function GET(request: Request) {
 
 			case DeviceDisplayMode.MIXUP:
 				if (device.mixup_id) {
-					imageUrl = `${baseUrl}/mixup/${device.mixup_id}.bmp?${baseQueryParams}&access_token=${encodeURIComponent(headers.apiKey)}`;
+					imageUrl = `${baseUrl}/mixup/${device.mixup_id}.bmp?${baseQueryParams}&${accessTokenParam}`;
 					const metadata = {
 						deviceId: device.friendly_id,
 						mixupId: device.mixup_id,
@@ -165,7 +184,7 @@ export async function GET(request: Request) {
 						metadata,
 					});
 				} else {
-					imageUrl = `${baseUrl}/${screenToDisplay || "not-found"}.bmp?${baseQueryParams}`;
+					imageUrl = `${baseUrl}/${singleScreenPath}.bmp?${baseQueryParams}`;
 				}
 				dynamicRefreshRate = calculateRefreshRate(
 					device.refresh_schedule as unknown as RefreshSchedule,
@@ -180,7 +199,8 @@ export async function GET(request: Request) {
 					180,
 					device.timezone || "UTC",
 				);
-				imageUrl = `${baseUrl}/${screenToDisplay || "not-found"}.bmp?${baseQueryParams}`;
+				screenToDisplay = singleScreenId;
+				imageUrl = `${baseUrl}/${singleScreenPath}.bmp?${baseQueryParams}`;
 				break;
 		}
 

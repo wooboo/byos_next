@@ -1,4 +1,5 @@
 import { fetchMixups, fetchRecipes } from "@/app/actions/mixup";
+import { listScreens } from "@/app/actions/screens";
 import MixupClientPage from "./client-page";
 
 export const metadata = {
@@ -7,7 +8,11 @@ export const metadata = {
 };
 
 export default async function MixupPage() {
-	const [mixups, recipes] = await Promise.all([fetchMixups(), fetchRecipes()]);
+	const [mixups, recipes, screens] = await Promise.all([
+		fetchMixups(),
+		fetchRecipes(),
+		listScreens(),
+	]);
 
 	const availableRecipes = recipes.map((r) => ({
 		id: r.id,
@@ -16,5 +21,15 @@ export default async function MixupPage() {
 		description: r.description ?? undefined,
 	}));
 
-	return <MixupClientPage initialMixups={mixups} recipes={availableRecipes} />;
+	return (
+		<MixupClientPage
+			initialMixups={mixups}
+			recipes={availableRecipes}
+			screens={screens.map((screen) => ({
+				id: screen.id,
+				title: screen.name,
+				description: screen.recipe_name,
+			}))}
+		/>
+	);
 }

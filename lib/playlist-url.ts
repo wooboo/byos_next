@@ -1,4 +1,4 @@
-/** Build the correct BMP API URL for a playlist frame (recipe or mixup). */
+/** Build the correct BMP API URL for a playlist frame (recipe, named screen, or mixup). */
 export function playlistFrameBmpUrl(
 	screenId: string,
 	screenType?: string | null,
@@ -9,7 +9,9 @@ export function playlistFrameBmpUrl(
 	const base =
 		screenType === "mixup"
 			? `/api/bitmap/mixup/${screenId}.bmp`
-			: `/api/bitmap/${screenId}.bmp`;
+			: screenType === "screen"
+				? `/api/bitmap/screen/${screenId}.bmp`
+				: `/api/bitmap/${screenId}.bmp`;
 	const params = new URLSearchParams({
 		width: String(width),
 		height: String(height),

@@ -8,6 +8,7 @@ import {
 	renderRecipeOutputs,
 	renderRecipeToImage,
 } from "@/lib/recipes/recipe-renderer";
+import { resolveRenderableRef } from "@/lib/screens/render-target";
 import {
 	parseRequestHeaders,
 	resolveUserIdFromApiKey,
@@ -96,14 +97,20 @@ const renderRecipeBitmap = cache(
 		userId: string | null = null,
 		cookies?: string,
 	) => {
+		const target = await resolveRenderableRef({
+			type: "recipe",
+			id: recipeId,
+			userId,
+		});
 		const renders = await renderRecipeToImage({
-			slug: recipeId,
+			slug: target?.recipeSlug ?? recipeId,
 			imageWidth: width,
 			imageHeight: height,
 			formats: ["bitmap"],
 			grayscale: grayscaleLevels,
 			userId,
 			cookies,
+			paramsOverride: target?.params,
 		});
 		return renders.bitmap ?? Buffer.from([]);
 	},

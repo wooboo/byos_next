@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { fetchRecipes } from "@/app/actions/mixup";
+import { listScreens } from "@/app/actions/screens";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getInitData } from "@/lib/getInitData";
 import { getDeviceStatus } from "@/utils/helpers";
@@ -36,8 +37,8 @@ const DevicePageSkeleton = () => (
 
 // Device data component that uses centralized cached data
 const DeviceData = async ({ friendlyId }: { friendlyId: string }) => {
-	const [{ devices, playlists, playlistItems, mixups }, recipes] =
-		await Promise.all([getInitData(), fetchRecipes()]);
+	const [{ devices, playlists, playlistItems, mixups }, recipes, screens] =
+		await Promise.all([getInitData(), fetchRecipes(), listScreens()]);
 
 	// Find the specific device by friendly_id
 	const device = devices.find((d) => d.friendly_id === friendlyId);
@@ -52,9 +53,12 @@ const DeviceData = async ({ friendlyId }: { friendlyId: string }) => {
 		status: getDeviceStatus(device),
 	};
 
-	// Convert recipes to availableScreens array
-	const availableScreens = recipes.map((recipe) => ({
-		id: recipe.slug,
+	const availableScreens = screens.map((screen) => ({
+		id: screen.id,
+		title: screen.name,
+	}));
+	const availableRecipes = recipes.map((recipe) => ({
+		id: recipe.id,
 		title: recipe.name,
 	}));
 
@@ -62,6 +66,7 @@ const DeviceData = async ({ friendlyId }: { friendlyId: string }) => {
 		<DeviceClientPage
 			initialDevice={enhancedDevice}
 			availableScreens={availableScreens}
+			availableRecipes={availableRecipes}
 			availablePlaylists={playlists}
 			availableMixups={mixups}
 			playlistItems={playlistItems}

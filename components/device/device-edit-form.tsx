@@ -1,9 +1,14 @@
 "use client";
 
-import { RefreshCw, Search } from "lucide-react";
+import { Check, ChevronsUpDown, RefreshCw, Search } from "lucide-react";
 import Image from "next/image";
 import type React from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
+import {
+	ScreenPreviewControls,
+	screenPreviewSummary,
+	useScreenPreviewControls,
+} from "@/components/preview/screen-preview-controls";
 import { Button } from "@/components/ui/button";
 import {
 	Command,
@@ -42,6 +47,7 @@ import { formatTimezone, timezones } from "@/utils/helpers";
 const DEVICE_SIZE_PRESETS = {
 	"800x480": { width: 800, height: 480 },
 	"1872x1404": { width: 1872, height: 1404 },
+	"2048x1536": { width: 2048, height: 1536 },
 	custom: null,
 } as const;
 
@@ -50,6 +56,7 @@ type DeviceSizePreset = keyof typeof DEVICE_SIZE_PRESETS;
 interface DeviceEditFormProps {
 	editedDevice: Device & { status?: string; type?: string };
 	availableScreens: { id: string; title: string }[];
+	availableRecipes: { id: string; title: string }[];
 	availablePlaylists: Playlist[];
 	availableMixups: Mixup[];
 	deviceSizePreset: DeviceSizePreset;
@@ -63,41 +70,23 @@ interface DeviceEditFormProps {
 	) => void;
 	onNestedInputChange: (path: string, value: string) => void;
 	onSelectChange: (name: string, value: string) => void;
-	onScreenChange: (screenId: string | null) => void;
+	onContentRefChange: (
+		kind: "recipe" | "screen" | "playlist" | "mixup" | "none",
+		id: string | null,
+	) => void;
 	onDeviceSizePresetChange: (preset: DeviceSizePreset) => void;
 	onCustomSizeChange: (field: "width" | "height", value: number) => void;
 	onRegenerateApiKey: () => void;
 	onRegenerateFriendlyId: () => void;
 	onAddTimeRange: () => void;
-	onSubmit: (e: React.FormEvent) => void;
+	onSubmit: (e?: React.FormEvent | React.MouseEvent) => void;
 	onCancel: () => void;
-}
-
-const getGrayscaleLevels = (grayscale: number | null | undefined): number => {
-	if (grayscale === 2 || grayscale === 4 || grayscale === 16) return grayscale;
-	return 2;
-};
-
-function PanelHeader({
-	label,
-	right,
-}: {
-	label: string;
-	right?: React.ReactNode;
-}) {
-	return (
-		<div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2">
-			<h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-				{label}
-			</h3>
-			{right}
-		</div>
-	);
 }
 
 export default function DeviceEditForm({
 	editedDevice,
 	availableScreens,
+	availableRecipes,
 	availablePlaylists,
 	availableMixups,
 	deviceSizePreset,
@@ -107,7 +96,7 @@ export default function DeviceEditForm({
 	onInputChange,
 	onNestedInputChange,
 	onSelectChange,
-	onScreenChange,
+	onContentRefChange,
 	onDeviceSizePresetChange,
 	onCustomSizeChange,
 	onRegenerateApiKey,
@@ -116,47 +105,104 @@ export default function DeviceEditForm({
 	onSubmit,
 	onCancel: _onCancel,
 }: DeviceEditFormProps) {
-	const isPortrait = editedDevice.screen_orientation === "portrait";
-	const deviceWidth = isPortrait
-		? editedDevice.screen_height || DEFAULT_IMAGE_HEIGHT
-		: editedDevice.screen_width || DEFAULT_IMAGE_WIDTH;
-	const deviceHeight = isPortrait
-		? editedDevice.screen_width || DEFAULT_IMAGE_WIDTH
-		: editedDevice.screen_height || DEFAULT_IMAGE_HEIGHT;
-	const grayscaleLevels = getGrayscaleLevels(editedDevice.grayscale);
+	const preview = useScreenPreviewControls({
+		defaultPortrait: editedDevice.screen_orientation === "portrait",
+	});
+	const isPortrait = preview.isPortrait;
+	const previewWidth = preview.width;
+	const previewHeight = preview.height;
+	const deviceGrayscale =
+		editedDevice.grayscale === 2 ||
+		editedDevice.grayscale === 4 ||
+		editedDevice.grayscale === 16
+			? editedDevice.grayscale
+			: 16;
 
-	const isMixup =
-		editedDevice.display_mode === DeviceDisplayMode.MIXUP &&
-		!!editedDevice.mixup_id;
 	const isPlaylist =
 		editedDevice.display_mode === DeviceDisplayMode.PLAYLIST &&
 		!!editedDevice.playlist_id;
-
-	const heroSrc = isMixup
-		? `/api/bitmap/mixup/${editedDevice.mixup_id}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`
-		: `/api/bitmap/${editedDevice?.screen || "simple-text"}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`;
+	const isMixup =
+		editedDevice.display_mode === DeviceDisplayMode.MIXUP &&
+		!!editedDevice.mixup_id;
+	const selectedContentValue = isPlaylist
+		? `playlist:${editedDevice.playlist_id}`
+		: isMixup
+			? `mixup:${editedDevice.mixup_id}`
+			: editedDevice.screen_type === "screen" && editedDevice.screen_id
+				? `screen:${editedDevice.screen_id}`
+				: editedDevice.screen_id
+					? `recipe:${editedDevice.screen_id}`
+					: editedDevice.screen
+						? `recipe:${editedDevice.screen}`
+						: "none";
+	const selectedContentLabel =
+		selectedContentValue === "none"
+			? "None (use default)"
+			: selectedContentValue.startsWith("recipe:")
+				? availableRecipes.find(
+						(recipe) => `recipe:${recipe.id}` === selectedContentValue,
+					)?.title
+				: selectedContentValue.startsWith("screen:")
+					? availableScreens.find(
+							(screen) => `screen:${screen.id}` === selectedContentValue,
+						)?.title
+					: selectedContentValue.startsWith("playlist:")
+						? availablePlaylists.find(
+								(playlist) =>
+									`playlist:${playlist.id}` === selectedContentValue,
+							)?.name
+						: availableMixups.find(
+								(mixup) => `mixup:${mixup.id}` === selectedContentValue,
+							)?.name;
+	const previewType =
+		editedDevice.screen_type === "screen" && editedDevice.screen_id
+			? "screen"
+			: "recipe";
+	const previewId =
+		previewType === "screen"
+			? editedDevice.screen_id
+			: editedDevice.screen_id || editedDevice.screen || "simple-text";
+	const bitmapBase = isMixup
+		? `/api/bitmap/mixup/${editedDevice.mixup_id}.bmp`
+		: previewType === "screen"
+			? `/api/bitmap/screen/${previewId}.bmp`
+			: `/api/bitmap/${previewId}.bmp`;
+	const heroSrc = `${bitmapBase}?width=${previewWidth}&height=${previewHeight}&grayscale=${preview.grayscale}`;
+	const pngSrc = `/api/png/${previewType}/${previewId}?width=${previewWidth}&height=${previewHeight}`;
+	const reactSrc = `/preview/${previewType}/${previewId}?width=${previewWidth}&height=${previewHeight}`;
 
 	return (
 		<form onSubmit={onSubmit}>
 			<div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
 				{/* Hero preview — left column, sticky on lg */}
 				<section className="flex flex-col overflow-hidden rounded-2xl border bg-card lg:sticky lg:top-4 lg:self-start">
-					<PanelHeader
-						label="Live preview"
-						right={
-							<span className="text-[11px] tabular-nums text-muted-foreground">
-								{deviceWidth}×{deviceHeight}px ·{" "}
-								<span className="capitalize">
-									{isPortrait ? "portrait" : "landscape"}
-								</span>{" "}
-								· {grayscaleLevels} levels
-							</span>
-						}
+					<div className="space-y-2 border-b bg-muted/30 px-3 py-2">
+						<div className="flex items-center justify-between gap-2">
+							<h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+								Live preview
+							</h3>
+						</div>
+					</div>
+					<ScreenPreviewControls
+						format={preview.format}
+						onFormatChange={preview.setFormat}
+						sizeIndex={preview.sizeIndex}
+						onSizeIndexChange={preview.setSizeIndex}
+						paletteIndex={preview.paletteIndex}
+						onPaletteIndexChange={preview.setPaletteIndex}
+						isPortrait={preview.isPortrait}
+						onPortraitChange={preview.setIsPortrait}
+						className="border-b bg-muted/20 px-3"
 					/>
 					<div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] p-6">
 						{isPlaylist ? (
 							<div className="text-center text-sm text-muted-foreground">
 								Playlist mode — preview shows on the device when saved.
+							</div>
+						) : isMixup && preview.format !== "bmp" ? (
+							<div className="text-center text-sm text-muted-foreground">
+								{preview.format.toUpperCase()} preview is not available for
+								mixups yet.
 							</div>
 						) : (
 							<div
@@ -166,20 +212,36 @@ export default function DeviceEditForm({
 								)}
 							>
 								<DeviceFrame size="lg" portrait={isPortrait}>
-									<Image
-										src={heroSrc}
-										alt="Device screen preview"
-										fill
-										className="absolute inset-0 h-full w-full object-cover"
-										style={{ imageRendering: "pixelated" }}
-										unoptimized
-									/>
+									{preview.format === "react" ? (
+										<iframe
+											title="Device React preview"
+											src={reactSrc}
+											className="absolute inset-0 h-full w-full border-0 bg-white"
+										/>
+									) : (
+										<Image
+											src={preview.format === "png" ? pngSrc : heroSrc}
+											alt="Device screen preview"
+											fill
+											className="absolute inset-0 h-full w-full object-cover"
+											style={{ imageRendering: "pixelated" }}
+											unoptimized
+										/>
+									)}
 								</DeviceFrame>
 							</div>
 						)}
 					</div>
 					<div className="border-t bg-muted/20 px-4 py-3 text-xs">
-						<div className="grid gap-1.5 sm:grid-cols-3">
+						<div className="grid gap-1.5 sm:grid-cols-4">
+							<MetaRow label="Pipeline">
+								{screenPreviewSummary({
+									format: preview.format,
+									width: previewWidth,
+									height: previewHeight,
+									grayscale: preview.grayscale,
+								})}
+							</MetaRow>
 							<MetaRow label="Mode">
 								<span className="capitalize">
 									{editedDevice.display_mode.toLowerCase()}
@@ -334,109 +396,126 @@ export default function DeviceEditForm({
 
 						<TabsContent value="content" className="mt-4 space-y-4">
 							<Field
-								label="Display mode"
-								hint="What should this device render?"
+								label="Content"
+								hint="Choose what this device should render."
 							>
-								<ToggleGroup
-									type="single"
-									variant="outline"
-									value={editedDevice.display_mode}
-									onValueChange={(value) => {
-										if (value) onSelectChange("display_mode", value);
-									}}
-									className="grid grid-cols-3"
-								>
-									<ToggleGroupItem value={DeviceDisplayMode.SCREEN}>
-										Single
-									</ToggleGroupItem>
-									<ToggleGroupItem value={DeviceDisplayMode.PLAYLIST}>
-										Playlist
-									</ToggleGroupItem>
-									<ToggleGroupItem value={DeviceDisplayMode.MIXUP}>
-										Mixup
-									</ToggleGroupItem>
-								</ToggleGroup>
+								<Popover>
+									<PopoverTrigger asChild>
+										<Button
+											variant="outline"
+											role="combobox"
+											className="w-full justify-between"
+										>
+											<span className="truncate">
+												{selectedContentLabel || "Search or select content…"}
+											</span>
+											<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+										</Button>
+									</PopoverTrigger>
+									<PopoverContent
+										className="w-[--radix-popover-trigger-width] p-0"
+										align="start"
+									>
+										<Command>
+											<CommandInput placeholder="Search content…" />
+											<CommandList>
+												<CommandEmpty>No results found.</CommandEmpty>
+												<CommandGroup heading="Recipes">
+													{availableRecipes.map((recipe) => {
+														const value = `recipe:${recipe.id}`;
+														return (
+															<CommandItem
+																key={value}
+																value={`recipe ${recipe.title}`}
+																onSelect={() =>
+																	onContentRefChange("recipe", recipe.id)
+																}
+															>
+																<Check
+																	className={cn(
+																		"mr-2 h-4 w-4",
+																		selectedContentValue === value
+																			? "opacity-100"
+																			: "opacity-0",
+																	)}
+																/>
+																{recipe.title}
+															</CommandItem>
+														);
+													})}
+												</CommandGroup>
+												<CommandGroup heading="Screens">
+													{availableScreens.map((screen) => {
+														const value = `screen:${screen.id}`;
+														return (
+															<CommandItem
+																key={value}
+																value={`screen ${screen.title}`}
+																onSelect={() =>
+																	onContentRefChange("screen", screen.id)
+																}
+															>
+																<Check
+																	className={cn(
+																		"mr-2 h-4 w-4",
+																		selectedContentValue === value
+																			? "opacity-100"
+																			: "opacity-0",
+																	)}
+																/>
+																{screen.title}
+															</CommandItem>
+														);
+													})}
+												</CommandGroup>
+												<CommandGroup heading="Playlists">
+													{availablePlaylists.map((playlist) => (
+														<CommandItem
+															key={`playlist:${playlist.id}`}
+															value={`playlist ${playlist.name}`}
+															onSelect={() =>
+																onContentRefChange("playlist", playlist.id)
+															}
+														>
+															<Check
+																className={cn(
+																	"mr-2 h-4 w-4",
+																	selectedContentValue ===
+																		`playlist:${playlist.id}`
+																		? "opacity-100"
+																		: "opacity-0",
+																)}
+															/>
+															{playlist.name}
+														</CommandItem>
+													))}
+												</CommandGroup>
+												<CommandGroup heading="Mixups">
+													{availableMixups.map((mixup) => (
+														<CommandItem
+															key={`mixup:${mixup.id}`}
+															value={`mixup ${mixup.name}`}
+															onSelect={() =>
+																onContentRefChange("mixup", mixup.id)
+															}
+														>
+															<Check
+																className={cn(
+																	"mr-2 h-4 w-4",
+																	selectedContentValue === `mixup:${mixup.id}`
+																		? "opacity-100"
+																		: "opacity-0",
+																)}
+															/>
+															{mixup.name}
+														</CommandItem>
+													))}
+												</CommandGroup>
+											</CommandList>
+										</Command>
+									</PopoverContent>
+								</Popover>
 							</Field>
-
-							{editedDevice.display_mode === DeviceDisplayMode.PLAYLIST && (
-								<Field label="Playlist" htmlFor="playlist">
-									<Select
-										value={editedDevice?.playlist_id || ""}
-										onValueChange={(value) =>
-											onSelectChange(
-												"playlist_id",
-												value === "none" ? "" : value,
-											)
-										}
-									>
-										<SelectTrigger className="w-full">
-											<SelectValue placeholder="Select playlist…" />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="none">None</SelectItem>
-											{availablePlaylists.map((playlist) => (
-												<SelectItem key={playlist.id} value={playlist.id}>
-													{playlist.name}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</Field>
-							)}
-
-							{editedDevice.display_mode === DeviceDisplayMode.MIXUP && (
-								<Field
-									label="Mixup"
-									htmlFor="mixup"
-									hint="A mixup combines multiple recipes into a single split-screen layout."
-								>
-									<Select
-										value={editedDevice?.mixup_id || ""}
-										onValueChange={(value) =>
-											onSelectChange("mixup_id", value === "none" ? "" : value)
-										}
-									>
-										<SelectTrigger className="w-full">
-											<SelectValue placeholder="Select mixup…" />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="none">None</SelectItem>
-											{availableMixups.map((mixup) => (
-												<SelectItem key={mixup.id} value={mixup.id}>
-													{mixup.name}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</Field>
-							)}
-
-							{editedDevice.display_mode === DeviceDisplayMode.SCREEN && (
-								<Field
-									label="Screen component"
-									htmlFor="screen"
-									hint="If unset, the default screen will be used."
-								>
-									<Select
-										value={editedDevice?.screen || ""}
-										onValueChange={(value) =>
-											onScreenChange(value === "none" ? null : value)
-										}
-									>
-										<SelectTrigger className="w-full">
-											<SelectValue placeholder="Select screen…" />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="none">None (use default)</SelectItem>
-											{availableScreens.map((screen) => (
-												<SelectItem key={screen.id} value={screen.id}>
-													{screen.title}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</Field>
-							)}
 						</TabsContent>
 
 						<TabsContent value="display" className="mt-4 space-y-4">
@@ -453,6 +532,7 @@ export default function DeviceEditForm({
 									<SelectContent>
 										<SelectItem value="800x480">800 × 480</SelectItem>
 										<SelectItem value="1872x1404">1872 × 1404</SelectItem>
+										<SelectItem value="2048x1536">2048 × 1536</SelectItem>
 										<SelectItem value="custom">Custom</SelectItem>
 									</SelectContent>
 								</Select>
@@ -520,7 +600,7 @@ export default function DeviceEditForm({
 							>
 								<ToggleGroup
 									type="single"
-									value={String(grayscaleLevels)}
+									value={String(deviceGrayscale)}
 									onValueChange={(value) => {
 										if (value) onSelectChange("grayscale", value);
 									}}

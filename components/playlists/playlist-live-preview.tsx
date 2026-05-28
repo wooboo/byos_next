@@ -3,12 +3,13 @@
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
-import { playlistFrameBmpUrl } from "@/lib/playlist-url";
-import { Button } from "@/components/ui/button";
 import {
-	DEFAULT_IMAGE_HEIGHT,
-	DEFAULT_IMAGE_WIDTH,
-} from "@/lib/recipes/constants";
+	ScreenPreviewControls,
+	screenPreviewSummary,
+	useScreenPreviewControls,
+} from "@/components/preview/screen-preview-controls";
+import { Button } from "@/components/ui/button";
+import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import { cn } from "@/lib/utils";
 
 export interface PreviewFrame {
@@ -32,6 +33,7 @@ export function PlaylistLivePreview({
 }: PlaylistLivePreviewProps) {
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [progress, setProgress] = useState(0);
+	const preview = useScreenPreviewControls();
 
 	const active = frames[activeIndex];
 	const duration = Math.max(1, active?.duration ?? 30);
@@ -99,8 +101,20 @@ export function PlaylistLivePreview({
 
 	return (
 		<div className="flex flex-col gap-4">
+			<ScreenPreviewControls
+				format={preview.format}
+				onFormatChange={preview.setFormat}
+				sizeIndex={preview.sizeIndex}
+				onSizeIndexChange={preview.setSizeIndex}
+				paletteIndex={preview.paletteIndex}
+				onPaletteIndexChange={preview.setPaletteIndex}
+				isPortrait={preview.isPortrait}
+				onPortraitChange={preview.setIsPortrait}
+				formats={["bmp"]}
+				className="rounded-lg border"
+			/>
 			<div className="relative mx-auto w-full max-w-[640px]">
-				<DeviceFrame size="lg">
+				<DeviceFrame size="lg" portrait={preview.isPortrait}>
 					{isEmpty ? (
 						<div className="absolute inset-0 flex items-center justify-center text-sm text-neutral-500">
 							Add a frame to preview the playlist
@@ -111,8 +125,9 @@ export function PlaylistLivePreview({
 								srcSet={playlistFrameBmpUrl(
 									active.screen_id,
 									active.screen_type,
-									DEFAULT_IMAGE_WIDTH,
-									DEFAULT_IMAGE_HEIGHT,
+									preview.width,
+									preview.height,
+									preview.grayscale,
 								)}
 								type="image/bmp"
 							/>
@@ -120,12 +135,13 @@ export function PlaylistLivePreview({
 								src={playlistFrameBmpUrl(
 									active.screen_id,
 									active.screen_type,
-									DEFAULT_IMAGE_WIDTH,
-									DEFAULT_IMAGE_HEIGHT,
+									preview.width,
+									preview.height,
+									preview.grayscale,
 								)}
 								alt={active.label}
-								width={DEFAULT_IMAGE_WIDTH}
-								height={DEFAULT_IMAGE_HEIGHT}
+								width={preview.width}
+								height={preview.height}
 								className="absolute inset-0 h-full w-full object-cover"
 								style={{ imageRendering: "pixelated" }}
 							/>
@@ -153,6 +169,17 @@ export function PlaylistLivePreview({
 						{Math.max(0, Math.ceil(duration * (1 - progress)))}s
 					</span>
 				</div>
+			</div>
+			<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+				<span>Playlist frame pipeline</span>
+				<span className="tabular-nums">
+					{screenPreviewSummary({
+						format: "bmp",
+						width: preview.width,
+						height: preview.height,
+						grayscale: preview.grayscale,
+					})}
+				</span>
 			</div>
 
 			<div className="flex items-center justify-between gap-2">

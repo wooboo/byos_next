@@ -3,6 +3,7 @@
 import { ArrowLeft, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { fetchPlaylistWithItems } from "@/app/actions/playlist";
+import { createScreenFromRecipe } from "@/app/actions/screens";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Mixup, Recipe } from "@/lib/types";
@@ -22,6 +23,7 @@ interface PlaylistBuilderProps {
 	};
 	recipes: Recipe[];
 	mixups: Mixup[];
+	screens: { id: string; name: string; recipe_name: string }[];
 	onSave: (data: { id?: string; name: string; items: FrameData[] }) => void;
 	onCancel: () => void;
 	isSaving?: boolean;
@@ -31,6 +33,7 @@ export function PlaylistBuilder({
 	playlist,
 	recipes,
 	mixups,
+	screens,
 	onSave,
 	onCancel,
 	isSaving = false,
@@ -45,33 +48,38 @@ export function PlaylistBuilder({
 			{
 				label: "Recipes",
 				options: recipes.map((r) => ({
-					id: r.slug,
+					id: r.id,
 					name: r.name,
 					type: "recipe" as const,
 				})),
 			},
-			...(mixups.length > 0
-				? [
-						{
-							label: "Mixups",
-							options: mixups.map((m) => ({
-								id: m.id,
-								name: m.name,
-								type: "mixup" as const,
-							})),
-						},
-					]
-				: []),
+			{
+				label: "Screens",
+				options: screens.map((s) => ({
+					id: s.id,
+					name: s.name,
+					type: "screen" as const,
+				})),
+			},
+			{
+				label: "Mixups",
+				options: mixups.map((m) => ({
+					id: m.id,
+					name: m.name,
+					type: "mixup" as const,
+				})),
+			},
 		],
-		[recipes, mixups],
+		[recipes, mixups, screens],
 	);
 
 	const nameByScreenId = useMemo(() => {
 		const map = new Map<string, string>();
-		for (const r of recipes) map.set(r.slug, r.name);
+		for (const r of recipes) map.set(r.id, r.name);
+		for (const s of screens) map.set(s.id, s.name);
 		for (const m of mixups) map.set(m.id, m.name);
 		return map;
-	}, [recipes, mixups]);
+	}, [recipes, mixups, screens]);
 
 	// Hydrate items if editing and we don't have them yet
 	useEffect(() => {
@@ -107,11 +115,11 @@ export function PlaylistBuilder({
 	}, [items.length, activeIndex]);
 
 	const handleAdd = () => {
-		const defaultSlug = recipes[0]?.slug || "simple-text";
+		const defaultId = screens[0]?.id || recipes[0]?.id || "simple-text";
 		const newItem: FrameData = {
 			id: `temp-${Date.now()}`,
-			screen_id: defaultSlug,
-			screen_type: "recipe",
+			screen_id: defaultId,
+			screen_type: screens[0]?.id ? "screen" : "recipe",
 			duration: 30,
 			order_index: items.length,
 			start_time: undefined,
@@ -122,7 +130,18 @@ export function PlaylistBuilder({
 		setActiveIndex(items.length);
 	};
 
-	const handleUpdate = (id: string, patch: Partial<FrameData>) => {
+	const handleUpdate = async (id: string, patch: Partial<FrameData>) => {
+		if (patch.screen_type === "recipe" && patch.screen_id) {
+			const recipe = recipes.find((r) => r.id === patch.screen_id);
+			const name = window.prompt(
+				"Name this screen",
+				recipe?.name || "New screen",
+			);
+			if (!name?.trim()) return;
+			const result = await createScreenFromRecipe(patch.screen_id, name);
+			if (!result.success || !result.screen) return;
+			patch = { ...patch, screen_type: "screen", screen_id: result.screen.id };
+		}
 		setItems((current) =>
 			current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
 		);
