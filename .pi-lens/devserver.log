@@ -1,0 +1,21 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.onlyBuiltDependencies". See https://pnpm.io/settings for the new home of each setting.
+$ pnpm generate:sql && next dev --turbopack --port 3001
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.onlyBuiltDependencies". See https://pnpm.io/settings for the new home of each setting.
+$ node scripts/generate-sql-statements.js && pnpm format
+✅ Generated 17 SQL statements from migrations
+   Output: lib/database/sql-statements.ts
+   Migrations: 0000_initial_schema, 0001_add_device_status_fields, 0002_add_playlist_index_to_devices, 0003_add_playlists, 0004_add_mixups, 0005_add_screen_size_settings, 0006_add_screen_configs, 0007_add_better_auth, 0008_add_admin_plugin, 0009_add_user_tenancy, 0010_add_recipes, 0011_add_device_model, 0012_create_schema_migrations, 0013_seed_mono_user, 0014_harden_rls, 0015_playlist_mixup_support, 0016_add_named_screens
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.onlyBuiltDependencies". See https://pnpm.io/settings for the new home of each setting.
+$ biome format --write ./app ./components ./lib ./utils ./hooks
+Formatted 216 files in 17ms. Fixed 1 file.
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://10.11.12.106:3001
+- Environments: .env
+✓ Ready in 159ms
+Creating turbopack project { dir: '/Users/wooboo/Work/byos_next', testMode: true }
+- Cache Components enabled
+- Experiments (use with caution):
+  · serverActions
+
+[?25h
