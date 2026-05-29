@@ -3,13 +3,13 @@
 import { Edit3, Film, Trash2 } from "lucide-react";
 import { FormattedDate } from "@/components/common/formatted-date";
 import { Button } from "@/components/ui/button";
+import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/constants";
 import type { Playlist, PlaylistItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 
 interface PlaylistReelCardProps {
 	playlist: Playlist;

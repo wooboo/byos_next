@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUuid, resolveRenderableContentType } from "@/lib/content-ref";
 import { db } from "@/lib/database/db";
 import { checkDbConnection } from "@/lib/database/utils";
 import { getLatestFirmware, isUpdateAvailable } from "@/lib/firmware";
@@ -115,12 +116,11 @@ export async function GET(request: Request) {
 
 		let dynamicRefreshRate = 180;
 		let imageUrl: string;
-		const singleScreenType = device.screen_type || "recipe";
 		const singleScreenId = device.screen_id || device.screen || "not-found";
-		const isUuid = (value: string) =>
-			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-				value,
-			);
+		const singleScreenType = resolveRenderableContentType(
+			device.screen_type,
+			singleScreenId,
+		);
 		const isScreenUuid = isUuid(singleScreenId);
 		const singleScreenPath =
 			singleScreenType === "screen" && isScreenUuid

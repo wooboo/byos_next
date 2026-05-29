@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { resolveRenderableContentType } from "@/lib/content-ref";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
 import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import {
@@ -168,7 +169,10 @@ export default function DeviceView({
 	const isMixup =
 		device.display_mode === DeviceDisplayMode.MIXUP && device.mixup_id;
 	const singleScreenId = device.screen_id || device.screen || "simple-text";
-	const singleScreenType = device.screen_type || "recipe";
+	const singleScreenType = resolveRenderableContentType(
+		device.screen_type,
+		singleScreenId,
+	);
 	const heroSrc = isPlaylist
 		? playlistFrameBmpUrl(
 				playlistScreens[0].screen || "simple-text",

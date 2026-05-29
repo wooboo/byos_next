@@ -1,4 +1,4 @@
-import { fetchCalendarEvents, type CalendarEvent } from "@/lib/calendar/ics";
+import { type CalendarEvent, fetchCalendarEvents } from "@/lib/calendar/ics";
 
 export interface WeekData {
 	days: {

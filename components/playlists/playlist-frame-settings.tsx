@@ -2,8 +2,6 @@
 
 import { Check, ChevronsUpDown, Clock, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Command,
 	CommandEmpty,
@@ -12,6 +10,8 @@ import {
 	CommandItem,
 	CommandList,
 } from "@/components/ui/command";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Popover,
 	PopoverContent,

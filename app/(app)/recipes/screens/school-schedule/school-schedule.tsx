@@ -1,5 +1,5 @@
-import type { Period, Subjects, WeekSchedule, ChildData } from "./getData";
 import { PreSatori } from "@/utils/pre-satori";
+import type { ChildData, Period, Subjects, WeekSchedule } from "./getData";
 
 // ─── Constants ───────────────────────────────────────────────────────────
 

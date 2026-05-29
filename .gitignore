@@ -54,3 +54,7 @@ sync.sh
 
 # local planning notes
 .notes/
+
+# local agent/devserver runtime artifacts
+.pi-lens/
+tmp/

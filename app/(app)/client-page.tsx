@@ -20,6 +20,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { resolveRenderableContentType } from "@/lib/content-ref";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
 import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import type { Device, SystemLog } from "@/lib/types";
@@ -31,21 +32,10 @@ interface DashboardClientPageProps {
 	systemLogs: SystemLog[];
 }
 
-function isUuid(value: string | null | undefined): boolean {
-	return (
-		!!value &&
-		/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-			value,
-		)
-	);
-}
-
 export default function DashboardClientPage({
 	devices,
 	systemLogs,
 }: DashboardClientPageProps) {
-	const preview = useScreenPreviewControls();
-
 	const processedDevices = devices.map((device) => ({
 		...device,
 		status: getDeviceStatus(device),
@@ -64,7 +54,8 @@ export default function DashboardClientPage({
 			: null;
 
 	const sourcePortrait = lastUpdatedDevice?.screen_orientation === "portrait";
-	const isPortrait = preview.isPortrait || sourcePortrait;
+	const preview = useScreenPreviewControls({ defaultPortrait: sourcePortrait });
+	const isPortrait = preview.isPortrait;
 	const deviceWidth = isPortrait
 		? preview.sizePreset.height
 		: preview.sizePreset.width;
@@ -73,11 +64,10 @@ export default function DashboardClientPage({
 		: preview.sizePreset.height;
 	const rawPreviewId =
 		lastUpdatedDevice?.screen_id || lastUpdatedDevice?.screen || "simple-text";
-	const previewType =
-		(lastUpdatedDevice?.screen_type === "screen" || isUuid(rawPreviewId)) &&
-		rawPreviewId
-			? "screen"
-			: "recipe";
+	const previewType = resolveRenderableContentType(
+		lastUpdatedDevice?.screen_type,
+		rawPreviewId,
+	);
 	const previewId =
 		previewType === "screen"
 			? rawPreviewId

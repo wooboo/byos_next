@@ -244,6 +244,7 @@ export default function DeviceClientPage({
 			mixup_id: kind === "mixup" ? id : null,
 			screen_type: kind === "screen" ? "screen" : "recipe",
 			screen_id: kind === "screen" ? id : null,
+			screen: kind === "recipe" ? id : null,
 		}));
 	};
 

@@ -1,5 +1,6 @@
 import { sql } from "kysely";
 import { getScreenParams } from "@/app/actions/screens-params";
+import { isUuid } from "@/lib/content-ref";
 import { db } from "@/lib/database/db";
 import type { JsonObject } from "@/lib/database/db.d";
 import { withExplicitUserScope } from "@/lib/database/scoped-db";
@@ -26,12 +27,6 @@ function parseParams(raw: unknown): Record<string, unknown> {
 	if (typeof raw === "string")
 		return JSON.parse(raw) as Record<string, unknown>;
 	return raw as Record<string, unknown>;
-}
-
-function isUuid(value: string): boolean {
-	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-		value,
-	);
 }
 
 async function getParamDefinitions(recipeSlug: string, userId?: string | null) {

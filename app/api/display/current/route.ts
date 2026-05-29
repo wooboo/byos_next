@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveRenderableContentType } from "@/lib/content-ref";
 import { db } from "@/lib/database/db";
 import { checkDbConnection } from "@/lib/database/utils";
 import { logError, logInfo } from "@/lib/logger";
@@ -83,8 +84,11 @@ export async function GET(request: Request) {
 				? deviceData.grayscale
 				: 2;
 
-		const screenType = deviceData.screen_type || "recipe";
 		const screenId = deviceData.screen_id || deviceData.screen || "not-found";
+		const screenType = resolveRenderableContentType(
+			deviceData.screen_type,
+			screenId,
+		);
 		const needsAccessToken =
 			(deviceData.display_mode === DeviceDisplayMode.MIXUP &&
 				!!deviceData.mixup_id) ||

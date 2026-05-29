@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { resolveRenderableContentType } from "@/lib/content-ref";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
 import {
 	DEFAULT_IMAGE_HEIGHT,
@@ -124,17 +125,18 @@ export default function DeviceEditForm({
 	const isMixup =
 		editedDevice.display_mode === DeviceDisplayMode.MIXUP &&
 		!!editedDevice.mixup_id;
+	const legacySingleScreenId = editedDevice.screen_id || editedDevice.screen;
+	const legacySingleScreenType = resolveRenderableContentType(
+		editedDevice.screen_type,
+		legacySingleScreenId,
+	);
 	const selectedContentValue = isPlaylist
 		? `playlist:${editedDevice.playlist_id}`
 		: isMixup
 			? `mixup:${editedDevice.mixup_id}`
-			: editedDevice.screen_type === "screen" && editedDevice.screen_id
-				? `screen:${editedDevice.screen_id}`
-				: editedDevice.screen_id
-					? `recipe:${editedDevice.screen_id}`
-					: editedDevice.screen
-						? `recipe:${editedDevice.screen}`
-						: "none";
+			: legacySingleScreenId
+				? `${legacySingleScreenType}:${legacySingleScreenId}`
+				: "none";
 	const selectedContentLabel =
 		selectedContentValue === "none"
 			? "None (use default)"
@@ -154,14 +156,11 @@ export default function DeviceEditForm({
 						: availableMixups.find(
 								(mixup) => `mixup:${mixup.id}` === selectedContentValue,
 							)?.name;
-	const previewType =
-		editedDevice.screen_type === "screen" && editedDevice.screen_id
-			? "screen"
-			: "recipe";
-	const previewId =
-		previewType === "screen"
-			? editedDevice.screen_id
-			: editedDevice.screen_id || editedDevice.screen || "simple-text";
+	const previewId = legacySingleScreenId || "simple-text";
+	const previewType = resolveRenderableContentType(
+		editedDevice.screen_type,
+		previewId,
+	);
 	const bitmapBase = isMixup
 		? `/api/bitmap/mixup/${editedDevice.mixup_id}.bmp`
 		: previewType === "screen"
