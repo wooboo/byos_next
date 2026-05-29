@@ -42,6 +42,10 @@ export default async function RenderPreviewPage({
 		target.params,
 	);
 	const propsWithDimensions = addDimensionsToProps(props, width, height);
+	const previewProps =
+		target.recipeSlug === "school-schedule"
+			? { ...propsWithDimensions, disableDoubling: true }
+			: propsWithDimensions;
 
 	if (isScrollMode) {
 		return (
@@ -50,7 +54,7 @@ export default async function RenderPreviewPage({
 					html, body { overflow: auto; }
 				`}</style>
 				<div style={{ width: `${width}px`, height: `${height}px` }}>
-					<Component {...propsWithDimensions} />
+					<Component {...previewProps} />
 				</div>
 			</>
 		);
@@ -74,7 +78,7 @@ export default async function RenderPreviewPage({
 					transformOrigin: "top left",
 				}}
 			>
-				<Component {...propsWithDimensions} />
+				<Component {...previewProps} />
 			</div>
 		</div>
 	);

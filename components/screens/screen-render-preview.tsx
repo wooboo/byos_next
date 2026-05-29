@@ -97,11 +97,15 @@ function ScreenRenderComponent({
 		imageWidth,
 		imageHeight,
 	) as ComponentProps;
+	const reactProps =
+		recipeSlug === "school-schedule"
+			? { ...propsWithDimensions, disableDoubling: true }
+			: propsWithDimensions;
 
 	if (format === "react") {
 		return (
 			<ScaledToFit imageWidth={imageWidth} imageHeight={imageHeight}>
-				<Component {...propsWithDimensions} />
+				<Component {...reactProps} />
 			</ScaledToFit>
 		);
 	}

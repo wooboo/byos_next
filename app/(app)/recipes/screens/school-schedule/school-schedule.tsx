@@ -1,5 +1,5 @@
 import { PreSatori } from "@/utils/pre-satori";
-import type { ChildData, Period, Subjects, WeekSchedule } from "./getData";
+import type { ChildData, Period, Subjects } from "./getData";
 
 // ─── Constants ───────────────────────────────────────────────────────────
 
@@ -277,12 +277,14 @@ export default function SchoolSchedule({
 	children = {},
 	width = 800,
 	height = 480,
+	disableDoubling = false,
 }: {
 	periods?: Period[];
 	subjects?: Subjects;
 	children?: Record<string, ChildData>;
 	width?: number;
 	height?: number;
+	disableDoubling?: boolean;
 }) {
 	const sc = makeScale(width);
 	const now = new Date();
@@ -293,7 +295,7 @@ export default function SchoolSchedule({
 	const bottom = childEntries.length > 1 ? childEntries[1] : null;
 
 	return (
-		<PreSatori useDoubling={true} width={width} height={height}>
+		<PreSatori useDoubling={!disableDoubling} width={width} height={height}>
 			<div
 				style={{
 					...flexCol,
