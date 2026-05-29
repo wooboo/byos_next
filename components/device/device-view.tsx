@@ -173,23 +173,32 @@ export default function DeviceView({
 		device.screen_type,
 		singleScreenId,
 	);
-	const heroSrc = isPlaylist
-		? playlistFrameBmpUrl(
-				playlistScreens[0].screen || "simple-text",
-				playlistScreens[0].screen_type,
-				deviceWidth,
-				deviceHeight,
-				grayscaleLevels,
-			)
+	const heroFrameId = isPlaylist
+		? playlistScreens[0].screen || "simple-text"
 		: isMixup
-			? `/api/bitmap/mixup/${device.mixup_id}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`
+			? device.mixup_id
+			: singleScreenId;
+	const heroFrameType = isPlaylist
+		? playlistScreens[0].screen_type || "recipe"
+		: isMixup
+			? "mixup"
+			: singleScreenType;
+	const heroContentType =
+		heroFrameType === "mixup"
+			? "mixup"
+			: resolveRenderableContentType(heroFrameType, heroFrameId);
+	const bmpSrc =
+		heroContentType === "mixup"
+			? `/api/bitmap/mixup/${heroFrameId}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`
 			: playlistFrameBmpUrl(
-					singleScreenId,
-					singleScreenType,
+					heroFrameId || "simple-text",
+					heroContentType,
 					deviceWidth,
 					deviceHeight,
 					grayscaleLevels,
 				);
+	const pngSrc = `/api/png/${heroContentType}/${heroFrameId}?width=${deviceWidth}&height=${deviceHeight}`;
+	const reactSrc = `/preview/${heroContentType}/${heroFrameId}?width=${deviceWidth}&height=${deviceHeight}`;
 
 	return (
 		<div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
@@ -214,7 +223,6 @@ export default function DeviceView({
 					onPaletteIndexChange={preview.setPaletteIndex}
 					isPortrait={preview.isPortrait}
 					onPortraitChange={preview.setIsPortrait}
-					formats={["bmp"]}
 					className="border-b bg-muted/20"
 				/>
 				<div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] p-6">
@@ -225,14 +233,27 @@ export default function DeviceView({
 						)}
 					>
 						<DeviceFrame size="lg" portrait={isPortrait}>
-							<Image
-								src={heroSrc}
-								alt="Device screen"
-								fill
-								className="absolute inset-0 h-full w-full object-cover"
-								style={{ imageRendering: "pixelated" }}
-								unoptimized
-							/>
+							{heroContentType === "mixup" && preview.format !== "bmp" ? (
+								<div className="absolute inset-0 flex items-center justify-center bg-background px-4 text-center text-sm text-muted-foreground">
+									{preview.format.toUpperCase()} preview is not available for
+									mixups yet.
+								</div>
+							) : preview.format === "react" ? (
+								<iframe
+									title={`${device.name} React preview`}
+									src={reactSrc}
+									className="absolute inset-0 h-full w-full border-0 bg-white"
+								/>
+							) : (
+								<Image
+									src={preview.format === "png" ? pngSrc : bmpSrc}
+									alt="Device screen"
+									fill
+									className="absolute inset-0 h-full w-full object-cover"
+									style={{ imageRendering: "pixelated" }}
+									unoptimized
+								/>
+							)}
 						</DeviceFrame>
 					</div>
 				</div>
@@ -282,9 +303,8 @@ export default function DeviceView({
 						currently on the screen.
 					</span>
 					<span className="ml-auto tabular-nums">
-						BMP pipeline ·{" "}
 						{screenPreviewSummary({
-							format: "bmp",
+							format: preview.format,
 							width: deviceWidth,
 							height: deviceHeight,
 							grayscale: grayscaleLevels,
