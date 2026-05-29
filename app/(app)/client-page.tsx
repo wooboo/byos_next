@@ -126,6 +126,8 @@ export default function DashboardClientPage({
 							onPaletteIndexChange={preview.setPaletteIndex}
 							isPortrait={isPortrait}
 							onPortraitChange={preview.setIsPortrait}
+							reactMode={preview.reactMode}
+							onReactModeChange={preview.setReactMode}
 						/>
 					)}
 
@@ -154,6 +156,7 @@ export default function DashboardClientPage({
 											src={reactSrc}
 											width={deviceWidth}
 											height={deviceHeight}
+											mode={preview.reactMode}
 										/>
 									) : (
 										<Image
@@ -186,6 +189,7 @@ export default function DashboardClientPage({
 									width: deviceWidth,
 									height: deviceHeight,
 									grayscale: preview.grayscale,
+									reactMode: preview.reactMode,
 								})}
 							</span>
 						)}

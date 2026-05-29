@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type ScreenPreviewFormat = "bmp" | "png" | "react";
+export type ReactPreviewMode = "fit" | "scroll";
 
 export const SCREEN_PREVIEW_FORMATS: {
 	value: ScreenPreviewFormat;
@@ -39,16 +40,20 @@ export function useScreenPreviewControls({
 	defaultPortrait = false,
 	defaultSizeIndex = 0,
 	defaultPaletteIndex = 2,
+	defaultReactMode = "fit",
 }: {
 	defaultFormat?: ScreenPreviewFormat;
 	defaultPortrait?: boolean;
 	defaultSizeIndex?: number;
 	defaultPaletteIndex?: number;
+	defaultReactMode?: ReactPreviewMode;
 } = {}) {
 	const [format, setFormat] = useState<ScreenPreviewFormat>(defaultFormat);
 	const [sizeIndex, setSizeIndex] = useState(defaultSizeIndex);
 	const [paletteIndex, setPaletteIndex] = useState(defaultPaletteIndex);
 	const [isPortrait, setIsPortrait] = useState(defaultPortrait);
+	const [reactMode, setReactMode] =
+		useState<ReactPreviewMode>(defaultReactMode);
 
 	const sizePreset =
 		SCREEN_PREVIEW_SIZE_PRESETS[sizeIndex] || SCREEN_PREVIEW_SIZE_PRESETS[0];
@@ -67,6 +72,8 @@ export function useScreenPreviewControls({
 			setPaletteIndex,
 			isPortrait,
 			setIsPortrait,
+			reactMode,
+			setReactMode,
 			sizePreset,
 			palette,
 			width,
@@ -78,6 +85,7 @@ export function useScreenPreviewControls({
 			sizeIndex,
 			paletteIndex,
 			isPortrait,
+			reactMode,
 			sizePreset,
 			palette,
 			width,
@@ -95,6 +103,8 @@ export function ScreenPreviewControls({
 	onPaletteIndexChange,
 	isPortrait,
 	onPortraitChange,
+	reactMode = "fit",
+	onReactModeChange,
 	formats = ["bmp", "png", "react"],
 	showFormats = true,
 	showSizes = true,
@@ -110,6 +120,8 @@ export function ScreenPreviewControls({
 	onPaletteIndexChange: (index: number) => void;
 	isPortrait: boolean;
 	onPortraitChange: (isPortrait: boolean) => void;
+	reactMode?: ReactPreviewMode;
+	onReactModeChange?: (mode: ReactPreviewMode) => void;
 	formats?: ScreenPreviewFormat[];
 	showFormats?: boolean;
 	showSizes?: boolean;
@@ -120,8 +132,10 @@ export function ScreenPreviewControls({
 	const allowedFormats = SCREEN_PREVIEW_FORMATS.filter((item) =>
 		formats.includes(item.value),
 	);
-	const canConfigureSize = format === "bmp" || format === "png";
+	const canConfigureSize =
+		format === "bmp" || format === "png" || format === "react";
 	const canConfigurePalette = format === "bmp";
+	const canConfigureReactMode = format === "react" && onReactModeChange;
 
 	return (
 		<div
@@ -199,6 +213,35 @@ export function ScreenPreviewControls({
 				</div>
 			)}
 
+			{canConfigureReactMode && (
+				<div className="inline-flex rounded-lg border bg-background p-0.5">
+					<button
+						type="button"
+						onClick={() => onReactModeChange("fit")}
+						className={cn(
+							"rounded-md px-2 py-1 text-xs font-medium",
+							reactMode === "fit"
+								? "bg-foreground text-background"
+								: "text-muted-foreground hover:text-foreground",
+						)}
+					>
+						Fit
+					</button>
+					<button
+						type="button"
+						onClick={() => onReactModeChange("scroll")}
+						className={cn(
+							"rounded-md px-2 py-1 text-xs font-medium",
+							reactMode === "scroll"
+								? "bg-foreground text-background"
+								: "text-muted-foreground hover:text-foreground",
+						)}
+					>
+						Scroll
+					</button>
+				</div>
+			)}
+
 			{showPalette && canConfigurePalette && (
 				<div className="inline-flex rounded-lg border bg-background p-0.5">
 					{SCREEN_PREVIEW_PALETTES.map((palette, index) => (
@@ -236,13 +279,16 @@ export function screenPreviewSummary({
 	width,
 	height,
 	grayscale,
+	reactMode,
 }: {
 	format: ScreenPreviewFormat;
 	width: number;
 	height: number;
 	grayscale: number;
+	reactMode?: ReactPreviewMode;
 }) {
-	if (format === "react") return "React preview";
+	if (format === "react")
+		return `${width}×${height}px · React ${reactMode ?? "fit"}`;
 	if (format === "png") return `${width}×${height}px · PNG`;
 	return `${width}×${height}px · ${grayscale} gray levels · BMP`;
 }

@@ -212,6 +212,8 @@ export default function DeviceEditForm({
 						onPaletteIndexChange={preview.setPaletteIndex}
 						isPortrait={preview.isPortrait}
 						onPortraitChange={preview.setIsPortrait}
+						reactMode={preview.reactMode}
+						onReactModeChange={preview.setReactMode}
 						className="border-b bg-muted/20 px-3"
 					/>
 					<div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] p-6">
@@ -243,6 +245,7 @@ export default function DeviceEditForm({
 											src={reactSrc}
 											width={previewWidth}
 											height={previewHeight}
+											mode={preview.reactMode}
 										/>
 									) : (
 										<Image
@@ -266,6 +269,7 @@ export default function DeviceEditForm({
 									width: previewWidth,
 									height: previewHeight,
 									grayscale: preview.grayscale,
+									reactMode: preview.reactMode,
 								})}
 							</MetaRow>
 							<MetaRow label="Mode">

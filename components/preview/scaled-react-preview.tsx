@@ -1,8 +1,12 @@
+import { cn } from "@/lib/utils";
+import type { ReactPreviewMode } from "./screen-preview-controls";
+
 interface ScaledReactPreviewProps {
 	src: string;
 	title: string;
 	width: number;
 	height: number;
+	mode?: ReactPreviewMode;
 }
 
 export function ScaledReactPreview({
@@ -10,10 +14,16 @@ export function ScaledReactPreview({
 	title,
 	width,
 	height,
+	mode = "fit",
 }: ScaledReactPreviewProps) {
+	const isFit = mode === "fit";
+
 	return (
 		<div
-			className="absolute inset-0 overflow-hidden bg-white"
+			className={cn(
+				"absolute inset-0 bg-white",
+				isFit ? "overflow-hidden" : "overflow-auto",
+			)}
 			style={{ containerType: "size" }}
 		>
 			<iframe
@@ -23,7 +33,9 @@ export function ScaledReactPreview({
 				style={{
 					width: `${width}px`,
 					height: `${height}px`,
-					transform: `scale(calc(100cqw / ${width}))`,
+					transform: isFit
+						? `scale(min(calc(100cqw / ${width}px), calc(100cqh / ${height}px)))`
+						: undefined,
 					transformOrigin: "top left",
 				}}
 			/>

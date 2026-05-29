@@ -44,6 +44,7 @@ export function RecipePreviewStage({
 	const [format, setFormat] = useState<ScreenPreviewFormat>(defaultFormat);
 	const [presetIdx, setPresetIdx] = useState(0);
 	const [paletteIdx, setPaletteIdx] = useState(2);
+	const [reactMode, setReactMode] = useState<"fit" | "scroll">("fit");
 
 	const preset =
 		SCREEN_PREVIEW_SIZE_PRESETS[presetIdx] || SCREEN_PREVIEW_SIZE_PRESETS[0];
@@ -97,6 +98,8 @@ export function RecipePreviewStage({
 				onPaletteIndexChange={setPaletteIdx}
 				isPortrait={isPortrait}
 				onPortraitChange={handleOrientationChange}
+				reactMode={reactMode}
+				onReactModeChange={setReactMode}
 				formats={formats.map((item) => item.key)}
 				className="bg-muted/30 px-3"
 			/>
@@ -128,6 +131,7 @@ export function RecipePreviewStage({
 						width: portraitW,
 						height: portraitH,
 						grayscale: palette.grayscale,
+						reactMode,
 					})}
 				</span>
 				{active?.pipeline && (

@@ -224,6 +224,8 @@ export default function DeviceView({
 					onPaletteIndexChange={preview.setPaletteIndex}
 					isPortrait={preview.isPortrait}
 					onPortraitChange={preview.setIsPortrait}
+					reactMode={preview.reactMode}
+					onReactModeChange={preview.setReactMode}
 					className="border-b bg-muted/20"
 				/>
 				<div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] p-6">
@@ -250,6 +252,7 @@ export default function DeviceView({
 									src={reactSrc}
 									width={deviceWidth}
 									height={deviceHeight}
+									mode={preview.reactMode}
 								/>
 							) : (
 								<Image
@@ -315,6 +318,7 @@ export default function DeviceView({
 							width: deviceWidth,
 							height: deviceHeight,
 							grayscale: grayscaleLevels,
+							reactMode: preview.reactMode,
 						})}
 					</span>
 				</footer>
