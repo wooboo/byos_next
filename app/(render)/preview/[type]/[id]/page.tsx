@@ -15,13 +15,14 @@ export default async function RenderPreviewPage({
 	searchParams,
 }: {
 	params: Promise<{ type: string; id: string }>;
-	searchParams: Promise<{ width?: string; height?: string }>;
+	searchParams: Promise<{ width?: string; height?: string; mode?: string }>;
 }) {
 	const { type, id } = await params;
 	if (type !== "recipe" && type !== "screen") notFound();
-	const { width: widthParam, height: heightParam } = await searchParams;
+	const { width: widthParam, height: heightParam, mode } = await searchParams;
 	const width = Number.parseInt(widthParam || "", 10) || DEFAULT_IMAGE_WIDTH;
 	const height = Number.parseInt(heightParam || "", 10) || DEFAULT_IMAGE_HEIGHT;
+	const isScrollMode = mode === "scroll";
 	const userId = await getCurrentUserId();
 	const target = await resolveRenderableRef({ type, id, userId });
 	if (!target) notFound();
@@ -42,8 +43,29 @@ export default async function RenderPreviewPage({
 	);
 	const propsWithDimensions = addDimensionsToProps(props, width, height);
 
+	if (isScrollMode) {
+		return (
+			<>
+				<style>{`
+					html, body { overflow: auto; }
+				`}</style>
+				<div style={{ width: `${width}px`, height: `${height}px` }}>
+					<Component {...propsWithDimensions} />
+				</div>
+			</>
+		);
+	}
+
 	return (
-		<div className="absolute inset-0" style={{ containerType: "inline-size" }}>
+		<div
+			className="absolute inset-0 overflow-hidden"
+			style={{ containerType: "inline-size" }}
+		>
+			<style>{`
+				html, body { overflow: hidden; }
+				::-webkit-scrollbar { display: none !important; }
+				* { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+			`}</style>
 			<div
 				style={{
 					width: `${width}px`,
