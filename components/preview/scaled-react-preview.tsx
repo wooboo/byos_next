@@ -20,7 +20,7 @@ export function ScaledReactPreview({
 	mode = "fit",
 }: ScaledReactPreviewProps) {
 	const isFit = mode === "fit";
-	const previewSrc = `${src}${src.includes("?") ? "&" : "?"}mode=${mode}`;
+	const previewSrc = `${src}${src.includes("?") ? "&" : "?"}mode=scroll`;
 	const [contentSize, setContentSize] = useState({ width, height });
 	const frameWidth = isFit ? Math.max(width, contentSize.width) : width;
 	const frameHeight = isFit ? Math.max(height, contentSize.height) : height;
