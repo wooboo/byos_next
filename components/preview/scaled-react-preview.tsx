@@ -39,15 +39,24 @@ export function ScaledReactPreview({
 
 				const body = doc.body;
 				const root = doc.documentElement;
-				const content = body.firstElementChild ?? body;
-				const rect = content.getBoundingClientRect();
+				const rects = Array.from(body.querySelectorAll("*"), (element) =>
+					element.getBoundingClientRect(),
+				);
+				const visualWidth = Math.max(
+					0,
+					...rects.map((rect) => rect.left + rect.width),
+				);
+				const visualHeight = Math.max(
+					0,
+					...rects.map((rect) => rect.top + rect.height),
+				);
 				setContentSize({
 					width: Math.ceil(
 						Math.max(
 							width,
 							body?.scrollWidth ?? 0,
 							root.scrollWidth,
-							rect.width,
+							visualWidth,
 						),
 					),
 					height: Math.ceil(
@@ -55,7 +64,7 @@ export function ScaledReactPreview({
 							height,
 							body?.scrollHeight ?? 0,
 							root.scrollHeight,
-							rect.height,
+							visualHeight,
 						),
 					),
 				});
