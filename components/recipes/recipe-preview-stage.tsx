@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
+import { ScaledReactPreview } from "@/components/preview/scaled-react-preview";
 import {
 	SCREEN_PREVIEW_PALETTES,
 	SCREEN_PREVIEW_SIZE_PRESETS,
@@ -21,6 +22,7 @@ interface RecipePreviewStageProps {
 	bmpNode?: ReactNode;
 	pngNode?: ReactNode;
 	reactNode?: ReactNode;
+	reactPreviewSrc?: string;
 	bmpPipeline?: ReactNode;
 	pngPipeline?: ReactNode;
 	reactPipeline?: ReactNode;
@@ -35,6 +37,7 @@ export function RecipePreviewStage({
 	bmpNode,
 	pngNode,
 	reactNode,
+	reactPreviewSrc,
 	bmpPipeline,
 	pngPipeline,
 	reactPipeline,
@@ -52,6 +55,18 @@ export function RecipePreviewStage({
 		SCREEN_PREVIEW_PALETTES[paletteIdx] || SCREEN_PREVIEW_PALETTES[2];
 	const portraitW = isPortrait ? preset.height : preset.width;
 	const portraitH = isPortrait ? preset.width : preset.height;
+	const resolvedReactNode =
+		reactPreviewSrc !== undefined ? (
+			<ScaledReactPreview
+				src={`${reactPreviewSrc}?width=${portraitW}&height=${portraitH}`}
+				title={`${slug} React preview`}
+				width={portraitW}
+				height={portraitH}
+				mode={reactMode}
+			/>
+		) : (
+			reactNode
+		);
 
 	const formats: {
 		key: ScreenPreviewFormat;
@@ -72,7 +87,7 @@ export function RecipePreviewStage({
 			pipeline: bmpPipeline,
 		},
 		{ key: "png", node: pngNode, pipeline: pngPipeline },
-		{ key: "react", node: reactNode, pipeline: reactPipeline },
+		{ key: "react", node: resolvedReactNode, pipeline: reactPipeline },
 	].filter((f) => f.node !== undefined) as typeof formats;
 
 	const active = formats.find((f) => f.key === format) || formats[0];

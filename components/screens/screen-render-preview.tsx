@@ -203,20 +203,7 @@ export function ScreenRenderPreview({
 					/>
 				</Suspense>
 			}
-			reactNode={
-				<Suspense fallback={<LoadingState label="Rendering recipe…" />}>
-					<ScreenRenderComponent
-						screenId={screenId}
-						recipeSlug={recipeSlug}
-						title={title}
-						format="react"
-						imageWidth={imageWidth}
-						imageHeight={imageHeight}
-						paramsOverride={paramsOverride}
-						userId={userId}
-					/>
-				</Suspense>
-			}
+			reactPreviewSrc={`/preview/screen/${screenId}`}
 			bmpPipeline={
 				<span>
 					Screen params → JSX → PNG → render-bmp → /api/bitmap/screen/{screenId}

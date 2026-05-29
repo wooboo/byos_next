@@ -596,17 +596,7 @@ export default async function RecipePage({
 							/>
 						</Suspense>
 					}
-					reactNode={
-						<Suspense fallback={<LoadingState label="Rendering recipe…" />}>
-							<RenderComponent
-								slug={slug}
-								format="react"
-								title={config.title}
-								imageWidth={imageWidth}
-								imageHeight={imageHeight}
-							/>
-						</Suspense>
-					}
+					reactPreviewSrc={`/preview/recipe/${slug}`}
 					bmpPipeline={
 						<span>
 							JSX → pre-satori → {getRendererType()} PNG → render-bmp →{" "}
