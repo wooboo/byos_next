@@ -109,7 +109,12 @@ export function RecipePreviewStage({
 						isPortrait ? "max-w-[360px]" : "max-w-[720px]",
 					)}
 				>
-					<DeviceFrame size="lg" portrait={isPortrait}>
+					<DeviceFrame
+						size="lg"
+						portrait={isPortrait}
+						screenWidth={portraitW}
+						screenHeight={portraitH}
+					>
 						<div className="absolute inset-0">{active?.node}</div>
 					</DeviceFrame>
 				</div>

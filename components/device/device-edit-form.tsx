@@ -4,6 +4,7 @@ import { Check, ChevronsUpDown, RefreshCw, Search } from "lucide-react";
 import Image from "next/image";
 import type React from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
+import { ScaledReactPreview } from "@/components/preview/scaled-react-preview";
 import {
 	ScreenPreviewControls,
 	screenPreviewSummary,
@@ -230,12 +231,18 @@ export default function DeviceEditForm({
 									isPortrait ? "max-w-[260px]" : "max-w-[520px]",
 								)}
 							>
-								<DeviceFrame size="lg" portrait={isPortrait}>
+								<DeviceFrame
+									size="lg"
+									portrait={isPortrait}
+									screenWidth={previewWidth}
+									screenHeight={previewHeight}
+								>
 									{preview.format === "react" ? (
-										<iframe
+										<ScaledReactPreview
 											title="Device React preview"
 											src={reactSrc}
-											className="absolute inset-0 h-full w-full border-0 bg-white"
+											width={previewWidth}
+											height={previewHeight}
 										/>
 									) : (
 										<Image

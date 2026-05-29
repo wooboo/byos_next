@@ -114,7 +114,12 @@ export function PlaylistLivePreview({
 				className="rounded-lg border"
 			/>
 			<div className="relative mx-auto w-full max-w-[640px]">
-				<DeviceFrame size="lg" portrait={preview.isPortrait}>
+				<DeviceFrame
+					size="lg"
+					portrait={preview.isPortrait}
+					screenWidth={preview.width}
+					screenHeight={preview.height}
+				>
 					{isEmpty ? (
 						<div className="absolute inset-0 flex items-center justify-center text-sm text-neutral-500">
 							Add a frame to preview the playlist

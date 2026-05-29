@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { DeviceFrame } from "@/components/common/device-frame";
 import { StatusIndicator } from "@/components/common/status-indicator";
+import { ScaledReactPreview } from "@/components/preview/scaled-react-preview";
 import {
 	ScreenPreviewControls,
 	screenPreviewSummary,
@@ -136,17 +137,23 @@ export default function DashboardClientPage({
 									isPortrait ? "max-w-[260px]" : "max-w-[520px]",
 								)}
 							>
-								<DeviceFrame size="lg" portrait={isPortrait}>
+								<DeviceFrame
+									size="lg"
+									portrait={isPortrait}
+									screenWidth={deviceWidth}
+									screenHeight={deviceHeight}
+								>
 									{isMixup && preview.format !== "bmp" ? (
 										<div className="absolute inset-0 flex items-center justify-center bg-background px-4 text-center text-sm text-muted-foreground">
 											{preview.format.toUpperCase()} preview is not available
 											for mixups yet.
 										</div>
 									) : preview.format === "react" ? (
-										<iframe
+										<ScaledReactPreview
 											title={`${lastUpdatedDevice.name} React preview`}
 											src={reactSrc}
-											className="absolute inset-0 h-full w-full border-0 bg-white"
+											width={deviceWidth}
+											height={deviceHeight}
 										/>
 									) : (
 										<Image

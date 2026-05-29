@@ -302,7 +302,12 @@ export function MixupBuilder({
 					/>
 					<div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] p-6">
 						<div className="w-full max-w-[640px]">
-							<DeviceFrame size="lg" portrait={preview.isPortrait}>
+							<DeviceFrame
+								size="lg"
+								portrait={preview.isPortrait}
+								screenWidth={preview.width}
+								screenHeight={preview.height}
+							>
 								<div
 									className="grid h-full w-full"
 									style={{
