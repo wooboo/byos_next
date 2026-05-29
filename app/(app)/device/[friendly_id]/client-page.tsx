@@ -517,6 +517,7 @@ export default function DeviceClientPage({
 					availableRecipes={availableRecipes}
 					availablePlaylists={availablePlaylists}
 					availableMixups={availableMixups}
+					playlistScreens={playlistScreens}
 					deviceSizePreset={deviceSizePreset}
 					apiKeyError={apiKeyError}
 					friendlyIdError={friendlyIdError}

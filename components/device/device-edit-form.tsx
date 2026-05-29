@@ -37,6 +37,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { resolveRenderableContentType } from "@/lib/content-ref";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
+import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
@@ -60,6 +61,11 @@ interface DeviceEditFormProps {
 	availableRecipes: { id: string; title: string }[];
 	availablePlaylists: Playlist[];
 	availableMixups: Mixup[];
+	playlistScreens: {
+		screen: string;
+		screen_type?: string | null;
+		duration: number;
+	}[];
 	deviceSizePreset: DeviceSizePreset;
 	apiKeyError: string | null;
 	friendlyIdError: string | null;
@@ -90,6 +96,7 @@ export default function DeviceEditForm({
 	availableRecipes,
 	availablePlaylists,
 	availableMixups,
+	playlistScreens,
 	deviceSizePreset,
 	apiKeyError,
 	friendlyIdError,
@@ -156,17 +163,30 @@ export default function DeviceEditForm({
 						: availableMixups.find(
 								(mixup) => `mixup:${mixup.id}` === selectedContentValue,
 							)?.name;
-	const previewId = legacySingleScreenId || "simple-text";
-	const previewType = resolveRenderableContentType(
-		editedDevice.screen_type,
-		previewId,
-	);
-	const bitmapBase = isMixup
-		? `/api/bitmap/mixup/${editedDevice.mixup_id}.bmp`
-		: previewType === "screen"
-			? `/api/bitmap/screen/${previewId}.bmp`
-			: `/api/bitmap/${previewId}.bmp`;
-	const heroSrc = `${bitmapBase}?width=${previewWidth}&height=${previewHeight}&grayscale=${preview.grayscale}`;
+	const playlistPreviewFrame = isPlaylist ? playlistScreens[0] : null;
+	const previewId =
+		playlistPreviewFrame?.screen ||
+		(isMixup ? editedDevice.mixup_id : legacySingleScreenId) ||
+		"simple-text";
+	const previewFrameType = playlistPreviewFrame
+		? playlistPreviewFrame.screen_type || "recipe"
+		: isMixup
+			? "mixup"
+			: editedDevice.screen_type;
+	const previewType =
+		previewFrameType === "mixup"
+			? "mixup"
+			: resolveRenderableContentType(previewFrameType, previewId);
+	const heroSrc =
+		previewType === "mixup"
+			? `/api/bitmap/mixup/${previewId}.bmp?width=${previewWidth}&height=${previewHeight}&grayscale=${preview.grayscale}`
+			: playlistFrameBmpUrl(
+					previewId,
+					previewType,
+					previewWidth,
+					previewHeight,
+					preview.grayscale,
+				);
 	const pngSrc = `/api/png/${previewType}/${previewId}?width=${previewWidth}&height=${previewHeight}`;
 	const reactSrc = `/preview/${previewType}/${previewId}?width=${previewWidth}&height=${previewHeight}`;
 
@@ -194,11 +214,11 @@ export default function DeviceEditForm({
 						className="border-b bg-muted/20 px-3"
 					/>
 					<div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] p-6">
-						{isPlaylist ? (
+						{isPlaylist && !playlistPreviewFrame ? (
 							<div className="text-center text-sm text-muted-foreground">
-								Playlist mode — preview shows on the device when saved.
+								This playlist does not have any frames yet.
 							</div>
-						) : isMixup && preview.format !== "bmp" ? (
+						) : previewType === "mixup" && preview.format !== "bmp" ? (
 							<div className="text-center text-sm text-muted-foreground">
 								{preview.format.toUpperCase()} preview is not available for
 								mixups yet.
