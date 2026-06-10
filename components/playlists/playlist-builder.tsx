@@ -29,20 +29,39 @@ interface PlaylistBuilderProps {
 	isSaving?: boolean;
 }
 
+function recipeNameById(recipes: Recipe[], recipeId: string) {
+	return recipes.find((recipe) => recipe.id === recipeId)?.name ?? "New screen";
+}
+
+function promptScreenName(defaultName: string) {
+	const name = window.prompt("Name this screen", defaultName);
+	if (name === null) return null;
+
+	const trimmed = name.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
+async function createScreenIdFromRecipe(recipeId: string, name: string) {
+	const result = await createScreenFromRecipe(recipeId, name);
+	return result.success && result.screen ? result.screen.id : null;
+}
+
 async function promoteRecipePatchToScreen(
 	patch: Partial<FrameData>,
 	recipes: Recipe[],
 ): Promise<Partial<FrameData> | null> {
-	if (patch.screen_type !== "recipe" || !patch.screen_id) return patch;
+	if (patch.screen_type !== "recipe") return patch;
 
-	const recipe = recipes.find((r) => r.id === patch.screen_id);
-	const name = window.prompt("Name this screen", recipe?.name || "New screen");
-	if (!name?.trim()) return null;
+	const recipeId = patch.screen_id;
+	if (!recipeId) return patch;
 
-	const result = await createScreenFromRecipe(patch.screen_id, name);
-	if (!result.success || !result.screen) return null;
+	const name = promptScreenName(recipeNameById(recipes, recipeId));
+	if (name === null) return null;
 
-	return { ...patch, screen_type: "screen", screen_id: result.screen.id };
+	const screenId = await createScreenIdFromRecipe(recipeId, name);
+	if (screenId === null) return null;
+
+	return { ...patch, screen_type: "screen", screen_id: screenId };
 }
 
 export function PlaylistBuilder({

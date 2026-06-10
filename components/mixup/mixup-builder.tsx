@@ -77,6 +77,25 @@ function removeSlotAssignment(
 	return next;
 }
 
+function recipeTitleById(recipes: MixupRecipe[], recipeId: string) {
+	return (
+		recipes.find((recipe) => recipe.id === recipeId)?.title ?? "New screen"
+	);
+}
+
+function promptScreenName(defaultName: string) {
+	const name = window.prompt("Name this screen", defaultName);
+	if (name === null) return null;
+
+	const trimmed = name.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
+async function createScreenValueFromRecipe(recipeId: string, name: string) {
+	const result = await createScreenFromRecipe(recipeId, name);
+	return result.success && result.screen ? `screen:${result.screen.id}` : null;
+}
+
 async function promoteRecipeValueToScreen(
 	value: string,
 	recipes: MixupRecipe[],
@@ -84,14 +103,10 @@ async function promoteRecipeValueToScreen(
 	if (!value.startsWith("recipe:")) return value;
 
 	const recipeId = value.slice("recipe:".length);
-	const recipe = recipes.find((r) => r.id === recipeId);
-	const name = window.prompt("Name this screen", recipe?.title || "New screen");
-	if (!name?.trim()) return null;
+	const name = promptScreenName(recipeTitleById(recipes, recipeId));
+	if (name === null) return null;
 
-	const result = await createScreenFromRecipe(recipeId, name);
-	if (!result.success || !result.screen) return null;
-
-	return `screen:${result.screen.id}`;
+	return createScreenValueFromRecipe(recipeId, name);
 }
 
 const spanLabel = (slot: LayoutSlot) => {
