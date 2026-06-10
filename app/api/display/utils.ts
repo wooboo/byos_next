@@ -5,7 +5,7 @@ import { db } from "@/lib/database/db";
 import { withExplicitUserScope } from "@/lib/database/scoped-db";
 import { checkDbConnection } from "@/lib/database/utils";
 import { logError, logInfo } from "@/lib/logger";
-import { logger } from "@/lib/recipes/recipe-renderer";
+import { logger } from "@/lib/recipes/logger";
 import type {
 	Device,
 	PlaylistItem,
@@ -13,7 +13,7 @@ import type {
 	TimeRange,
 } from "@/lib/types";
 import { generateApiKey, generateFriendlyId, timezones } from "@/utils/helpers";
-import { DEFAULT_SCREEN } from "./route";
+import { DEFAULT_SCREEN } from "./constants";
 
 // --- Types ---
 

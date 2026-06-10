@@ -97,7 +97,7 @@ export const ditherAtkinson = (
 };
 
 /** Jarvis-Judice-Ninke error diffusion — smoother than Atkinson for photos */
-export const ditherJarvisJudiceNinke = (
+const ditherJarvisJudiceNinke = (
 	grayscale: Uint8Array,
 	width: number,
 	height: number,

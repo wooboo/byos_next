@@ -10,6 +10,7 @@ import {
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/recipe-renderer";
 import type { RefreshSchedule } from "@/lib/types";
+import { DEFAULT_REFRESH_RATE, DEFAULT_SCREEN } from "./constants";
 import {
 	buildDisplayResponse,
 	buildErrorResponse,
@@ -20,9 +21,6 @@ import {
 	precacheImageInBackground,
 	updateDeviceStatus,
 } from "./utils";
-
-export const DEFAULT_SCREEN = "album";
-export const DEFAULT_REFRESH_RATE = 180;
 
 /**
  * Map grayscale value from database to number of gray levels

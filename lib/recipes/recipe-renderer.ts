@@ -12,56 +12,22 @@ import {
 	isLiquidRecipe,
 	renderLiquidRecipe,
 } from "@/lib/recipes/liquid-renderer";
+import { logger } from "@/lib/recipes/logger";
+import type { RecipeParamDefinitions } from "@/lib/recipes/params";
 import { DitheringMethod, renderBmp } from "@/utils/render-bmp";
 import { renderWithSatori } from "./renderers/satori";
 import { renderWithTakumi } from "./renderers/takumi";
 
-// Logging utility shared between recipe renderers
-export const logger = {
-	info: (message: string) => {
-		if (process.env.NODE_ENV !== "production" || process.env.DEBUG === "true") {
-			console.log(message);
-		}
-	},
-	error: (message: string, error?: unknown) => {
-		if (error) {
-			console.error(message, error);
-		} else {
-			console.error(message);
-		}
-	},
-	success: (message: string) => {
-		if (process.env.NODE_ENV !== "production" || process.env.DEBUG === "true") {
-			console.log(`✅ ${message}`);
-		}
-	},
-	warn: (message: string, error?: unknown) => {
-		if (process.env.NODE_ENV !== "production" || process.env.DEBUG === "true") {
-			if (error) {
-				console.warn(message, error);
-			} else {
-				console.warn(message);
-			}
-		}
-	},
-};
+export { logger } from "@/lib/recipes/logger";
+export type {
+	RecipeParamDefinition,
+	RecipeParamDefinitions,
+} from "@/lib/recipes/params";
 
 export type ComponentProps = Record<string, unknown> & {
 	width?: number;
 	height?: number;
 };
-
-export type RecipeParamType = "string" | "number" | "boolean";
-
-export type RecipeParamDefinition = {
-	label: string;
-	type: RecipeParamType;
-	description?: string;
-	default?: unknown;
-	placeholder?: string;
-};
-
-export type RecipeParamDefinitions = Record<string, RecipeParamDefinition>;
 
 export type RecipeConfig = {
 	title: string;

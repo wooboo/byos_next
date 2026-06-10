@@ -91,16 +91,6 @@ export type MixupSlot = {
 	created_at: string | null;
 };
 
-export type Screen = {
-	id: string;
-	user_id: string;
-	name: string;
-	recipe_id: string;
-	params: Json;
-	created_at: string | null;
-	updated_at: string | null;
-};
-
 export type Recipe = {
 	id: string;
 	slug: string;
@@ -120,14 +110,6 @@ export type Recipe = {
 	user_id: string | null;
 	created_at: string | null;
 	updated_at: string | null;
-};
-
-export type RecipeFile = {
-	id: string;
-	recipe_id: string;
-	filename: string;
-	content: string;
-	created_at: string | null;
 };
 
 export type Log = {
@@ -151,6 +133,3 @@ export type RecipeSidebarItem = {
 	slug: string;
 	name: string;
 };
-
-// Re-export for convenience
-export { DeviceDisplayMode } from "@/lib/mixup/constants";

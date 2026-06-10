@@ -10,8 +10,6 @@ import {
 	type RecipeParamDefinitions,
 } from "@/lib/recipes/recipe-renderer";
 
-export type RenderRefType = "recipe" | "screen" | "mixup";
-
 export type RenderTarget = {
 	type: "recipe" | "screen";
 	id: string;
