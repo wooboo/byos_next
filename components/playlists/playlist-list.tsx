@@ -1,7 +1,7 @@
 "use client";
 
 import { Film, Plus } from "lucide-react";
-import type { Playlist, PlaylistItem, Recipe } from "@/lib/types";
+import type { Mixup, Playlist, PlaylistItem, Recipe } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { PlaylistReelCard } from "./playlist-reel-card";
 
@@ -9,6 +9,7 @@ interface PlaylistListProps {
 	playlists: Playlist[];
 	playlistItems: PlaylistItem[];
 	recipes: Recipe[];
+	mixups: Mixup[];
 	onEditPlaylist?: (playlist: Playlist) => void;
 	onDeletePlaylist?: (playlistId: string) => void;
 	onCreatePlaylist?: () => void;
@@ -19,6 +20,7 @@ export function PlaylistList({
 	playlists,
 	playlistItems,
 	recipes,
+	mixups,
 	onEditPlaylist,
 	onDeletePlaylist,
 	onCreatePlaylist,
@@ -36,7 +38,9 @@ export function PlaylistList({
 
 	const getRecipeName = (screenId: string) => {
 		const recipe = recipes.find((r) => r.slug === screenId);
-		return recipe?.name || screenId;
+		if (recipe) return recipe.name;
+		const mixup = mixups.find((m) => m.id === screenId);
+		return mixup?.name || screenId;
 	};
 
 	if (playlists.length === 0) {

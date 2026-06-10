@@ -26,6 +26,8 @@ export type Device = {
 	api_key: string;
 	friendly_id: string;
 	screen: string | null;
+	screen_id: string | null;
+	screen_type: string | null;
 	refresh_schedule: RefreshSchedule | null;
 	timezone: string;
 	last_update_time: string | null;
@@ -60,6 +62,7 @@ export type PlaylistItem = {
 	id: string;
 	playlist_id: string | null;
 	screen_id: string;
+	screen_type: string;
 	duration: number;
 	start_time: string | null;
 	end_time: string | null;
@@ -82,6 +85,8 @@ export type MixupSlot = {
 	slot_id: string;
 	recipe_slug: string | null;
 	recipe_id: string | null;
+	ref_type: string | null;
+	ref_id: string | null;
 	order_index: number;
 	created_at: string | null;
 };
@@ -107,14 +112,6 @@ export type Recipe = {
 	updated_at: string | null;
 };
 
-export type RecipeFile = {
-	id: string;
-	recipe_id: string;
-	filename: string;
-	content: string;
-	created_at: string | null;
-};
-
 export type Log = {
 	id: number;
 	friendly_id: string | null;
@@ -136,6 +133,3 @@ export type RecipeSidebarItem = {
 	slug: string;
 	name: string;
 };
-
-// Re-export for convenience
-export { DeviceDisplayMode } from "@/lib/mixup/constants";

@@ -928,6 +928,87 @@ CREATE POLICY mixup_slots_delete_policy ON mixup_slots
 GRANT SELECT, INSERT, UPDATE, DELETE ON playlist_items TO byos_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON mixup_slots TO byos_app;`,
 	},
+	"0015_playlist_mixup_support": {
+		title: "Add screen_type to playlist_items for mixup support",
+		description: "Adds a screen_type column so playlist items can reference",
+		sql: `-- either a recipe (type='recipe') or a mixup (type='mixup').
+
+ALTER TABLE playlist_items
+ADD COLUMN IF NOT EXISTS screen_type TEXT NOT NULL DEFAULT 'recipe';
+
+-- Backfill: detect mixup UUIDs by checking the mixups table.
+-- Recipe slugs don't collide with mixup UUIDs, so this is safe.
+UPDATE playlist_items
+SET screen_type = 'mixup'
+WHERE screen_id IN (SELECT id::text FROM mixups);`,
+	},
+	"0016_add_named_screens": {
+		title: "Add Named Screens",
+		description:
+			"Adds user-owned configured screen instances and explicit assignment refs",
+		sql: `CREATE TABLE IF NOT EXISTS public.screens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  recipe_id UUID NOT NULL REFERENCES recipes(id) ON DELETE RESTRICT,
+  params JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS screens_user_id_idx ON public.screens (user_id);
+CREATE INDEX IF NOT EXISTS screens_recipe_id_idx ON public.screens (recipe_id);
+
+ALTER TABLE devices
+ADD COLUMN IF NOT EXISTS screen_type TEXT DEFAULT 'recipe',
+ADD COLUMN IF NOT EXISTS screen_id TEXT;
+
+UPDATE devices d
+SET screen_id = COALESCE(r.id::text, d.screen),
+    screen_type = 'recipe'
+FROM recipes r
+WHERE d.screen IS NOT NULL
+  AND r.slug = d.screen
+  AND d.screen_id IS NULL;
+
+UPDATE devices
+SET screen_id = screen,
+    screen_type = 'recipe'
+WHERE screen IS NOT NULL
+  AND screen_id IS NULL;
+
+ALTER TABLE mixup_slots
+ADD COLUMN IF NOT EXISTS ref_type TEXT DEFAULT 'recipe',
+ADD COLUMN IF NOT EXISTS ref_id TEXT;
+
+UPDATE mixup_slots
+SET ref_type = 'recipe',
+    ref_id = COALESCE(recipe_id::text, recipe_slug)
+WHERE ref_id IS NULL;
+
+ALTER TABLE screens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE screens FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS screens_select_policy ON screens;
+DROP POLICY IF EXISTS screens_insert_policy ON screens;
+DROP POLICY IF EXISTS screens_update_policy ON screens;
+DROP POLICY IF EXISTS screens_delete_policy ON screens;
+
+CREATE POLICY screens_select_policy ON screens
+  FOR SELECT USING (user_id = current_setting('app.current_user_id', true));
+
+CREATE POLICY screens_insert_policy ON screens
+  FOR INSERT WITH CHECK (user_id = current_setting('app.current_user_id', true));
+
+CREATE POLICY screens_update_policy ON screens
+  FOR UPDATE USING (user_id = current_setting('app.current_user_id', true))
+  WITH CHECK (user_id = current_setting('app.current_user_id', true));
+
+CREATE POLICY screens_delete_policy ON screens
+  FOR DELETE USING (user_id = current_setting('app.current_user_id', true));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON screens TO byos_app;`,
+	},
 	validate_schema: {
 		title: "Validate Database Schema",
 		description:
@@ -936,7 +1017,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON mixup_slots TO byos_app;`,
 -- Returns empty result if all tables exist, or rows with missing table names if any are missing
 SELECT 
   expected_table as missing_table
-FROM unnest(ARRAY['account', 'devices', 'logs', 'mixup_slots', 'mixups', 'playlist_items', 'playlists', 'recipe_files', 'recipes', 'schema_migrations', 'screen_configs', 'session', 'system_logs', 'user', 'verification']::text[]) as expected_table
+FROM unnest(ARRAY['account', 'devices', 'logs', 'mixup_slots', 'mixups', 'playlist_items', 'playlists', 'recipe_files', 'recipes', 'schema_migrations', 'screen_configs', 'screens', 'session', 'system_logs', 'user', 'verification']::text[]) as expected_table
 WHERE NOT EXISTS (
   SELECT 1 
   FROM information_schema.tables 

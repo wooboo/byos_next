@@ -3,6 +3,7 @@
 import { Edit3, Film, Trash2 } from "lucide-react";
 import { FormattedDate } from "@/components/common/formatted-date";
 import { Button } from "@/components/ui/button";
+import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
@@ -82,11 +83,21 @@ export function PlaylistReelCard({
 							>
 								<picture>
 									<source
-										srcSet={`/api/bitmap/${item.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
+										srcSet={playlistFrameBmpUrl(
+											item.screen_id,
+											item.screen_type,
+											DEFAULT_IMAGE_WIDTH,
+											DEFAULT_IMAGE_HEIGHT,
+										)}
 										type="image/bmp"
 									/>
 									<img
-										src={`/api/bitmap/${item.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
+										src={playlistFrameBmpUrl(
+											item.screen_id,
+											item.screen_type,
+											DEFAULT_IMAGE_WIDTH,
+											DEFAULT_IMAGE_HEIGHT,
+										)}
 										alt={getRecipeName(item.screen_id)}
 										width={DEFAULT_IMAGE_WIDTH}
 										height={DEFAULT_IMAGE_HEIGHT}

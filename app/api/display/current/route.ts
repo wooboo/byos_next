@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { resolveRenderableContentType } from "@/lib/content-ref";
 import { db } from "@/lib/database/db";
 import { checkDbConnection } from "@/lib/database/utils";
 import { logError, logInfo } from "@/lib/logger";
+import { DeviceDisplayMode } from "@/lib/mixup/constants";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
@@ -64,7 +66,6 @@ export async function GET(request: Request) {
 
 		const deviceData = device as unknown as Device;
 		const baseUrl = `${headers.hostUrl}/api/bitmap`;
-		const screenToDisplay = deviceData.screen || "not-found";
 		const orientation = deviceData.screen_orientation || "landscape";
 		const deviceWidth =
 			orientation === "landscape"
@@ -83,7 +84,26 @@ export async function GET(request: Request) {
 				? deviceData.grayscale
 				: 2;
 
-		const imageUrl = `${baseUrl}/${screenToDisplay}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`;
+		const screenId = deviceData.screen_id || deviceData.screen || "not-found";
+		const screenType = resolveRenderableContentType(
+			deviceData.screen_type,
+			screenId,
+		);
+		const needsAccessToken =
+			(deviceData.display_mode === DeviceDisplayMode.MIXUP &&
+				!!deviceData.mixup_id) ||
+			screenType === "screen";
+		const screenPath =
+			deviceData.display_mode === DeviceDisplayMode.MIXUP && deviceData.mixup_id
+				? `mixup/${deviceData.mixup_id}`
+				: screenType === "screen"
+					? `screen/${screenId}`
+					: screenId;
+		const screenToDisplay = screenId;
+		const accessTokenParam = needsAccessToken
+			? `&access_token=${encodeURIComponent(apiKey)}`
+			: "";
+		const imageUrl = `${baseUrl}/${screenPath}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}${accessTokenParam}`;
 
 		// Calculate refresh rate from schedule or use default
 		const refreshSchedule = deviceData.refresh_schedule as {

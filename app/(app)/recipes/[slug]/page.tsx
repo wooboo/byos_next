@@ -226,11 +226,15 @@ const RenderComponent = ({
 	);
 
 	const useDoubling = config.renderSettings?.doubleSizeForSharperText ?? false;
+	const shouldDisableRecipeDoubling = slug === "school-schedule";
+	const reactProps = shouldDisableRecipeDoubling
+		? { ...propsWithDimensions, disableDoubling: true }
+		: propsWithDimensions;
 
 	if (format === "react") {
 		return (
 			<ScaledToFit imageWidth={imageWidth} imageHeight={imageHeight}>
-				{useDoubling ? (
+				{useDoubling && !shouldDisableRecipeDoubling ? (
 					<div
 						style={{
 							transform: "scale(0.5)",
@@ -239,10 +243,10 @@ const RenderComponent = ({
 							height: "200%",
 						}}
 					>
-						<Component {...propsWithDimensions} />
+						<Component {...reactProps} />
 					</div>
 				) : (
-					<Component {...propsWithDimensions} />
+					<Component {...reactProps} />
 				)}
 			</ScaledToFit>
 		);
@@ -592,17 +596,7 @@ export default async function RecipePage({
 							/>
 						</Suspense>
 					}
-					reactNode={
-						<Suspense fallback={<LoadingState label="Rendering recipe…" />}>
-							<RenderComponent
-								slug={slug}
-								format="react"
-								title={config.title}
-								imageWidth={imageWidth}
-								imageHeight={imageHeight}
-							/>
-						</Suspense>
-					}
+					reactPreviewSrc={`/preview/recipe/${slug}`}
 					bmpPipeline={
 						<span>
 							JSX → pre-satori → {getRendererType()} PNG → render-bmp →{" "}

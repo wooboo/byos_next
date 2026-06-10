@@ -5,7 +5,7 @@ import { db } from "@/lib/database/db";
 import { withExplicitUserScope } from "@/lib/database/scoped-db";
 import { checkDbConnection } from "@/lib/database/utils";
 import { logError, logInfo } from "@/lib/logger";
-import { logger } from "@/lib/recipes/recipe-renderer";
+import { logger } from "@/lib/recipes/logger";
 import type {
 	Device,
 	PlaylistItem,
@@ -13,7 +13,7 @@ import type {
 	TimeRange,
 } from "@/lib/types";
 import { generateApiKey, generateFriendlyId, timezones } from "@/utils/helpers";
-import { DEFAULT_SCREEN } from "./route";
+import { DEFAULT_SCREEN } from "./constants";
 
 // --- Types ---
 
@@ -38,9 +38,15 @@ export const parseRequestHeaders = (request: Request): RequestHeaders => {
 	const headers = request.headers;
 	const widthStr = headers.get("Width");
 	const heightStr = headers.get("Height");
+	let accessToken = headers.get("Access-Token");
+	try {
+		accessToken ||= new URL(request.url).searchParams.get("access_token");
+	} catch {
+		// Some tests/mocks may pass a Request without an absolute URL.
+	}
 
 	return {
-		apiKey: headers.get("Access-Token"),
+		apiKey: accessToken,
 		macAddress: headers.get("ID")?.toUpperCase() || null,
 		refreshRate: headers.get("Refresh-Rate"),
 		batteryVoltage: headers.get("Battery-Voltage"),

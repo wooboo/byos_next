@@ -6,10 +6,18 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
 import { StatusIndicator } from "@/components/common/status-indicator";
+import { ScaledReactPreview } from "@/components/preview/scaled-react-preview";
+import {
+	ScreenPreviewControls,
+	screenPreviewSummary,
+	useScreenPreviewControls,
+} from "@/components/preview/screen-preview-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { resolveRenderableContentType } from "@/lib/content-ref";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
+import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
@@ -63,14 +71,13 @@ const calculateRefreshPerDay = (
 	return Math.max(0, refreshesPerDay);
 };
 
-const getGrayscaleLevels = (grayscale: number | null | undefined): number => {
-	if (grayscale === 2 || grayscale === 4 || grayscale === 16) return grayscale;
-	return 2;
-};
-
 interface DeviceViewProps {
 	device: Device & { status?: string; type?: string };
-	playlistScreens: { screen: string; duration: number }[];
+	playlistScreens: {
+		screen: string;
+		screen_type?: string | null;
+		duration: number;
+	}[];
 }
 
 function PanelHeader({
@@ -114,6 +121,11 @@ export default function DeviceView({
 	playlistScreens,
 }: DeviceViewProps) {
 	const [firmwareInfo, setFirmwareInfo] = useState<FirmwareInfo | null>(null);
+	const preview = useScreenPreviewControls({
+		defaultPortrait: device.screen_orientation === "portrait",
+		defaultPaletteIndex:
+			device.grayscale === 2 ? 0 : device.grayscale === 4 ? 1 : 2,
+	});
 
 	useEffect(() => {
 		const fetchLatestFirmware = async () => {
@@ -139,14 +151,10 @@ export default function DeviceView({
 		fetchLatestFirmware();
 	}, [device.firmware_version]);
 
-	const isPortrait = device.screen_orientation === "portrait";
-	const deviceWidth = isPortrait
-		? device.screen_height || DEFAULT_IMAGE_HEIGHT
-		: device.screen_width || DEFAULT_IMAGE_WIDTH;
-	const deviceHeight = isPortrait
-		? device.screen_width || DEFAULT_IMAGE_WIDTH
-		: device.screen_height || DEFAULT_IMAGE_HEIGHT;
-	const grayscaleLevels = getGrayscaleLevels(device.grayscale);
+	const isPortrait = preview.isPortrait;
+	const deviceWidth = preview.width || DEFAULT_IMAGE_WIDTH;
+	const deviceHeight = preview.height || DEFAULT_IMAGE_HEIGHT;
+	const grayscaleLevels = preview.grayscale;
 
 	const status: "online" | "offline" =
 		device.status === "online" ? "online" : "offline";
@@ -161,11 +169,37 @@ export default function DeviceView({
 		playlistScreens.length > 0;
 	const isMixup =
 		device.display_mode === DeviceDisplayMode.MIXUP && device.mixup_id;
-	const heroSrc = isPlaylist
-		? `/api/bitmap/${playlistScreens[0].screen || "simple-text"}.bmp?width=${deviceWidth}&height=${deviceHeight}`
+	const singleScreenId = device.screen_id || device.screen || "simple-text";
+	const singleScreenType = resolveRenderableContentType(
+		device.screen_type,
+		singleScreenId,
+	);
+	const heroFrameId = isPlaylist
+		? playlistScreens[0].screen || "simple-text"
 		: isMixup
-			? `/api/bitmap/mixup/${device.mixup_id}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`
-			: `/api/bitmap/${device?.screen || "simple-text"}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`;
+			? device.mixup_id
+			: singleScreenId;
+	const heroFrameType = isPlaylist
+		? playlistScreens[0].screen_type || "recipe"
+		: isMixup
+			? "mixup"
+			: singleScreenType;
+	const heroContentType =
+		heroFrameType === "mixup"
+			? "mixup"
+			: resolveRenderableContentType(heroFrameType, heroFrameId);
+	const bmpSrc =
+		heroContentType === "mixup"
+			? `/api/bitmap/mixup/${heroFrameId}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`
+			: playlistFrameBmpUrl(
+					heroFrameId || "simple-text",
+					heroContentType,
+					deviceWidth,
+					deviceHeight,
+					grayscaleLevels,
+				);
+	const pngSrc = `/api/png/${heroContentType}/${heroFrameId}?width=${deviceWidth}&height=${deviceHeight}`;
+	const reactSrc = `/preview/${heroContentType}/${heroFrameId}?width=${deviceWidth}&height=${deviceHeight}`;
 
 	return (
 		<div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
@@ -175,13 +209,24 @@ export default function DeviceView({
 					label="Preview"
 					right={
 						<span className="text-[11px] tabular-nums text-muted-foreground">
-							{deviceWidth}×{deviceHeight}px ·{" "}
 							<span className="capitalize">
 								{isPortrait ? "portrait" : "landscape"}
-							</span>{" "}
-							· {grayscaleLevels} levels
+							</span>
 						</span>
 					}
+				/>
+				<ScreenPreviewControls
+					format={preview.format}
+					onFormatChange={preview.setFormat}
+					sizeIndex={preview.sizeIndex}
+					onSizeIndexChange={preview.setSizeIndex}
+					paletteIndex={preview.paletteIndex}
+					onPaletteIndexChange={preview.setPaletteIndex}
+					isPortrait={preview.isPortrait}
+					onPortraitChange={preview.setIsPortrait}
+					reactMode={preview.reactMode}
+					onReactModeChange={preview.setReactMode}
+					className="border-b bg-muted/20"
 				/>
 				<div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] p-6">
 					<div
@@ -190,15 +235,35 @@ export default function DeviceView({
 							isPortrait ? "max-w-[260px]" : "max-w-[520px]",
 						)}
 					>
-						<DeviceFrame size="lg" portrait={isPortrait}>
-							<Image
-								src={heroSrc}
-								alt="Device screen"
-								fill
-								className="absolute inset-0 h-full w-full object-cover"
-								style={{ imageRendering: "pixelated" }}
-								unoptimized
-							/>
+						<DeviceFrame
+							size="lg"
+							portrait={isPortrait}
+							screenWidth={deviceWidth}
+							screenHeight={deviceHeight}
+						>
+							{heroContentType === "mixup" && preview.format !== "bmp" ? (
+								<div className="absolute inset-0 flex items-center justify-center bg-background px-4 text-center text-sm text-muted-foreground">
+									{preview.format.toUpperCase()} preview is not available for
+									mixups yet.
+								</div>
+							) : preview.format === "react" ? (
+								<ScaledReactPreview
+									title={`${device.name} React preview`}
+									src={reactSrc}
+									width={deviceWidth}
+									height={deviceHeight}
+									mode={preview.reactMode}
+								/>
+							) : (
+								<Image
+									src={preview.format === "png" ? pngSrc : bmpSrc}
+									alt="Device screen"
+									fill
+									className="absolute inset-0 h-full w-full object-cover"
+									style={{ imageRendering: "pixelated" }}
+									unoptimized
+								/>
+							)}
 						</DeviceFrame>
 					</div>
 				</div>
@@ -214,12 +279,18 @@ export default function DeviceView({
 						<div className="flex items-stretch gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
 							{playlistScreens.map((screen, i) => (
 								<div
-									key={`${screen.screen}-${i}`}
+									key={`${screen.screen_type || "recipe"}-${screen.screen}-${i}`}
 									className="w-[110px] shrink-0 space-y-1"
 								>
 									<DeviceFrame size="sm" portrait={isPortrait} flat>
 										<Image
-											src={`/api/bitmap/${screen.screen || "simple-text"}.bmp?width=${deviceWidth}&height=${deviceHeight}`}
+											src={playlistFrameBmpUrl(
+												screen.screen || "simple-text",
+												screen.screen_type,
+												deviceWidth,
+												deviceHeight,
+												grayscaleLevels,
+											)}
 											alt={`Frame ${i + 1}`}
 											fill
 											className="absolute inset-0 h-full w-full object-cover"
@@ -240,6 +311,15 @@ export default function DeviceView({
 					<span>
 						Passive device — this preview may be newer than what&apos;s
 						currently on the screen.
+					</span>
+					<span className="ml-auto tabular-nums">
+						{screenPreviewSummary({
+							format: preview.format,
+							width: deviceWidth,
+							height: deviceHeight,
+							grayscale: grayscaleLevels,
+							reactMode: preview.reactMode,
+						})}
 					</span>
 				</footer>
 			</section>

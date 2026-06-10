@@ -1,5 +1,7 @@
+import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import sharp from "sharp";
+import { auth } from "@/lib/auth/auth";
 import { db } from "@/lib/database/db";
 import { withExplicitUserScope } from "@/lib/database/scoped-db";
 import { checkDbConnection } from "@/lib/database/utils";
@@ -10,6 +12,7 @@ import {
 	logger,
 	renderRecipeToImage,
 } from "@/lib/recipes/recipe-renderer";
+import { resolveRenderableRef } from "@/lib/screens/render-target";
 import { DitheringMethod, renderBmp } from "@/utils/render-bmp";
 
 export async function GET(
@@ -32,7 +35,7 @@ export async function GET(
 		const height = heightParam
 			? parseInt(heightParam, 10)
 			: DEFAULT_IMAGE_HEIGHT;
-		const grayscaleLevels = grayscaleParam ? parseInt(grayscaleParam, 10) : 2;
+		const grayscaleLevels = grayscaleParam ? parseInt(grayscaleParam, 10) : 16;
 
 		const { ready } = await checkDbConnection();
 		if (!ready) {
@@ -40,23 +43,63 @@ export async function GET(
 			return new Response("Database not available", { status: 503 });
 		}
 
-		if (!accessToken) {
+		let userId: string | null = null;
+
+		// Try device API key first
+		if (accessToken) {
+			const device = await db
+				.selectFrom("devices")
+				.select(["user_id"])
+				.where("api_key", "=", accessToken)
+				.executeTakeFirst();
+
+			if (!device?.user_id) {
+				return new Response("Mixup not found", { status: 404 });
+			}
+			// The API key identifies the device owner. The mixup itself is checked
+			// below through withExplicitUserScope, so playlist mixup items work too.
+			userId = device.user_id;
+		} else if (auth) {
+			// Fallback: session-based auth (web UI preview)
+			const session = await auth.api.getSession({
+				headers: await headers(),
+			});
+			if (!session?.user?.id) {
+				return new Response("Access token is required", { status: 401 });
+			}
+			// Verify the mixup belongs to this user
+			const mixup = await db
+				.selectFrom("mixups")
+				.select(["user_id"])
+				.where("id", "=", mixupId)
+				.executeTakeFirst();
+			if (!mixup || mixup.user_id !== session.user.id) {
+				return new Response("Mixup not found", { status: 404 });
+			}
+			userId = session.user.id;
+		} else if (process.env.AUTH_ENABLED === "false") {
+			// Auth disabled (mono-user dev mode): allow any mixup access
+			const mixup = await db
+				.selectFrom("mixups")
+				.select(["user_id"])
+				.where("id", "=", mixupId)
+				.executeTakeFirst();
+			if (!mixup?.user_id) {
+				return new Response("Mixup not found", { status: 404 });
+			}
+			userId = mixup.user_id;
+		} else {
 			return new Response("Access token is required", { status: 401 });
 		}
 
-		const device = await db
-			.selectFrom("devices")
-			.select(["user_id", "mixup_id"])
-			.where("api_key", "=", accessToken)
-			.executeTakeFirst();
-
-		if (!device || device.mixup_id !== mixupId || !device.user_id) {
+		// Fetch mixup and its slots. New slots use ref_type/ref_id; legacy slots use recipe_id/recipe_slug.
+		const resolvedUserId = userId;
+		if (!resolvedUserId) {
 			return new Response("Mixup not found", { status: 404 });
 		}
 
-		// Fetch mixup and its slots (join with recipes to get slug)
 		const [mixup, slots] = await withExplicitUserScope(
-			device.user_id,
+			resolvedUserId,
 			(scopedDb) =>
 				Promise.all([
 					scopedDb
@@ -73,6 +116,8 @@ export async function GET(
 							"mixup_slots.slot_id",
 							"mixup_slots.recipe_slug",
 							"mixup_slots.recipe_id",
+							"mixup_slots.ref_type",
+							"mixup_slots.ref_id",
 							"mixup_slots.order_index",
 							"recipes.slug as resolved_slug",
 						])
@@ -93,10 +138,16 @@ export async function GET(
 			return new Response("Invalid layout", { status: 400 });
 		}
 
-		// Build slot assignments map, preferring the normalized recipe_id relation.
-		const assignments: Record<string, string | null> = {};
+		// Build slot assignments map, preferring explicit refs.
+		const assignments: Record<
+			string,
+			{ type: "recipe" | "screen"; id: string } | null
+		> = {};
 		for (const slot of slots) {
-			assignments[slot.slot_id] = slot.resolved_slug ?? slot.recipe_slug;
+			const refType = slot.ref_type === "screen" ? "screen" : "recipe";
+			const refId =
+				slot.ref_id ?? slot.recipe_id ?? slot.resolved_slug ?? slot.recipe_slug;
+			assignments[slot.slot_id] = refId ? { type: refType, id: refId } : null;
 		}
 
 		logger.info(
@@ -110,7 +161,7 @@ export async function GET(
 			width,
 			height,
 			grayscaleLevels,
-			device.user_id,
+			resolvedUserId,
 		);
 
 		return new Response(new Uint8Array(compositeBuffer), {
@@ -130,21 +181,28 @@ export async function GET(
  */
 async function renderSlot(
 	slot: LayoutSlot,
-	recipeSlug: string,
+	assignment: { type: "recipe" | "screen"; id: string },
 	userId: string,
 ): Promise<Buffer | null> {
 	try {
+		const target = await resolveRenderableRef({
+			type: assignment.type,
+			id: assignment.id,
+			userId,
+		});
+		if (!target) return null;
 		const renders = await renderRecipeToImage({
-			slug: recipeSlug,
+			slug: target.recipeSlug,
 			imageWidth: slot.width,
 			imageHeight: slot.height,
 			formats: ["png"],
 			userId,
+			paramsOverride: target.params,
 		});
 		return renders.png;
 	} catch (error) {
 		logger.error(
-			`Error rendering slot ${slot.id} with recipe ${recipeSlug}:`,
+			`Error rendering slot ${slot.id} with ${assignment.type} ${assignment.id}:`,
 			error,
 		);
 		return null;
@@ -156,7 +214,7 @@ async function renderSlot(
  */
 async function renderMixupComposite(
 	slots: LayoutSlot[],
-	assignments: Record<string, string | null>,
+	assignments: Record<string, { type: "recipe" | "screen"; id: string } | null>,
 	width: number,
 	height: number,
 	grayscaleLevels: number,
@@ -165,12 +223,12 @@ async function renderMixupComposite(
 	// Render all slots in parallel
 	const slotRenders = await Promise.all(
 		slots.map(async (slot) => {
-			const recipeSlug = assignments[slot.id];
-			if (!recipeSlug) {
+			const assignment = assignments[slot.id];
+			if (!assignment) {
 				return { slot, buffer: null };
 			}
 
-			const buffer = await renderSlot(slot, recipeSlug, userId);
+			const buffer = await renderSlot(slot, assignment, userId);
 			return { slot, buffer };
 		}),
 	);

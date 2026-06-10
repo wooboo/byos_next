@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveRenderableContentType } from "@/lib/content-ref";
 import { db } from "@/lib/database/db";
 import { checkDbConnection } from "@/lib/database/utils";
 import { getLatestFirmware, isUpdateAvailable } from "@/lib/firmware";
@@ -9,6 +10,7 @@ import {
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/recipe-renderer";
 import type { RefreshSchedule } from "@/lib/types";
+import { DEFAULT_REFRESH_RATE, DEFAULT_SCREEN } from "./constants";
 import {
 	buildDisplayResponse,
 	buildErrorResponse,
@@ -19,9 +21,6 @@ import {
 	precacheImageInBackground,
 	updateDeviceStatus,
 } from "./utils";
-
-export const DEFAULT_SCREEN = "album";
-export const DEFAULT_REFRESH_RATE = 180;
 
 /**
  * Map grayscale value from database to number of gray levels
@@ -66,7 +65,7 @@ export async function GET(request: Request) {
 		// Use header dimensions if provided
 		const width = headers.width || DEFAULT_IMAGE_WIDTH;
 		const height = headers.height || DEFAULT_IMAGE_HEIGHT;
-		const noDbQueryParams = `width=${width}&height=${height}&grayscale=2${headers.base64 ? "&base64=true" : ""}`;
+		const noDbQueryParams = `width=${width}&height=${height}&grayscale=16${headers.base64 ? "&base64=true" : ""}`;
 
 		return buildDisplayResponse(
 			`${baseUrl}/${DEFAULT_SCREEN}.bmp?${noDbQueryParams}`,
@@ -111,9 +110,19 @@ export async function GET(request: Request) {
 
 		// Build common query params for image URLs
 		const baseQueryParams = `width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}${headers.base64 ? "&base64=true" : ""}`;
+		const accessTokenParam = `access_token=${encodeURIComponent(headers.apiKey)}`;
 
 		let dynamicRefreshRate = 180;
 		let imageUrl: string;
+		const singleScreenId = device.screen_id || device.screen || "not-found";
+		const singleScreenType = resolveRenderableContentType(
+			device.screen_type,
+			singleScreenId,
+		);
+		const singleScreenPath =
+			singleScreenType === "screen"
+				? `screen/${singleScreenId}`
+				: singleScreenId;
 
 		switch (device.display_mode) {
 			case DeviceDisplayMode.PLAYLIST:
@@ -134,6 +143,17 @@ export async function GET(request: Request) {
 							.set({ current_playlist_index: activeItem.order_index })
 							.where("id", "=", device.id.toString())
 							.execute();
+
+						// Mixup and named screen items need explicit API endpoints
+						if (activeItem.screen_type === "mixup") {
+							imageUrl = `${baseUrl}/mixup/${screenToDisplay}.bmp?${baseQueryParams}&${accessTokenParam}`;
+							dynamicRefreshRate = Math.max(dynamicRefreshRate, 30);
+							break; // skip the default URL below
+						}
+						if (activeItem.screen_type === "screen") {
+							imageUrl = `${baseUrl}/screen/${screenToDisplay}.bmp?${baseQueryParams}&${accessTokenParam}`;
+							break;
+						}
 					} else {
 						logInfo("No active playlist item found, using fallback", {
 							source: "api/display",
@@ -148,7 +168,7 @@ export async function GET(request: Request) {
 
 			case DeviceDisplayMode.MIXUP:
 				if (device.mixup_id) {
-					imageUrl = `${baseUrl}/mixup/${device.mixup_id}.bmp?${baseQueryParams}&access_token=${encodeURIComponent(headers.apiKey)}`;
+					imageUrl = `${baseUrl}/mixup/${device.mixup_id}.bmp?${baseQueryParams}&${accessTokenParam}`;
 					const metadata = {
 						deviceId: device.friendly_id,
 						mixupId: device.mixup_id,
@@ -158,7 +178,7 @@ export async function GET(request: Request) {
 						metadata,
 					});
 				} else {
-					imageUrl = `${baseUrl}/${screenToDisplay || "not-found"}.bmp?${baseQueryParams}`;
+					imageUrl = `${baseUrl}/${singleScreenPath}.bmp?${baseQueryParams}`;
 				}
 				dynamicRefreshRate = calculateRefreshRate(
 					device.refresh_schedule as unknown as RefreshSchedule,
@@ -173,7 +193,8 @@ export async function GET(request: Request) {
 					180,
 					device.timezone || "UTC",
 				);
-				imageUrl = `${baseUrl}/${screenToDisplay || "not-found"}.bmp?${baseQueryParams}`;
+				screenToDisplay = singleScreenId;
+				imageUrl = `${baseUrl}/${singleScreenPath}.bmp?${baseQueryParams}`;
 				break;
 		}
 

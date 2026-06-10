@@ -16,9 +16,10 @@ export async function renderHtmlToImage(
 	try {
 		await page.setViewport({ width, height });
 		await page.setContent(html, {
-			waitUntil: "networkidle0",
+			waitUntil: "domcontentloaded",
 			timeout: 15000,
 		});
+		await page.waitForNetworkIdle({ timeout: 15000 });
 		const screenshot = await page.screenshot({
 			type: "png",
 			clip: { x: 0, y: 0, width, height },

@@ -99,6 +99,8 @@ export interface Devices {
 	 */
 	rssi: number | null;
 	screen: string | null;
+	screen_id: string | null;
+	screen_type: Generated<string | null>;
 	/**
 	 * Screen height in pixels
 	 */
@@ -139,6 +141,8 @@ export interface MixupSlots {
 	order_index: number;
 	recipe_id: string | null;
 	recipe_slug: string | null;
+	ref_id: string | null;
+	ref_type: Generated<string | null>;
 	slot_id: string;
 }
 
@@ -151,6 +155,7 @@ export interface PlaylistItems {
 	order_index: number;
 	playlist_id: string | null;
 	screen_id: string;
+	screen_type: Generated<string>;
 	start_time: string | null;
 }
 
@@ -190,6 +195,16 @@ export interface Recipes {
 	version: string | null;
 	zip_entry_path: string | null;
 	zip_url: string | null;
+}
+
+export interface Screens {
+	created_at: Generated<Timestamp | null>;
+	id: Generated<string>;
+	name: string;
+	params: Generated<Json>;
+	recipe_id: string;
+	updated_at: Generated<Timestamp | null>;
+	user_id: string;
 }
 
 export interface ScreenConfigs {
@@ -260,6 +275,7 @@ export interface DB {
 	recipe_files: RecipeFiles;
 	recipes: Recipes;
 	screen_configs: ScreenConfigs;
+	screens: Screens;
 	session: Session;
 	system_logs: SystemLogs;
 	user: User;

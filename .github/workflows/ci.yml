@@ -1,4 +1,4 @@
-name: CI
+name: PR Checks
 
 on:
   push:
@@ -13,9 +13,12 @@ on:
       - "docs/**"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  lint:
-    name: Biome Lint
+  validate:
+    name: Build, Lint, Typecheck, Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -25,19 +28,30 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "20"
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - name: Test
+        run: pnpm run --if-present test
 
-  typecheck:
-    name: TypeScript Type Check
+  fallow:
+    name: Fallow Audit
     runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v4
         with:
-          version: 10
-      - uses: actions/setup-node@v6
+          fetch-depth: 0
+      - uses: fallow-rs/fallow@v2
         with:
-          node-version: "20"
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+          command: audit
+          annotations: true
+          comment: true
+          review-comments: false
+          fail-on-issues: false
+          artifacts-dir: .var/fallow

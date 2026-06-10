@@ -116,6 +116,7 @@ Create `.env.local` (for `pnpm dev`) or `.env` (for Docker Compose) with the key
 | `BETTER_AUTH_URL` | Public URL of your deployment (defaults to `http://localhost:3000`). |
 | `AUTH_ENABLED` | Set to `false` to disable authentication (mono-user mode). |
 | `ADMIN_EMAIL` | Email that receives admin role on first sign-up. |
+| `ALLOWED_SERVER_ACTION_ORIGINS` | Optional comma-separated LAN/reverse-proxy hosts allowed to call Next Server Actions, e.g. `192.168.1.20:3001,byos.local:3001`. Local IPv4 addresses are auto-detected on startup. |
 | `REACT_RENDERER` | `takumi` (default), `satori`, or `browser`. See below. |
 | `ENABLE_EXTERNAL_CATALOG` | Allow fetching the community / TRMNL recipe catalog. |
 

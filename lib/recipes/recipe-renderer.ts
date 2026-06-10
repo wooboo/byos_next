@@ -12,56 +12,22 @@ import {
 	isLiquidRecipe,
 	renderLiquidRecipe,
 } from "@/lib/recipes/liquid-renderer";
+import { logger } from "@/lib/recipes/logger";
+import type { RecipeParamDefinitions } from "@/lib/recipes/params";
 import { DitheringMethod, renderBmp } from "@/utils/render-bmp";
 import { renderWithSatori } from "./renderers/satori";
 import { renderWithTakumi } from "./renderers/takumi";
 
-// Logging utility shared between recipe renderers
-export const logger = {
-	info: (message: string) => {
-		if (process.env.NODE_ENV !== "production" || process.env.DEBUG === "true") {
-			console.log(message);
-		}
-	},
-	error: (message: string, error?: unknown) => {
-		if (error) {
-			console.error(message, error);
-		} else {
-			console.error(message);
-		}
-	},
-	success: (message: string) => {
-		if (process.env.NODE_ENV !== "production" || process.env.DEBUG === "true") {
-			console.log(`✅ ${message}`);
-		}
-	},
-	warn: (message: string, error?: unknown) => {
-		if (process.env.NODE_ENV !== "production" || process.env.DEBUG === "true") {
-			if (error) {
-				console.warn(message, error);
-			} else {
-				console.warn(message);
-			}
-		}
-	},
-};
+export { logger } from "@/lib/recipes/logger";
+export type {
+	RecipeParamDefinition,
+	RecipeParamDefinitions,
+} from "@/lib/recipes/params";
 
 export type ComponentProps = Record<string, unknown> & {
 	width?: number;
 	height?: number;
 };
-
-export type RecipeParamType = "string" | "number" | "boolean";
-
-export type RecipeParamDefinition = {
-	label: string;
-	type: RecipeParamType;
-	description?: string;
-	default?: unknown;
-	placeholder?: string;
-};
-
-export type RecipeParamDefinitions = Record<string, RecipeParamDefinition>;
 
 export type RecipeConfig = {
 	title: string;
@@ -166,10 +132,11 @@ export const fetchRecipeProps = cache(
 		config: RecipeConfig,
 		options?: FetchPropsOptions,
 		userId?: string,
+		paramsOverride?: Record<string, unknown>,
 	): Promise<ComponentProps> => {
-		const params = config.params
-			? await getScreenParams(slug, config.params, userId)
-			: {};
+		const params =
+			paramsOverride ??
+			(config.params ? await getScreenParams(slug, config.params, userId) : {});
 
 		let props: ComponentProps = {
 			...(config.props || {}),
@@ -344,7 +311,7 @@ export const renderRecipeOutputs = cache(
 		if (needsBitmap) {
 			try {
 				results.bitmap = await renderBmp(pngBuffer, {
-					ditheringMethod: DitheringMethod.FLOYD_STEINBERG,
+					ditheringMethod: DitheringMethod.JARVIS_JUDICE_NINKE,
 					width: imageWidth,
 					height: imageHeight,
 					applyEdgeSnap: config?.renderSettings?.applyEdgeSnap ?? true,
@@ -373,13 +340,15 @@ type BuildRecipeResult = {
 async function buildLiquidRecipeElement(
 	slug: string,
 	userId?: string,
+	paramsOverride?: Record<string, unknown>,
 ): Promise<BuildRecipeResult> {
 	// Load stored custom field overrides from screen_configs
 	let customFieldOverrides: Record<string, unknown> | undefined;
 	const settings = await fetchLiquidRecipeSettings(slug, userId);
 	if (settings?.custom_fields?.length) {
 		const definitions = customFieldsToParamDefinitions(settings.custom_fields);
-		customFieldOverrides = await getScreenParams(slug, definitions, userId);
+		customFieldOverrides =
+			paramsOverride ?? (await getScreenParams(slug, definitions, userId));
 	}
 
 	const result = await renderLiquidRecipe(slug, customFieldOverrides, userId);
@@ -406,10 +375,12 @@ export const buildRecipeElement = async ({
 	slug,
 	userId,
 	validateProps,
+	paramsOverride,
 }: {
 	slug: string;
 	userId?: string | null;
 	validateProps?: (slug: string, props: ComponentProps) => boolean;
+	paramsOverride?: Record<string, unknown>;
 }): Promise<BuildRecipeResult> => {
 	// First try React recipe from the DB metadata cache.
 	const config = await fetchRecipeConfig(slug, userId ?? undefined);
@@ -431,6 +402,7 @@ export const buildRecipeElement = async ({
 					: undefined,
 			},
 			userId ?? undefined,
+			paramsOverride,
 		);
 
 		if (validateProps && !validateProps(slug, props)) {
@@ -452,7 +424,7 @@ export const buildRecipeElement = async ({
 
 	// Try liquid recipe from DB
 	if (await isLiquidRecipe(slug, userId ?? undefined)) {
-		return buildLiquidRecipeElement(slug, userId ?? undefined);
+		return buildLiquidRecipeElement(slug, userId ?? undefined, paramsOverride);
 	}
 
 	// Not found
@@ -477,6 +449,7 @@ export async function renderRecipeToImage({
 	grayscale,
 	userId,
 	cookies,
+	paramsOverride,
 }: {
 	slug: string;
 	imageWidth: number;
@@ -485,8 +458,9 @@ export async function renderRecipeToImage({
 	grayscale?: number;
 	userId?: string | null;
 	cookies?: string;
+	paramsOverride?: Record<string, unknown>;
 }): Promise<RenderResults> {
-	const result = await buildRecipeElement({ slug, userId });
+	const result = await buildRecipeElement({ slug, userId, paramsOverride });
 
 	if (result.html) {
 		return renderRecipeOutputs({

@@ -11,6 +11,8 @@ interface DeviceFrameProps {
 	size?: "sm" | "md" | "lg";
 	/** Portrait flips the screen aspect ratio. */
 	portrait?: boolean;
+	screenWidth?: number;
+	screenHeight?: number;
 	className?: string;
 	/** Render without the outer shadow (useful when nested in a card). */
 	flat?: boolean;
@@ -39,14 +41,13 @@ const sizeStyles = {
 export function DeviceFrame({
 	children,
 	size = "md",
-	portrait = false,
+	screenWidth,
+	screenHeight,
 	className,
 	flat = false,
 }: DeviceFrameProps) {
 	const styles = sizeStyles[size];
-	const ratio = portrait
-		? `${DEFAULT_IMAGE_HEIGHT} / ${DEFAULT_IMAGE_WIDTH}`
-		: `${DEFAULT_IMAGE_WIDTH} / ${DEFAULT_IMAGE_HEIGHT}`;
+	const ratio = `${screenWidth ?? DEFAULT_IMAGE_WIDTH} / ${screenHeight ?? DEFAULT_IMAGE_HEIGHT}`;
 
 	return (
 		<div

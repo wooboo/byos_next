@@ -88,11 +88,11 @@ export function MixupList({
 						>
 							<picture>
 								<source
-									srcSet={`/api/bitmap/mixup/${mixup.id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
+									srcSet={`/api/bitmap/mixup/${mixup.id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}&grayscale=16`}
 									type="image/bmp"
 								/>
 								<img
-									src={`/api/bitmap/mixup/${mixup.id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
+									src={`/api/bitmap/mixup/${mixup.id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}&grayscale=16`}
 									alt={`${mixup.name} preview`}
 									width={DEFAULT_IMAGE_WIDTH}
 									height={DEFAULT_IMAGE_HEIGHT}

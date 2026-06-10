@@ -1,115 +1,123 @@
 "use client";
 
-import { Monitor, Smartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
+import { ScaledReactPreview } from "@/components/preview/scaled-react-preview";
+import {
+	SCREEN_PREVIEW_PALETTES,
+	SCREEN_PREVIEW_SIZE_PRESETS,
+	ScreenPreviewControls,
+	type ScreenPreviewFormat,
+	screenPreviewSummary,
+} from "@/components/preview/screen-preview-controls";
+import { BmpPreview } from "@/components/recipes/bmp-preview";
 import { cn } from "@/lib/utils";
-
-type FormatKey = "bmp" | "png" | "react";
 
 interface RecipePreviewStageProps {
 	slug: string;
 	isPortrait: boolean;
+	basePath?: string;
+	bitmapUrl?: string;
 	bmpNode?: ReactNode;
 	pngNode?: ReactNode;
 	reactNode?: ReactNode;
+	reactPreviewSrc?: string;
 	bmpPipeline?: ReactNode;
 	pngPipeline?: ReactNode;
 	reactPipeline?: ReactNode;
-	defaultFormat?: FormatKey;
+	defaultFormat?: ScreenPreviewFormat;
 }
-
-const FORMAT_LABELS: Record<FormatKey, string> = {
-	bmp: "BMP",
-	png: "PNG",
-	react: "React",
-};
 
 export function RecipePreviewStage({
 	slug,
 	isPortrait,
+	basePath,
+	bitmapUrl,
 	bmpNode,
 	pngNode,
 	reactNode,
+	reactPreviewSrc,
 	bmpPipeline,
 	pngPipeline,
 	reactPipeline,
 	defaultFormat = "bmp",
 }: RecipePreviewStageProps) {
 	const router = useRouter();
-	const [format, setFormat] = useState<FormatKey>(defaultFormat);
+	const [format, setFormat] = useState<ScreenPreviewFormat>(defaultFormat);
+	const [presetIdx, setPresetIdx] = useState(0);
+	const [paletteIdx, setPaletteIdx] = useState(2);
+	const [reactMode, setReactMode] = useState<"fit" | "scroll">("fit");
 
-	const formats: { key: FormatKey; node: ReactNode; pipeline: ReactNode }[] = [
-		{ key: "bmp", node: bmpNode, pipeline: bmpPipeline },
+	const preset =
+		SCREEN_PREVIEW_SIZE_PRESETS[presetIdx] || SCREEN_PREVIEW_SIZE_PRESETS[0];
+	const palette =
+		SCREEN_PREVIEW_PALETTES[paletteIdx] || SCREEN_PREVIEW_PALETTES[2];
+	const portraitW = isPortrait ? preset.height : preset.width;
+	const portraitH = isPortrait ? preset.width : preset.height;
+	const resolvedReactNode =
+		reactPreviewSrc !== undefined ? (
+			<ScaledReactPreview
+				src={`${reactPreviewSrc}?width=${portraitW}&height=${portraitH}`}
+				title={`${slug} React preview`}
+				width={portraitW}
+				height={portraitH}
+				mode={reactMode}
+			/>
+		) : (
+			reactNode
+		);
+
+	const formats: {
+		key: ScreenPreviewFormat;
+		node: ReactNode;
+		pipeline: ReactNode;
+	}[] = [
+		{
+			key: "bmp",
+			node: bmpNode ?? (
+				<BmpPreview
+					slug={slug}
+					width={portraitW}
+					height={portraitH}
+					bpp={palette.grayscale}
+					bitmapUrl={bitmapUrl}
+				/>
+			),
+			pipeline: bmpPipeline,
+		},
 		{ key: "png", node: pngNode, pipeline: pngPipeline },
-		{ key: "react", node: reactNode, pipeline: reactPipeline },
+		{ key: "react", node: resolvedReactNode, pipeline: reactPipeline },
 	].filter((f) => f.node !== undefined) as typeof formats;
 
 	const active = formats.find((f) => f.key === format) || formats[0];
-	const activeKey = active?.key ?? defaultFormat;
 
 	const handleOrientationChange = (nextPortrait: boolean) => {
 		if (nextPortrait === isPortrait) return;
 		router.push(
-			nextPortrait ? `/recipes/${slug}?format=portrait` : `/recipes/${slug}`,
+			nextPortrait
+				? `${basePath ?? `/recipes/${slug}`}?format=portrait`
+				: (basePath ?? `/recipes/${slug}`),
 		);
 	};
 
 	return (
 		<div className="overflow-hidden rounded-2xl border bg-card">
 			{/* Toolbar */}
-			<div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2.5">
-				<div className="inline-flex items-center gap-0.5 rounded-lg border bg-background p-0.5">
-					{formats.map((f) => (
-						<button
-							key={f.key}
-							type="button"
-							onClick={() => setFormat(f.key)}
-							className={cn(
-								"rounded-md px-3 py-1.5 text-xs font-semibold tracking-wide transition-colors",
-								activeKey === f.key
-									? "bg-primary text-primary-foreground"
-									: "text-muted-foreground hover:text-foreground",
-							)}
-							aria-pressed={activeKey === f.key}
-						>
-							{FORMAT_LABELS[f.key]}
-						</button>
-					))}
-				</div>
-
-				<div className="inline-flex items-center gap-0.5 rounded-lg border bg-background p-0.5">
-					<button
-						type="button"
-						onClick={() => handleOrientationChange(false)}
-						className={cn(
-							"inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-							!isPortrait
-								? "bg-foreground text-background"
-								: "text-muted-foreground hover:text-foreground",
-						)}
-						aria-pressed={!isPortrait}
-					>
-						<Monitor className="h-3.5 w-3.5" />
-						Landscape
-					</button>
-					<button
-						type="button"
-						onClick={() => handleOrientationChange(true)}
-						className={cn(
-							"inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-							isPortrait
-								? "bg-foreground text-background"
-								: "text-muted-foreground hover:text-foreground",
-						)}
-						aria-pressed={isPortrait}
-					>
-						<Smartphone className="h-3.5 w-3.5" />
-						Portrait
-					</button>
-				</div>
-			</div>
+			<ScreenPreviewControls
+				format={format}
+				onFormatChange={setFormat}
+				sizeIndex={presetIdx}
+				onSizeIndexChange={setPresetIdx}
+				paletteIndex={paletteIdx}
+				onPaletteIndexChange={setPaletteIdx}
+				isPortrait={isPortrait}
+				onPortraitChange={handleOrientationChange}
+				reactMode={reactMode}
+				onReactModeChange={setReactMode}
+				formats={formats.map((item) => item.key)}
+				className="bg-muted/30 px-3"
+			/>
 
 			{/* Stage */}
 			<div className="flex items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] px-6 py-8">
@@ -119,25 +127,34 @@ export function RecipePreviewStage({
 						isPortrait ? "max-w-[360px]" : "max-w-[720px]",
 					)}
 				>
-					<DeviceFrame size="lg" portrait={isPortrait}>
-						{active?.node}
+					<DeviceFrame
+						size="lg"
+						portrait={isPortrait}
+						screenWidth={portraitW}
+						screenHeight={portraitH}
+					>
+						<div className="absolute inset-0">{active?.node}</div>
 					</DeviceFrame>
 				</div>
 			</div>
 
-			{/* Pipeline caption */}
-			{active?.pipeline && (
-				<div className="border-t bg-muted/20 px-4 py-3">
-					<div className="flex items-start gap-3">
-						<span className="mt-0.5 rounded border bg-background px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-							Pipeline
-						</span>
-						<div className="flex-1 text-xs text-muted-foreground [&_a]:text-primary [&_a]:hover:underline">
-							{active.pipeline}
-						</div>
-					</div>
-				</div>
-			)}
+			{/* Info bar */}
+			<div className="border-t bg-muted/20 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+				<span className="tabular-nums">
+					{screenPreviewSummary({
+						format,
+						width: portraitW,
+						height: portraitH,
+						grayscale: palette.grayscale,
+						reactMode,
+					})}
+				</span>
+				{active?.pipeline && (
+					<span className="[&_a]:text-primary [&_a]:hover:underline">
+						{active.pipeline}
+					</span>
+				)}
+			</div>
 		</div>
 	);
 }

@@ -9,6 +9,7 @@ import {
 	ListMusic,
 	Monitor,
 	Palette,
+	PanelsTopLeft,
 	PencilRuler,
 	Plus,
 	ScrollText,
@@ -294,6 +295,21 @@ export function AppSidebar({
 										</CollapsibleContent>
 									</SidebarMenuItem>
 								</Collapsible>
+
+								{/* Screens */}
+								<SidebarMenuItem>
+									<SidebarMenuButton
+										asChild
+										isActive={currentPath.startsWith("/screens")}
+										onMouseEnter={() => prefetch("/screens")}
+										tooltip="Screens"
+									>
+										<Link href="/screens">
+											<PanelsTopLeft />
+											<span>Screens</span>
+										</Link>
+									</SidebarMenuButton>
+								</SidebarMenuItem>
 
 								{/* Playlists */}
 								<SidebarMenuItem>

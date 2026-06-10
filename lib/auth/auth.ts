@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { admin } from "better-auth/plugins";
 import { Pool } from "pg";
 import { sendEmail } from "@/lib/email";
+import { getLanTrustedOrigins } from "@/lib/lan-origins";
 
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";
 
@@ -18,6 +19,7 @@ function createAuth() {
 
 	return betterAuth({
 		database: pool,
+		trustedOrigins: getLanTrustedOrigins(),
 		emailAndPassword: {
 			enabled: true,
 			sendResetPassword: async ({

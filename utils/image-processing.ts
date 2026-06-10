@@ -82,7 +82,7 @@ export const ditherAtkinson = (
 			const oldPixel = buffer[index];
 			const newPixel = quantizeValue(oldPixel, levels);
 			result[index] = newPixel;
-			const error = Math.floor((oldPixel - newPixel) / 8);
+			const error = (oldPixel - newPixel) / 8;
 
 			if (x + 1 < width) buffer[index + 1] += error;
 			if (x + 2 < width) buffer[index + 2] += error;
@@ -96,7 +96,54 @@ export const ditherAtkinson = (
 	return result;
 };
 
-const BAYER_MATRICES = {
+/** Jarvis-Judice-Ninke error diffusion — smoother than Atkinson for photos */
+const ditherJarvisJudiceNinke = (
+	grayscale: Uint8Array,
+	width: number,
+	height: number,
+	levels = 2,
+): Uint8Array => {
+	const result = new Uint8Array(grayscale.length);
+	const buffer = new Float32Array(grayscale.length);
+
+	for (let i = 0; i < grayscale.length; i++) {
+		buffer[i] = grayscale[i];
+	}
+
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const index = y * width + x;
+			const oldPixel = buffer[index];
+			const newPixel = quantizeValue(oldPixel, levels);
+			result[index] = newPixel;
+			const error = oldPixel - newPixel;
+
+			// Row 0
+			if (x + 1 < width) buffer[index + 1] += (error * 7) / 48;
+			if (x + 2 < width) buffer[index + 2] += (error * 5) / 48;
+			// Row 1
+			if (y + 1 < height) {
+				if (x - 2 >= 0) buffer[index + width - 2] += (error * 3) / 48;
+				if (x - 1 >= 0) buffer[index + width - 1] += (error * 5) / 48;
+				buffer[index + width] += (error * 7) / 48;
+				if (x + 1 < width) buffer[index + width + 1] += (error * 5) / 48;
+				if (x + 2 < width) buffer[index + width + 2] += (error * 3) / 48;
+			}
+			// Row 2
+			if (y + 2 < height) {
+				if (x - 2 >= 0) buffer[index + width * 2 - 2] += (error * 1) / 48;
+				if (x - 1 >= 0) buffer[index + width * 2 - 1] += (error * 3) / 48;
+				buffer[index + width * 2] += (error * 5) / 48;
+				if (x + 1 < width) buffer[index + width * 2 + 1] += (error * 3) / 48;
+				if (x + 2 < width) buffer[index + width * 2 + 2] += (error * 1) / 48;
+			}
+		}
+	}
+
+	return result;
+};
+
+const BAYER_MATRICES: Record<number, number[][]> = {
 	2: [
 		[0, 2],
 		[3, 1],
@@ -210,6 +257,7 @@ export enum DitheringMethod {
 	FLOYD_STEINBERG = "floyd-steinberg",
 	ATKINSON = "atkinson",
 	BAYER = "bayer",
+	JARVIS_JUDICE_NINKE = "jarvis-judice-ninke",
 	RANDOM = "random",
 	NONE = "none",
 }
@@ -288,6 +336,16 @@ export function applyDithering(
 				resolvedHeight,
 				levels,
 				bayerPatternSize,
+			);
+			break;
+		}
+		case DitheringMethod.JARVIS_JUDICE_NINKE: {
+			const [resolvedWidth, resolvedHeight] = requireDimensions();
+			result = ditherJarvisJudiceNinke(
+				grayscale,
+				resolvedWidth,
+				resolvedHeight,
+				levels,
 			);
 			break;
 		}

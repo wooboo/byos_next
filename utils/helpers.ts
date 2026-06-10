@@ -85,27 +85,9 @@ export function getLogType(log: Log): "error" | "warning" | "info" {
 	return "info";
 }
 
-// Custom debounce function implementation
-export function debounce<T extends (...args: unknown[]) => unknown>(
-	func: T,
-	wait: number,
-): (...args: Parameters<T>) => void {
-	let timeout: ReturnType<typeof setTimeout> | null = null;
-
-	return (...args: Parameters<T>) => {
-		const later = () => {
-			timeout = null;
-			func(...args);
-		};
-
-		if (timeout) clearTimeout(timeout);
-		timeout = setTimeout(later, wait);
-	};
-}
-
 // Add validation functions for API key and friendly ID
 export const isValidApiKey = (key: string): boolean => {
-	const regex = /^[a-zA-Z0-9]{20,60}$/; // Alphanumeric, 20-60 characters
+	const regex = /^[a-zA-Z0-9]{8,60}$/; // Alphanumeric, 8-60 characters
 	return regex.test(key);
 };
 

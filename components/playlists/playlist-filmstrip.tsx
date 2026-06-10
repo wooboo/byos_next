@@ -3,6 +3,7 @@
 import { Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
+import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 export interface FilmstripFrame {
 	id: string;
 	screen_id: string;
+	screen_type?: string;
 	duration: number;
 	label: string;
 }
@@ -117,11 +119,21 @@ export function PlaylistFilmstrip({
 								<DeviceFrame size="sm" flat>
 									<picture>
 										<source
-											srcSet={`/api/bitmap/${frame.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
+											srcSet={playlistFrameBmpUrl(
+												frame.screen_id,
+												frame.screen_type,
+												DEFAULT_IMAGE_WIDTH,
+												DEFAULT_IMAGE_HEIGHT,
+											)}
 											type="image/bmp"
 										/>
 										<img
-											src={`/api/bitmap/${frame.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
+											src={playlistFrameBmpUrl(
+												frame.screen_id,
+												frame.screen_type,
+												DEFAULT_IMAGE_WIDTH,
+												DEFAULT_IMAGE_HEIGHT,
+											)}
 											alt={frame.label}
 											width={DEFAULT_IMAGE_WIDTH}
 											height={DEFAULT_IMAGE_HEIGHT}

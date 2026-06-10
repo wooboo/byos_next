@@ -37,7 +37,7 @@ export async function renderWithBrowser(
 	scale = 1,
 	cookies?: string,
 ): Promise<Buffer> {
-	const port = process.env.PORT || 3000;
+	const port = process.env.PORT || 3001;
 	const baseUrl =
 		process.env.NEXT_PUBLIC_BASE_URL ?? `http://127.0.0.1:${port}`;
 	const url = `${baseUrl}/recipes/${slug}/preview?width=${width}&height=${height}`;
