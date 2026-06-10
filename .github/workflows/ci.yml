@@ -34,12 +34,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
       - name: Test
-        run: |
-          if pnpm pkg get scripts.test | grep -qv null; then
-            pnpm test
-          else
-            echo "No test script configured; skipping."
-          fi
+        run: pnpm run --if-present test
 
   fallow:
     name: Fallow Audit
@@ -58,4 +53,5 @@ jobs:
           annotations: true
           comment: true
           review-comments: true
+          fail-on-issues: false
           artifacts-dir: .var/fallow

@@ -41,16 +41,13 @@ const sizeStyles = {
 export function DeviceFrame({
 	children,
 	size = "md",
-	portrait = false,
 	screenWidth,
 	screenHeight,
 	className,
 	flat = false,
 }: DeviceFrameProps) {
 	const styles = sizeStyles[size];
-	const ratio = portrait
-		? `${screenHeight ?? DEFAULT_IMAGE_HEIGHT} / ${screenWidth ?? DEFAULT_IMAGE_WIDTH}`
-		: `${screenWidth ?? DEFAULT_IMAGE_WIDTH} / ${screenHeight ?? DEFAULT_IMAGE_HEIGHT}`;
+	const ratio = `${screenWidth ?? DEFAULT_IMAGE_WIDTH} / ${screenHeight ?? DEFAULT_IMAGE_HEIGHT}`;
 
 	return (
 		<div

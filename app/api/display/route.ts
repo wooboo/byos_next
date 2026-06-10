@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isUuid, resolveRenderableContentType } from "@/lib/content-ref";
+import { resolveRenderableContentType } from "@/lib/content-ref";
 import { db } from "@/lib/database/db";
 import { checkDbConnection } from "@/lib/database/utils";
 import { getLatestFirmware, isUpdateAvailable } from "@/lib/firmware";
@@ -121,9 +121,8 @@ export async function GET(request: Request) {
 			device.screen_type,
 			singleScreenId,
 		);
-		const isScreenUuid = isUuid(singleScreenId);
 		const singleScreenPath =
-			singleScreenType === "screen" && isScreenUuid
+			singleScreenType === "screen"
 				? `screen/${singleScreenId}`
 				: singleScreenId;
 
@@ -153,10 +152,7 @@ export async function GET(request: Request) {
 							dynamicRefreshRate = Math.max(dynamicRefreshRate, 30);
 							break; // skip the default URL below
 						}
-						if (
-							activeItem.screen_type === "screen" ||
-							isUuid(screenToDisplay)
-						) {
+						if (activeItem.screen_type === "screen") {
 							imageUrl = `${baseUrl}/screen/${screenToDisplay}.bmp?${baseQueryParams}&${accessTokenParam}`;
 							break;
 						}

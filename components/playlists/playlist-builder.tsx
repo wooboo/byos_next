@@ -92,6 +92,7 @@ export function PlaylistBuilder({
 					setItems(
 						result.items.map((item) => ({
 							id: item.id,
+							screen_type: item.screen_type ?? "recipe",
 							screen_id: item.screen_id,
 							duration: item.duration,
 							order_index: item.order_index,

@@ -82,20 +82,21 @@ async function fetchSingleCalendar(
 				while (occ) {
 					const jsDate = occ.toJSDate();
 					if (jsDate > rangeEnd) break;
-					if (jsDate < rangeStart) continue;
 
-					events.push({
-						summary: event.summary || "(bez tytułu)",
-						start: jsDate,
-						end: new Date(
-							jsDate.getTime() + (event.duration?.toSeconds() ?? 3600) * 1000,
-						),
-						isAllDay: event.startDate.isDate,
-						location: event.location || undefined,
-						calendarName: optionalString(
-							comp.getFirstPropertyValue("x-wr-calname"),
-						),
-					});
+					if (jsDate >= rangeStart) {
+						events.push({
+							summary: event.summary || "(bez tytułu)",
+							start: jsDate,
+							end: new Date(
+								jsDate.getTime() + (event.duration?.toSeconds() ?? 3600) * 1000,
+							),
+							isAllDay: event.startDate.isDate,
+							location: event.location || undefined,
+							calendarName: optionalString(
+								comp.getFirstPropertyValue("x-wr-calname"),
+							),
+						});
+					}
 					occ = expand.next();
 				}
 			} catch {

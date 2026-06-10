@@ -11,7 +11,7 @@ export function isUuid(value: string | null | undefined): boolean {
 
 export function resolveRenderableContentType(
 	contentType: string | null | undefined,
-	contentId: string | null | undefined,
+	_contentId: string | null | undefined,
 ): RenderableContentType {
-	return contentType === "screen" || isUuid(contentId) ? "screen" : "recipe";
+	return contentType === "screen" ? "screen" : "recipe";
 }
