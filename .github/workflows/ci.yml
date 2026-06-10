@@ -52,6 +52,6 @@ jobs:
           command: audit
           annotations: true
           comment: true
-          review-comments: true
+          review-comments: false
           fail-on-issues: false
           artifacts-dir: .var/fallow
