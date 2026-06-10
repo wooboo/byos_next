@@ -68,6 +68,32 @@ interface MixupBuilderProps {
 	isSaving?: boolean;
 }
 
+function removeSlotAssignment(
+	assignments: Record<string, string>,
+	slotId: string,
+) {
+	const next = { ...assignments };
+	delete next[slotId];
+	return next;
+}
+
+async function promoteRecipeValueToScreen(
+	value: string,
+	recipes: MixupRecipe[],
+) {
+	if (!value.startsWith("recipe:")) return value;
+
+	const recipeId = value.slice("recipe:".length);
+	const recipe = recipes.find((r) => r.id === recipeId);
+	const name = window.prompt("Name this screen", recipe?.title || "New screen");
+	if (!name?.trim()) return null;
+
+	const result = await createScreenFromRecipe(recipeId, name);
+	if (!result.success || !result.screen) return null;
+
+	return `screen:${result.screen.id}`;
+}
+
 const spanLabel = (slot: LayoutSlot) => {
 	const spanSize = (slot.colSpan ?? 1) * (slot.rowSpan ?? 1);
 	return spanSize > 1 ? `${spanSize} quarters` : "1 quarter";
@@ -189,26 +215,14 @@ export function MixupBuilder({
 
 	const handleContentChange = async (slotId: string, value: string | null) => {
 		if (!value) {
-			setAssignments((prev) => {
-				const next = { ...prev };
-				delete next[slotId];
-				return next;
-			});
+			setAssignments((prev) => removeSlotAssignment(prev, slotId));
 			return;
 		}
-		if (value.startsWith("recipe:")) {
-			const recipeId = value.slice("recipe:".length);
-			const recipe = recipes.find((r) => r.id === recipeId);
-			const name = window.prompt(
-				"Name this screen",
-				recipe?.title || "New screen",
-			);
-			if (!name?.trim()) return;
-			const result = await createScreenFromRecipe(recipeId, name);
-			if (!result.success || !result.screen) return;
-			value = `screen:${result.screen.id}`;
-		}
-		setAssignments((prev) => ({ ...prev, [slotId]: value }));
+
+		const resolvedValue = await promoteRecipeValueToScreen(value, recipes);
+		if (!resolvedValue) return;
+
+		setAssignments((prev) => ({ ...prev, [slotId]: resolvedValue }));
 	};
 
 	const handleSave = () => {

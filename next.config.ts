@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
-import { networkInterfaces } from "os";
 import type { NextConfig } from "next";
+import { getLanServerActionOrigins } from "./lib/lan-origins";
 
 const serverExternalPackages = [
 	"@takumi-rs/core",
@@ -9,45 +9,6 @@ const serverExternalPackages = [
 ];
 
 const browserTracingIncludes: string[] = [];
-
-function getLanServerActionOrigins() {
-	const ports = new Set([
-		process.env.PORT || "3001",
-		process.env.NEXT_PUBLIC_PORT || "3001",
-		"3000",
-		"3001",
-	]);
-
-	const hosts = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
-	const explicitOrigins = new Set<string>();
-
-	for (const entries of Object.values(networkInterfaces())) {
-		for (const entry of entries ?? []) {
-			if (entry.family === "IPv4" && !entry.internal) {
-				hosts.add(entry.address);
-			}
-		}
-	}
-
-	for (const value of (process.env.ALLOWED_SERVER_ACTION_ORIGINS || "")
-		.split(",")
-		.map((origin) => origin.trim())
-		.filter(Boolean)) {
-		const withoutProtocol = value.replace(/^https?:\/\//, "");
-		if (/:\d+$/.test(withoutProtocol)) {
-			explicitOrigins.add(withoutProtocol);
-		} else {
-			hosts.add(withoutProtocol);
-		}
-	}
-
-	return [
-		...Array.from(hosts).flatMap((host) =>
-			Array.from(ports).map((port) => `${host}:${port}`),
-		),
-		...Array.from(explicitOrigins),
-	];
-}
 
 const serverActionAllowedOrigins = getLanServerActionOrigins();
 const allowedDevOrigins = Array.from(

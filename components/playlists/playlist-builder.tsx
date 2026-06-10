@@ -29,6 +29,22 @@ interface PlaylistBuilderProps {
 	isSaving?: boolean;
 }
 
+async function promoteRecipePatchToScreen(
+	patch: Partial<FrameData>,
+	recipes: Recipe[],
+): Promise<Partial<FrameData> | null> {
+	if (patch.screen_type !== "recipe" || !patch.screen_id) return patch;
+
+	const recipe = recipes.find((r) => r.id === patch.screen_id);
+	const name = window.prompt("Name this screen", recipe?.name || "New screen");
+	if (!name?.trim()) return null;
+
+	const result = await createScreenFromRecipe(patch.screen_id, name);
+	if (!result.success || !result.screen) return null;
+
+	return { ...patch, screen_type: "screen", screen_id: result.screen.id };
+}
+
 export function PlaylistBuilder({
 	playlist,
 	recipes,
@@ -132,19 +148,13 @@ export function PlaylistBuilder({
 	};
 
 	const handleUpdate = async (id: string, patch: Partial<FrameData>) => {
-		if (patch.screen_type === "recipe" && patch.screen_id) {
-			const recipe = recipes.find((r) => r.id === patch.screen_id);
-			const name = window.prompt(
-				"Name this screen",
-				recipe?.name || "New screen",
-			);
-			if (!name?.trim()) return;
-			const result = await createScreenFromRecipe(patch.screen_id, name);
-			if (!result.success || !result.screen) return;
-			patch = { ...patch, screen_type: "screen", screen_id: result.screen.id };
-		}
+		const resolvedPatch = await promoteRecipePatchToScreen(patch, recipes);
+		if (!resolvedPatch) return;
+
 		setItems((current) =>
-			current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+			current.map((item) =>
+				item.id === id ? { ...item, ...resolvedPatch } : item,
+			),
 		);
 	};
 
