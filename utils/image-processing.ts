@@ -257,8 +257,8 @@ export enum DitheringMethod {
 	FLOYD_STEINBERG = "floyd-steinberg",
 	ATKINSON = "atkinson",
 	BAYER = "bayer",
-	JARVIS_JUDICE_NINKE = "jarvis-judice-ninke",
 	RANDOM = "random",
+	JARVIS_JUDICE_NINKE = "jarvis-judice-ninke",
 	NONE = "none",
 }
 

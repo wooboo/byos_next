@@ -1,7 +1,9 @@
 ARG NODE_VERSION=22
+ARG PNPM_VERSION=10
 
 # Base stage - minimal Node.js only
 FROM node:${NODE_VERSION}-slim AS base
+ARG PNPM_VERSION=10
 
 LABEL org.opencontainers.image.title="TRMNL BYOS Next.js"
 LABEL org.opencontainers.image.description="A Next.js application for BYOS"
@@ -12,7 +14,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 WORKDIR /app
 
-RUN corepack enable pnpm
+RUN corepack enable \
+    && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 # Install dependencies only when needed
 FROM base AS deps

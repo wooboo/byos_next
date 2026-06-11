@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-byos_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-byos_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  byos-next:
+    image: ${APP_IMAGE:?Set APP_IMAGE to the GitHub Container Registry image, for example ghcr.io/owner/byos_next:latest}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-byos_db}?sslmode=disable
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Set BETTER_AUTH_URL to the public URL}
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      REACT_RENDERER: ${REACT_RENDERER:-takumi}
+      ENABLE_EXTERNAL_CATALOG: ${ENABLE_EXTERNAL_CATALOG:-false}
+      TRMNL_PROXY_LIVE: ${TRMNL_PROXY_LIVE:-false}
+      FORCE_WIKIPEDIA_RESERVOIR: ${FORCE_WIKIPEDIA_RESERVOIR:-false}
+      WIKIPEDIA_ACCESS_TOKEN: ${WIKIPEDIA_ACCESS_TOKEN:-}
+      ALLOWED_SERVER_ACTION_ORIGINS: ${ALLOWED_SERVER_ACTION_ORIGINS:-}
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3001}:3000"
+
+volumes:
+  postgres_data:
