@@ -8,8 +8,11 @@ import {
 	Save,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { createScreenFromRecipe } from "@/app/actions/screens";
 import { DeviceFrame } from "@/components/common/device-frame";
+import {
+	createScreenIdFromRecipe,
+	promptScreenName,
+} from "@/components/common/screen-from-recipe";
 import {
 	ScreenPreviewControls,
 	screenPreviewSummary,
@@ -52,6 +55,13 @@ type MixupScreen = {
 	description?: string;
 };
 
+type ContentOption = MixupRecipe | MixupScreen;
+type SelectedContentOption = {
+	title: string;
+	description?: string;
+	previewUrl: string;
+};
+
 export type MixupBuilderData = {
 	id?: string;
 	name: string;
@@ -83,17 +93,51 @@ function recipeTitleById(recipes: MixupRecipe[], recipeId: string) {
 	);
 }
 
-function promptScreenName(defaultName: string) {
-	const name = window.prompt("Name this screen", defaultName);
-	if (name === null) return null;
+function normalizeContentRef(ref: string) {
+	if (ref.startsWith("screen:") || ref.startsWith("recipe:")) return ref;
+	return `recipe:${ref}`;
+}
 
-	const trimmed = name.trim();
-	return trimmed.length > 0 ? trimmed : null;
+function ContentCommandGroup({
+	heading,
+	kind,
+	options,
+	selectedId,
+	onSelect,
+}: {
+	heading: string;
+	kind: "recipe" | "screen";
+	options: ContentOption[];
+	selectedId?: string;
+	onSelect: (value: string) => void;
+}) {
+	return (
+		<CommandGroup heading={heading}>
+			{options.map((option) => {
+				const value = `${kind}:${option.id}`;
+				return (
+					<CommandItem
+						key={value}
+						value={`${kind} ${option.title}`}
+						onSelect={() => onSelect(value)}
+					>
+						<Check
+							className={cn(
+								"mr-2 h-4 w-4",
+								selectedId === value ? "opacity-100" : "opacity-0",
+							)}
+						/>
+						{option.title}
+					</CommandItem>
+				);
+			})}
+		</CommandGroup>
+	);
 }
 
 async function createScreenValueFromRecipe(recipeId: string, name: string) {
-	const result = await createScreenFromRecipe(recipeId, name);
-	return result.success && result.screen ? `screen:${result.screen.id}` : null;
+	const screenId = await createScreenIdFromRecipe(recipeId, name);
+	return screenId ? `screen:${screenId}` : null;
 }
 
 async function promoteRecipeValueToScreen(
@@ -174,10 +218,7 @@ export function MixupBuilder({
 	isSaving = false,
 }: MixupBuilderProps) {
 	const optionMap = useMemo(() => {
-		const map = new Map<
-			string,
-			{ title: string; description?: string; previewUrl: string }
-		>();
+		const map = new Map<string, SelectedContentOption>();
 		for (const recipe of recipes)
 			map.set(`recipe:${recipe.id}`, {
 				...recipe,
@@ -347,12 +388,7 @@ export function MixupBuilder({
 									{currentLayout.slots.map((slot) => {
 										const selectedId = assignments[slot.id];
 										const recipe = selectedId
-											? optionMap.get(
-													selectedId.startsWith("screen:") ||
-														selectedId.startsWith("recipe:")
-														? selectedId
-														: `recipe:${selectedId}`,
-												)
+											? optionMap.get(normalizeContentRef(selectedId))
 											: null;
 										const isActive = activeSlot === slot.id;
 
@@ -449,12 +485,7 @@ export function MixupBuilder({
 							{currentLayout.slots.map((slot, index) => {
 								const selectedId = assignments[slot.id];
 								const recipe = selectedId
-									? optionMap.get(
-											selectedId.startsWith("screen:") ||
-												selectedId.startsWith("recipe:")
-												? selectedId
-												: `recipe:${selectedId}`,
-										)
+									? optionMap.get(normalizeContentRef(selectedId))
 									: null;
 								const isActive = activeSlot === slot.id;
 
@@ -501,54 +532,24 @@ export function MixupBuilder({
 															<CommandInput placeholder="Search content…" />
 															<CommandList>
 																<CommandEmpty>No results found.</CommandEmpty>
-																<CommandGroup heading="Recipes">
-																	{recipes.map((option) => {
-																		const value = `recipe:${option.id}`;
-																		return (
-																			<CommandItem
-																				key={value}
-																				value={`recipe ${option.title}`}
-																				onSelect={() =>
-																					handleContentChange(slot.id, value)
-																				}
-																			>
-																				<Check
-																					className={cn(
-																						"mr-2 h-4 w-4",
-																						selectedId === value
-																							? "opacity-100"
-																							: "opacity-0",
-																					)}
-																				/>
-																				{option.title}
-																			</CommandItem>
-																		);
-																	})}
-																</CommandGroup>
-																<CommandGroup heading="Screens">
-																	{screens.map((option) => {
-																		const value = `screen:${option.id}`;
-																		return (
-																			<CommandItem
-																				key={value}
-																				value={`screen ${option.title}`}
-																				onSelect={() =>
-																					handleContentChange(slot.id, value)
-																				}
-																			>
-																				<Check
-																					className={cn(
-																						"mr-2 h-4 w-4",
-																						selectedId === value
-																							? "opacity-100"
-																							: "opacity-0",
-																					)}
-																				/>
-																				{option.title}
-																			</CommandItem>
-																		);
-																	})}
-																</CommandGroup>
+																<ContentCommandGroup
+																	heading="Recipes"
+																	kind="recipe"
+																	options={recipes}
+																	selectedId={selectedId}
+																	onSelect={(value) =>
+																		handleContentChange(slot.id, value)
+																	}
+																/>
+																<ContentCommandGroup
+																	heading="Screens"
+																	kind="screen"
+																	options={screens}
+																	selectedId={selectedId}
+																	onSelect={(value) =>
+																		handleContentChange(slot.id, value)
+																	}
+																/>
 															</CommandList>
 														</Command>
 													</PopoverContent>

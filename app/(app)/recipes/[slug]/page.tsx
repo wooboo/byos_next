@@ -1,6 +1,5 @@
 import { revalidateTag } from "next/cache";
 import { headers } from "next/headers";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache, Suspense, use } from "react";
@@ -10,6 +9,12 @@ import {
 	updateScreenParams,
 } from "@/app/actions/screens-params";
 import { PageTemplate } from "@/components/common/page-template";
+import {
+	EmptyRenderState,
+	RenderLoadingState,
+	RenderOutputForFormat,
+	ScaledRenderPreview,
+} from "@/components/preview/render-output-preview";
 import { DeleteRecipeButton } from "@/components/recipes/delete-recipe-button";
 import { RecipePreviewStage } from "@/components/recipes/recipe-preview-stage";
 import RecipeProps from "@/components/recipes/recipe-props";
@@ -94,18 +99,20 @@ const LiquidRenderComponent = ({
 	const result = use(renderLiquidRecipe(slug, customFieldOverrides));
 
 	if (!result) {
-		return <EmptyState>Failed to render liquid template</EmptyState>;
+		return (
+			<EmptyRenderState>Failed to render liquid template</EmptyRenderState>
+		);
 	}
 
 	if (format === "react") {
 		return (
-			<ScaledToFit imageWidth={imageWidth} imageHeight={imageHeight}>
+			<ScaledRenderPreview imageWidth={imageWidth} imageHeight={imageHeight}>
 				<LiquidPreview
 					html={result.html}
 					width={imageWidth}
 					height={imageHeight}
 				/>
-			</ScaledToFit>
+			</ScaledRenderPreview>
 		);
 	}
 
@@ -119,31 +126,14 @@ const LiquidRenderComponent = ({
 		}),
 	);
 
-	if (format === "bitmap") {
-		if (!renders.bitmap)
-			return <EmptyState>Failed to generate bitmap</EmptyState>;
+	if (format === "bitmap" || format === "png") {
 		return (
-			<Image
-				width={imageWidth}
-				height={imageHeight}
-				src={`data:image/bmp;base64,${renders.bitmap.toString("base64")}`}
-				style={{ imageRendering: "pixelated" }}
-				alt={`${title} BMP render`}
-				className="absolute inset-0 h-full w-full object-cover"
-			/>
-		);
-	}
-
-	if (format === "png") {
-		if (!renders.png) return <EmptyState>Failed to generate PNG</EmptyState>;
-		return (
-			<Image
-				width={imageWidth}
-				height={imageHeight}
-				src={`data:image/png;base64,${renders.png.toString("base64")}`}
-				style={{ imageRendering: "pixelated" }}
-				alt={`${title} PNG render`}
-				className="absolute inset-0 h-full w-full object-cover"
+			<RenderOutputForFormat
+				format={format}
+				renders={renders}
+				title={title}
+				imageWidth={imageWidth}
+				imageHeight={imageHeight}
 			/>
 		);
 	}
@@ -210,10 +200,12 @@ const RenderComponent = ({
 	imageHeight: number;
 }) => {
 	const configResult = use(fetchRecipeConfig(slug));
-	if (!configResult) return <EmptyState>Configuration not found</EmptyState>;
+	if (!configResult)
+		return <EmptyRenderState>Configuration not found</EmptyRenderState>;
 
 	const componentResult = use(Promise.resolve(fetchRecipeComponent(slug)));
-	if (!componentResult) return <EmptyState>Component not found</EmptyState>;
+	if (!componentResult)
+		return <EmptyRenderState>Component not found</EmptyRenderState>;
 
 	const config = configResult;
 	const Component = componentResult;
@@ -233,7 +225,7 @@ const RenderComponent = ({
 
 	if (format === "react") {
 		return (
-			<ScaledToFit imageWidth={imageWidth} imageHeight={imageHeight}>
+			<ScaledRenderPreview imageWidth={imageWidth} imageHeight={imageHeight}>
 				{useDoubling && !shouldDisableRecipeDoubling ? (
 					<div
 						style={{
@@ -248,7 +240,7 @@ const RenderComponent = ({
 				) : (
 					<Component {...reactProps} />
 				)}
-			</ScaledToFit>
+			</ScaledRenderPreview>
 		);
 	}
 
@@ -265,90 +257,20 @@ const RenderComponent = ({
 		),
 	);
 
-	if (format === "bitmap") {
-		if (!renders.bitmap)
-			return <EmptyState>Failed to generate bitmap</EmptyState>;
+	if (format === "bitmap" || format === "png") {
 		return (
-			<Image
-				width={imageWidth}
-				height={imageHeight}
-				src={`data:image/bmp;base64,${renders.bitmap.toString("base64")}`}
-				style={{ imageRendering: "pixelated" }}
-				alt={`${title} BMP render`}
-				className="absolute inset-0 h-full w-full object-cover"
-			/>
-		);
-	}
-
-	if (format === "png") {
-		if (!renders.png) return <EmptyState>Failed to generate PNG</EmptyState>;
-		return (
-			<Image
-				width={imageWidth}
-				height={imageHeight}
-				src={`data:image/png;base64,${renders.png.toString("base64")}`}
-				style={{ imageRendering: "pixelated" }}
-				alt={`${title} PNG render`}
-				className="absolute inset-0 h-full w-full object-cover"
+			<RenderOutputForFormat
+				format={format}
+				renders={renders}
+				title={title}
+				imageWidth={imageWidth}
+				imageHeight={imageHeight}
 			/>
 		);
 	}
 
 	return null;
 };
-
-/**
- * Scales a fixed-pixel-size preview (imageWidth × imageHeight) to fit its
- * parent container using CSS container queries. The child renders at its
- * native pixel size; the wrapper measures the available width and applies
- * a proportional scale. Keeps layout crisp and handles both BMP images
- * (which already fit via object-cover) and React/iframe content that has
- * hard-coded pixel dimensions.
- */
-function ScaledToFit({
-	imageWidth,
-	imageHeight,
-	children,
-}: {
-	imageWidth: number;
-	imageHeight: number;
-	children: React.ReactNode;
-}) {
-	return (
-		<div
-			className="absolute inset-0"
-			style={{ containerType: "inline-size" } as React.CSSProperties}
-		>
-			<div
-				style={{
-					width: `${imageWidth}px`,
-					height: `${imageHeight}px`,
-					transform: `scale(calc(100cqi / ${imageWidth}px))`,
-					transformOrigin: "top left",
-				}}
-			>
-				{children}
-			</div>
-		</div>
-	);
-}
-
-function EmptyState({ children }: { children: React.ReactNode }) {
-	return (
-		<div className="absolute inset-0 flex items-center justify-center text-sm text-neutral-500">
-			{children}
-		</div>
-	);
-}
-
-function LoadingState({ label }: { label: string }) {
-	return (
-		<div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-neutral-500">
-			<span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" />
-			{label}
-		</div>
-	);
-}
 
 function MetaChips({
 	type,
@@ -410,6 +332,13 @@ function SectionCard({
 	);
 }
 
+type RecipePageViewProps = {
+	slug: string;
+	isPortrait: boolean;
+	imageWidth: number;
+	imageHeight: number;
+};
+
 export default async function RecipePage({
 	params,
 	searchParams,
@@ -425,116 +354,152 @@ export default async function RecipePage({
 	const imageWidth = isPortrait ? DEFAULT_IMAGE_HEIGHT : DEFAULT_IMAGE_WIDTH;
 	const imageHeight = isPortrait ? DEFAULT_IMAGE_WIDTH : DEFAULT_IMAGE_HEIGHT;
 
-	// --- Liquid recipe path ---
 	if (!config) {
-		const liquidMeta = await fetchLiquidRecipeMeta(slug);
-		if (!liquidMeta) notFound();
-
-		const title = liquidMeta.name;
-		const description = liquidMeta.description;
-
-		const liquidSettings = await fetchLiquidRecipeSettings(slug);
-		const customFields = liquidSettings?.custom_fields ?? [];
-		const paramDefinitions = customFieldsToParamDefinitions(customFields);
-		const hasParams = Object.keys(paramDefinitions).length > 0;
-		const storedValues = hasParams
-			? await getScreenParams(slug, paramDefinitions)
-			: {};
-
 		return (
-			<div className="@container">
-				<PageTemplate
-					title={
-						<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-							<h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-							<MetaChips
-								type="liquid"
-								version={liquidMeta.version}
-								category={liquidMeta.category}
-								updatedAt={
-									liquidMeta.updated_at instanceof Date
-										? liquidMeta.updated_at.toISOString()
-										: liquidMeta.updated_at
-								}
-							/>
-						</div>
-					}
-					subtitle={
-						description ? (
-							<p className="text-sm text-muted-foreground max-w-prose">
-								{description}
-							</p>
-						) : null
-					}
-					left={<DeleteRecipeButton slug={slug} />}
-				>
-					<RecipePreviewStage
-						slug={slug}
-						isPortrait={isPortrait}
-						bmpNode={
-							<Suspense fallback={<LoadingState label="Rendering bitmap…" />}>
-								<LiquidRenderComponent
-									slug={slug}
-									format="bitmap"
-									title={title}
-									imageWidth={imageWidth}
-									imageHeight={imageHeight}
-									customFieldOverrides={storedValues}
-								/>
-							</Suspense>
-						}
-						pngNode={
-							<Suspense fallback={<LoadingState label="Rendering PNG…" />}>
-								<LiquidRenderComponent
-									slug={slug}
-									format="png"
-									title={title}
-									imageWidth={imageWidth}
-									imageHeight={imageHeight}
-									customFieldOverrides={storedValues}
-								/>
-							</Suspense>
-						}
-						reactNode={
-							<Suspense fallback={<LoadingState label="Rendering recipe…" />}>
-								<LiquidRenderComponent
-									slug={slug}
-									format="react"
-									title={title}
-									imageWidth={imageWidth}
-									imageHeight={imageHeight}
-									customFieldOverrides={storedValues}
-								/>
-							</Suspense>
-						}
-						bmpPipeline={
-							<span>
-								Liquid → liquidjs → HTML → Puppeteer PNG → render-bmp →{" "}
-								<Link href={`/api/bitmap/${slug}.bmp`}>
-									/api/bitmap/{slug}.bmp
-								</Link>
-							</span>
-						}
-						pngPipeline={<span>Liquid → liquidjs → HTML → Puppeteer PNG</span>}
-						reactPipeline={
-							<span>Liquid → liquidjs → HTML → browser preview</span>
-						}
-					/>
-
-					{hasParams && (
-						<ScreenParamsForm
-							slug={slug}
-							paramsSchema={paramDefinitions}
-							initialValues={storedValues}
-							updateAction={updateScreenParams}
-						/>
-					)}
-				</PageTemplate>
-			</div>
+			<LiquidRecipePage
+				slug={slug}
+				isPortrait={isPortrait}
+				imageWidth={imageWidth}
+				imageHeight={imageHeight}
+			/>
 		);
 	}
 
-	// --- React recipe path ---
+	return (
+		<ReactRecipePage
+			slug={slug}
+			config={config}
+			isPortrait={isPortrait}
+			imageWidth={imageWidth}
+			imageHeight={imageHeight}
+		/>
+	);
+}
+
+async function LiquidRecipePage({
+	slug,
+	isPortrait,
+	imageWidth,
+	imageHeight,
+}: RecipePageViewProps) {
+	const liquidMeta = await fetchLiquidRecipeMeta(slug);
+	if (!liquidMeta) notFound();
+
+	const title = liquidMeta.name;
+	const description = liquidMeta.description;
+
+	const liquidSettings = await fetchLiquidRecipeSettings(slug);
+	const customFields = liquidSettings?.custom_fields ?? [];
+	const paramDefinitions = customFieldsToParamDefinitions(customFields);
+	const hasParams = Object.keys(paramDefinitions).length > 0;
+	const storedValues = hasParams
+		? await getScreenParams(slug, paramDefinitions)
+		: {};
+
+	return (
+		<div className="@container">
+			<PageTemplate
+				title={
+					<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+						<h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+						<MetaChips
+							type="liquid"
+							version={liquidMeta.version}
+							category={liquidMeta.category}
+							updatedAt={
+								liquidMeta.updated_at instanceof Date
+									? liquidMeta.updated_at.toISOString()
+									: liquidMeta.updated_at
+							}
+						/>
+					</div>
+				}
+				subtitle={
+					description ? (
+						<p className="text-sm text-muted-foreground max-w-prose">
+							{description}
+						</p>
+					) : null
+				}
+				left={<DeleteRecipeButton slug={slug} />}
+			>
+				<RecipePreviewStage
+					slug={slug}
+					isPortrait={isPortrait}
+					bmpNode={
+						<Suspense
+							fallback={<RenderLoadingState label="Rendering bitmap…" />}
+						>
+							<LiquidRenderComponent
+								slug={slug}
+								format="bitmap"
+								title={title}
+								imageWidth={imageWidth}
+								imageHeight={imageHeight}
+								customFieldOverrides={storedValues}
+							/>
+						</Suspense>
+					}
+					pngNode={
+						<Suspense fallback={<RenderLoadingState label="Rendering PNG…" />}>
+							<LiquidRenderComponent
+								slug={slug}
+								format="png"
+								title={title}
+								imageWidth={imageWidth}
+								imageHeight={imageHeight}
+								customFieldOverrides={storedValues}
+							/>
+						</Suspense>
+					}
+					reactNode={
+						<Suspense
+							fallback={<RenderLoadingState label="Rendering recipe…" />}
+						>
+							<LiquidRenderComponent
+								slug={slug}
+								format="react"
+								title={title}
+								imageWidth={imageWidth}
+								imageHeight={imageHeight}
+								customFieldOverrides={storedValues}
+							/>
+						</Suspense>
+					}
+					bmpPipeline={
+						<span>
+							Liquid → liquidjs → HTML → Puppeteer PNG → render-bmp →{" "}
+							<Link href={`/api/bitmap/${slug}.bmp`}>
+								/api/bitmap/{slug}.bmp
+							</Link>
+						</span>
+					}
+					pngPipeline={<span>Liquid → liquidjs → HTML → Puppeteer PNG</span>}
+					reactPipeline={
+						<span>Liquid → liquidjs → HTML → browser preview</span>
+					}
+				/>
+
+				{hasParams && (
+					<ScreenParamsForm
+						slug={slug}
+						paramsSchema={paramDefinitions}
+						initialValues={storedValues}
+						updateAction={updateScreenParams}
+					/>
+				)}
+			</PageTemplate>
+		</div>
+	);
+}
+
+async function ReactRecipePage({
+	slug,
+	config,
+	isPortrait,
+	imageWidth,
+	imageHeight,
+}: RecipePageViewProps & { config: RecipeConfig }) {
 	const screenParams = config.params
 		? await getScreenParams(slug, config.params)
 		: {};
@@ -575,7 +540,9 @@ export default async function RecipePage({
 					slug={slug}
 					isPortrait={isPortrait}
 					bmpNode={
-						<Suspense fallback={<LoadingState label="Rendering bitmap…" />}>
+						<Suspense
+							fallback={<RenderLoadingState label="Rendering bitmap…" />}
+						>
 							<RenderComponent
 								slug={slug}
 								format="bitmap"
@@ -586,7 +553,7 @@ export default async function RecipePage({
 						</Suspense>
 					}
 					pngNode={
-						<Suspense fallback={<LoadingState label="Rendering PNG…" />}>
+						<Suspense fallback={<RenderLoadingState label="Rendering PNG…" />}>
 							<RenderComponent
 								slug={slug}
 								format="png"

@@ -3,11 +3,15 @@
 import { ArrowLeft, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { fetchPlaylistWithItems } from "@/app/actions/playlist";
-import { createScreenFromRecipe } from "@/app/actions/screens";
+import {
+	createScreenIdFromRecipe,
+	promptScreenName,
+} from "@/components/common/screen-from-recipe";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Mixup, Recipe } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { formatPlaylistDuration } from "./duration-format";
 import { PlaylistFilmstrip } from "./playlist-filmstrip";
 import {
 	type FrameData,
@@ -31,19 +35,6 @@ interface PlaylistBuilderProps {
 
 function recipeNameById(recipes: Recipe[], recipeId: string) {
 	return recipes.find((recipe) => recipe.id === recipeId)?.name ?? "New screen";
-}
-
-function promptScreenName(defaultName: string) {
-	const name = window.prompt("Name this screen", defaultName);
-	if (name === null) return null;
-
-	const trimmed = name.trim();
-	return trimmed.length > 0 ? trimmed : null;
-}
-
-async function createScreenIdFromRecipe(recipeId: string, name: string) {
-	const result = await createScreenFromRecipe(recipeId, name);
-	return result.success && result.screen ? result.screen.id : null;
 }
 
 async function promoteRecipePatchToScreen(
@@ -215,7 +206,10 @@ export function PlaylistBuilder({
 	}));
 
 	const totalSeconds = items.reduce((sum, item) => sum + item.duration, 0);
-	const totalLabel = formatLoop(totalSeconds);
+	const totalLabel = formatPlaylistDuration(totalSeconds, {
+		suffix: "loop",
+		suffixZero: true,
+	});
 
 	const activeItem = items[activeIndex];
 
@@ -312,13 +306,4 @@ export function PlaylistBuilder({
 			/>
 		</div>
 	);
-}
-
-function formatLoop(seconds: number): string {
-	if (seconds <= 0) return "0s loop";
-	const m = Math.floor(seconds / 60);
-	const s = seconds % 60;
-	if (m === 0) return `${s}s loop`;
-	if (s === 0) return `${m}m loop`;
-	return `${m}m ${s}s loop`;
 }

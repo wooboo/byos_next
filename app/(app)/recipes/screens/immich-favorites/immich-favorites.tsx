@@ -46,6 +46,7 @@ export default function ImmichFavorites({
 					backgroundColor: "#fff",
 				}}
 			>
+				{/* biome-ignore lint/performance/noImgElement: Satori-compatible recipe rendering needs a plain img with a data URL. */}
 				<img
 					src={imageDataUrl}
 					alt=""

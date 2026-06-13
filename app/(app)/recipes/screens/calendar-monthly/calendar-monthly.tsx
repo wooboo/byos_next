@@ -1,35 +1,14 @@
 import { PreSatori } from "@/utils/pre-satori";
+import {
+	createCalendarScale as sc,
+	calendarTextStyle as t,
+} from "../calendar-ui";
 import type { CalendarData } from "./getData";
 
 const DAY_NAMES = ["PN", "WT", "ŚR", "CZ", "PT", "SO", "ND"];
 
-const BASE_W = 800;
-function sc(w: number) {
-	const s = w / BASE_W;
-	return {
-		f: (n: number) => Math.round(n * s),
-		p: (n: number) => Math.round(n * s),
-		b: (n: number) => Math.max(1, Math.round(n * s)),
-	};
-}
-function t(
-	s: ReturnType<typeof sc>,
-	size: number,
-	weight = 400,
-	color = "#333",
-) {
-	return {
-		fontFamily: "inter",
-		fontSize: s.f(size),
-		fontWeight: weight,
-		lineHeight: 1.15,
-		color,
-	};
-}
-
 export default function CalendarMonthly({
 	year = 2026,
-	month = 0,
 	monthName = "",
 	days = [],
 	width = 800,
@@ -178,7 +157,7 @@ export default function CalendarMonthly({
 										{day.events.slice(0, 3).map((ev, ei) => (
 											<span key={ei} style={t(s, 12, 600, "#333")}>
 												{ev.summary.length > 20
-													? ev.summary.slice(0, 19) + "…"
+													? `${ev.summary.slice(0, 19)}…`
 													: ev.summary}
 											</span>
 										))}

@@ -1,4 +1,4 @@
-import { resolveRenderableContentType } from "@/lib/content-ref";
+import { resolveRenderableContentType } from "./content-ref.ts";
 
 /** Build the correct BMP API URL for a playlist frame (recipe, named screen, or mixup). */
 export function playlistFrameBmpUrl(

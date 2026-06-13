@@ -17,8 +17,8 @@ import { useTheme } from "next-themes";
 import type React from "react";
 import { Suspense, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
-import type { ComponentConfig } from "@/components/client-sidebar";
 import { CommandPalette } from "@/components/command-palette";
+import type { ComponentConfig } from "@/components/sidebar-types";
 import { Button } from "@/components/ui/button";
 import {
 	SidebarInset,

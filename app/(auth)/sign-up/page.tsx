@@ -1,18 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+	AuthFooterLink,
+	AuthForm,
+	AuthInputField,
+	AuthMessage,
+	AuthPageCard,
+	AuthSubmitButton,
+} from "@/components/auth/auth-form";
 import { authClient } from "@/lib/auth/auth-client";
 
 export default function SignUpPage() {
@@ -67,88 +64,63 @@ export default function SignUpPage() {
 	};
 
 	return (
-		<div className="flex min-h-screen items-center justify-center p-4">
-			<Card className="w-full max-w-md">
-				<CardHeader>
-					<CardTitle className="text-2xl">Create Account</CardTitle>
-					<CardDescription>
-						Enter your information to create a new account
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<form onSubmit={handleSubmit} className="space-y-4">
-						{error && (
-							<div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-								{error}
-							</div>
-						)}
-						<div className="space-y-2">
-							<Label htmlFor="name">Name</Label>
-							<Input
-								id="name"
-								type="text"
-								placeholder="John Doe"
-								value={name}
-								onChange={(e) => setName(e.target.value)}
-								required
-								autoComplete="name"
-								disabled={isLoading}
-							/>
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor="email">Email</Label>
-							<Input
-								id="email"
-								type="email"
-								placeholder="you@example.com"
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								required
-								autoComplete="email"
-								disabled={isLoading}
-							/>
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor="password">Password</Label>
-							<Input
-								id="password"
-								type="password"
-								placeholder="••••••••"
-								value={password}
-								onChange={(e) => setPassword(e.target.value)}
-								required
-								autoComplete="new-password"
-								disabled={isLoading}
-							/>
-							<p className="text-xs text-muted-foreground">
-								Must be at least 8 characters long
-							</p>
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor="confirmPassword">Confirm Password</Label>
-							<Input
-								id="confirmPassword"
-								type="password"
-								placeholder="••••••••"
-								value={confirmPassword}
-								onChange={(e) => setConfirmPassword(e.target.value)}
-								required
-								autoComplete="new-password"
-								disabled={isLoading}
-							/>
-						</div>
-						<Button type="submit" className="w-full" disabled={isLoading}>
-							{isLoading ? "Creating account..." : "Create Account"}
-						</Button>
-						<div className="text-center text-sm text-muted-foreground">
-							Already have an account?{" "}
-							<Link href="/sign-in" className="text-primary hover:underline">
-								Sign in
-							</Link>
-						</div>
-					</form>
-				</CardContent>
-			</Card>
-		</div>
+		<AuthPageCard
+			title="Create Account"
+			description="Enter your information to create a new account"
+		>
+			<AuthForm onSubmit={handleSubmit}>
+				{error && <AuthMessage>{error}</AuthMessage>}
+				<AuthInputField
+					id="name"
+					label="Name"
+					type="text"
+					placeholder="John Doe"
+					value={name}
+					onChange={(e) => setName(e.target.value)}
+					autoComplete="name"
+					disabled={isLoading}
+				/>
+				<AuthInputField
+					id="email"
+					label="Email"
+					type="email"
+					placeholder="you@example.com"
+					value={email}
+					onChange={(e) => setEmail(e.target.value)}
+					autoComplete="email"
+					disabled={isLoading}
+				/>
+				<AuthInputField
+					id="password"
+					label="Password"
+					type="password"
+					placeholder="••••••••"
+					value={password}
+					onChange={(e) => setPassword(e.target.value)}
+					autoComplete="new-password"
+					disabled={isLoading}
+					helpText="Must be at least 8 characters long"
+				/>
+				<AuthInputField
+					id="confirmPassword"
+					label="Confirm Password"
+					type="password"
+					placeholder="••••••••"
+					value={confirmPassword}
+					onChange={(e) => setConfirmPassword(e.target.value)}
+					autoComplete="new-password"
+					disabled={isLoading}
+				/>
+				<AuthSubmitButton
+					isLoading={isLoading}
+					loadingLabel="Creating account..."
+				>
+					Create Account
+				</AuthSubmitButton>
+				<AuthFooterLink text="Already have an account?" href="/sign-in">
+					Sign in
+				</AuthFooterLink>
+			</AuthForm>
+		</AuthPageCard>
 	);
 }

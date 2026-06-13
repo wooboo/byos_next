@@ -6,14 +6,25 @@ import { db } from "@/lib/database/db";
 import { withExplicitUserScope } from "@/lib/database/scoped-db";
 import { checkDbConnection } from "@/lib/database/utils";
 import { getLayoutById, type LayoutSlot } from "@/lib/mixup/constants";
-import {
-	DEFAULT_IMAGE_HEIGHT,
-	DEFAULT_IMAGE_WIDTH,
-	logger,
-	renderRecipeToImage,
-} from "@/lib/recipes/recipe-renderer";
+import { logger, renderRecipeToImage } from "@/lib/recipes/recipe-renderer";
 import { resolveRenderableRef } from "@/lib/screens/render-target";
 import { DitheringMethod, renderBmp } from "@/utils/render-bmp";
+import { binaryImageResponse, parseBitmapOptions } from "../../render-utils";
+
+type SlotAssignment = { type: "recipe" | "screen"; id: string };
+type SlotAssignments = Record<string, SlotAssignment | null>;
+type MixupSlotRow = {
+	slot_id: string;
+	recipe_slug: string | null;
+	recipe_id: string | null;
+	ref_type: string | null;
+	ref_id: string | null;
+	resolved_slug: string | null;
+};
+type MixupRenderData = {
+	mixup: { layout_id: string } | undefined;
+	slots: MixupSlotRow[];
+};
 
 export async function GET(
 	req: NextRequest,
@@ -22,20 +33,10 @@ export async function GET(
 	try {
 		const { id } = await params;
 		const mixupId = id.replace(".bmp", "");
-
-		// Get width, height, and grayscale from query parameters
 		const { searchParams } = new URL(req.url);
-		const widthParam = searchParams.get("width");
-		const heightParam = searchParams.get("height");
-		const grayscaleParam = searchParams.get("grayscale");
 		const accessToken =
 			searchParams.get("access_token") ?? req.headers.get("Access-Token");
-
-		const width = widthParam ? parseInt(widthParam, 10) : DEFAULT_IMAGE_WIDTH;
-		const height = heightParam
-			? parseInt(heightParam, 10)
-			: DEFAULT_IMAGE_HEIGHT;
-		const grayscaleLevels = grayscaleParam ? parseInt(grayscaleParam, 10) : 16;
+		const { width, height, grayscale } = parseBitmapOptions(req);
 
 		const { ready } = await checkDbConnection();
 		if (!ready) {
@@ -43,88 +44,14 @@ export async function GET(
 			return new Response("Database not available", { status: 503 });
 		}
 
-		let userId: string | null = null;
-
-		// Try device API key first
-		if (accessToken) {
-			const device = await db
-				.selectFrom("devices")
-				.select(["user_id"])
-				.where("api_key", "=", accessToken)
-				.executeTakeFirst();
-
-			if (!device?.user_id) {
-				return new Response("Mixup not found", { status: 404 });
-			}
-			// The API key identifies the device owner. The mixup itself is checked
-			// below through withExplicitUserScope, so playlist mixup items work too.
-			userId = device.user_id;
-		} else if (auth) {
-			// Fallback: session-based auth (web UI preview)
-			const session = await auth.api.getSession({
-				headers: await headers(),
-			});
-			if (!session?.user?.id) {
-				return new Response("Access token is required", { status: 401 });
-			}
-			// Verify the mixup belongs to this user
-			const mixup = await db
-				.selectFrom("mixups")
-				.select(["user_id"])
-				.where("id", "=", mixupId)
-				.executeTakeFirst();
-			if (!mixup || mixup.user_id !== session.user.id) {
-				return new Response("Mixup not found", { status: 404 });
-			}
-			userId = session.user.id;
-		} else if (process.env.AUTH_ENABLED === "false") {
-			// Auth disabled (mono-user dev mode): allow any mixup access
-			const mixup = await db
-				.selectFrom("mixups")
-				.select(["user_id"])
-				.where("id", "=", mixupId)
-				.executeTakeFirst();
-			if (!mixup?.user_id) {
-				return new Response("Mixup not found", { status: 404 });
-			}
-			userId = mixup.user_id;
-		} else {
-			return new Response("Access token is required", { status: 401 });
+		const userIdOrResponse = await resolveMixupUserId(accessToken, mixupId);
+		if (userIdOrResponse instanceof Response) {
+			return userIdOrResponse;
 		}
 
-		// Fetch mixup and its slots. New slots use ref_type/ref_id; legacy slots use recipe_id/recipe_slug.
-		const resolvedUserId = userId;
-		if (!resolvedUserId) {
-			return new Response("Mixup not found", { status: 404 });
-		}
-
-		const [mixup, slots] = await withExplicitUserScope(
-			resolvedUserId,
-			(scopedDb) =>
-				Promise.all([
-					scopedDb
-						.selectFrom("mixups")
-						.selectAll()
-						.where("id", "=", mixupId)
-						.executeTakeFirst(),
-					scopedDb
-						.selectFrom("mixup_slots")
-						.leftJoin("recipes", "recipes.id", "mixup_slots.recipe_id")
-						.select([
-							"mixup_slots.id",
-							"mixup_slots.mixup_id",
-							"mixup_slots.slot_id",
-							"mixup_slots.recipe_slug",
-							"mixup_slots.recipe_id",
-							"mixup_slots.ref_type",
-							"mixup_slots.ref_id",
-							"mixup_slots.order_index",
-							"recipes.slug as resolved_slug",
-						])
-						.where("mixup_slots.mixup_id", "=", mixupId)
-						.orderBy("mixup_slots.order_index", "asc")
-						.execute(),
-				]),
+		const { mixup, slots } = await fetchMixupRenderData(
+			userIdOrResponse,
+			mixupId,
 		);
 
 		if (!mixup) {
@@ -138,17 +65,7 @@ export async function GET(
 			return new Response("Invalid layout", { status: 400 });
 		}
 
-		// Build slot assignments map, preferring explicit refs.
-		const assignments: Record<
-			string,
-			{ type: "recipe" | "screen"; id: string } | null
-		> = {};
-		for (const slot of slots) {
-			const refType = slot.ref_type === "screen" ? "screen" : "recipe";
-			const refId =
-				slot.ref_id ?? slot.recipe_id ?? slot.resolved_slug ?? slot.recipe_slug;
-			assignments[slot.slot_id] = refId ? { type: refType, id: refId } : null;
-		}
+		const assignments = buildSlotAssignments(slots);
 
 		logger.info(
 			`Rendering mixup ${mixupId} with layout ${mixup.layout_id} and ${slots.length} slots`,
@@ -160,20 +77,142 @@ export async function GET(
 			assignments,
 			width,
 			height,
-			grayscaleLevels,
-			resolvedUserId,
+			grayscale,
+			userIdOrResponse,
 		);
 
-		return new Response(new Uint8Array(compositeBuffer), {
-			headers: {
-				"Content-Type": "image/bmp",
-				"Content-Length": compositeBuffer.length.toString(),
-			},
-		});
+		return binaryImageResponse(compositeBuffer, "image/bmp");
 	} catch (error) {
 		logger.error("Error generating mixup image:", error);
 		return new Response("Error generating image", { status: 500 });
 	}
+}
+
+async function resolveMixupUserId(
+	accessToken: string | null,
+	mixupId: string,
+): Promise<string | Response> {
+	if (accessToken) {
+		return resolveUserIdFromDeviceToken(accessToken);
+	}
+
+	if (auth) {
+		return resolveUserIdFromSession(auth, mixupId);
+	}
+
+	if (process.env.AUTH_ENABLED === "false") {
+		return resolveUserIdFromDevMode(mixupId);
+	}
+
+	return new Response("Access token is required", { status: 401 });
+}
+
+async function resolveUserIdFromDeviceToken(
+	accessToken: string,
+): Promise<string | Response> {
+	const device = await db
+		.selectFrom("devices")
+		.select(["user_id"])
+		.where("api_key", "=", accessToken)
+		.executeTakeFirst();
+
+	if (!device?.user_id) {
+		return new Response("Mixup not found", { status: 404 });
+	}
+
+	// The API key identifies the device owner. The mixup itself is checked
+	// below through withExplicitUserScope, so playlist mixup items work too.
+	return device.user_id;
+}
+
+async function resolveUserIdFromSession(
+	authClient: NonNullable<typeof auth>,
+	mixupId: string,
+): Promise<string | Response> {
+	const session = await authClient.api.getSession({
+		headers: await headers(),
+	});
+	if (!session?.user?.id) {
+		return new Response("Access token is required", { status: 401 });
+	}
+
+	const mixup = await db
+		.selectFrom("mixups")
+		.select(["user_id"])
+		.where("id", "=", mixupId)
+		.executeTakeFirst();
+	if (!mixup || mixup.user_id !== session.user.id) {
+		return new Response("Mixup not found", { status: 404 });
+	}
+
+	return session.user.id;
+}
+
+async function resolveUserIdFromDevMode(
+	mixupId: string,
+): Promise<string | Response> {
+	const mixup = await db
+		.selectFrom("mixups")
+		.select(["user_id"])
+		.where("id", "=", mixupId)
+		.executeTakeFirst();
+	if (!mixup?.user_id) {
+		return new Response("Mixup not found", { status: 404 });
+	}
+
+	return mixup.user_id;
+}
+
+async function fetchMixupRenderData(
+	userId: string,
+	mixupId: string,
+): Promise<MixupRenderData> {
+	const [mixup, slots] = await withExplicitUserScope(userId, (scopedDb) =>
+		Promise.all([
+			scopedDb
+				.selectFrom("mixups")
+				.selectAll()
+				.where("id", "=", mixupId)
+				.executeTakeFirst(),
+			scopedDb
+				.selectFrom("mixup_slots")
+				.leftJoin("recipes", "recipes.id", "mixup_slots.recipe_id")
+				.select([
+					"mixup_slots.id",
+					"mixup_slots.mixup_id",
+					"mixup_slots.slot_id",
+					"mixup_slots.recipe_slug",
+					"mixup_slots.recipe_id",
+					"mixup_slots.ref_type",
+					"mixup_slots.ref_id",
+					"mixup_slots.order_index",
+					"recipes.slug as resolved_slug",
+				])
+				.where("mixup_slots.mixup_id", "=", mixupId)
+				.orderBy("mixup_slots.order_index", "asc")
+				.execute(),
+		]),
+	);
+
+	return { mixup, slots };
+}
+
+function buildSlotAssignments(slots: MixupSlotRow[]): SlotAssignments {
+	const assignments: SlotAssignments = {};
+
+	for (const slot of slots) {
+		assignments[slot.slot_id] = buildSlotAssignment(slot);
+	}
+
+	return assignments;
+}
+
+function buildSlotAssignment(slot: MixupSlotRow): SlotAssignment | null {
+	const refType = slot.ref_type === "screen" ? "screen" : "recipe";
+	const refId =
+		slot.ref_id ?? slot.recipe_id ?? slot.resolved_slug ?? slot.recipe_slug;
+
+	return refId ? { type: refType, id: refId } : null;
 }
 
 /**
@@ -181,7 +220,7 @@ export async function GET(
  */
 async function renderSlot(
 	slot: LayoutSlot,
-	assignment: { type: "recipe" | "screen"; id: string },
+	assignment: SlotAssignment,
 	userId: string,
 ): Promise<Buffer | null> {
 	try {
@@ -214,7 +253,7 @@ async function renderSlot(
  */
 async function renderMixupComposite(
 	slots: LayoutSlot[],
-	assignments: Record<string, { type: "recipe" | "screen"; id: string } | null>,
+	assignments: SlotAssignments,
 	width: number,
 	height: number,
 	grayscaleLevels: number,

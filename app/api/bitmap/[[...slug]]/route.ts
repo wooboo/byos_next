@@ -13,6 +13,10 @@ import {
 	parseRequestHeaders,
 	resolveUserIdFromApiKey,
 } from "../../display/utils";
+import {
+	binaryImageResponse,
+	parsePositiveBitmapOptions,
+} from "../render-utils";
 
 export async function GET(
 	req: NextRequest,
@@ -24,25 +28,10 @@ export async function GET(
 		const { slug = ["not-found"] } = await params;
 		const bitmapPath = Array.isArray(slug) ? slug.join("/") : slug;
 		const recipeSlug = bitmapPath.replace(".bmp", "");
-
-		// Get width, height, and grayscale from query parameters
-		const { searchParams } = new URL(req.url);
-		const widthParam = searchParams.get("width");
-		const heightParam = searchParams.get("height");
-		const grayscaleParam = searchParams.get("grayscale");
-
-		const width = widthParam ? parseInt(widthParam, 10) : DEFAULT_IMAGE_WIDTH;
-		const height = heightParam
-			? parseInt(heightParam, 10)
-			: DEFAULT_IMAGE_HEIGHT;
-
-		// Validate width and height are positive numbers
-		const validWidth = width > 0 ? width : DEFAULT_IMAGE_WIDTH;
-		const validHeight = height > 0 ? height : DEFAULT_IMAGE_HEIGHT;
-		const grayscaleLevels = grayscaleParam ? parseInt(grayscaleParam, 10) : 16;
+		const { width, height, grayscale } = parsePositiveBitmapOptions(req);
 
 		logger.info(
-			`Bitmap request for: ${bitmapPath} in ${validWidth}x${validHeight} with ${grayscaleLevels} gray levels`,
+			`Bitmap request for: ${bitmapPath} in ${width}x${height} with ${grayscale} gray levels`,
 		);
 
 		// Resolve the device owner so DB queries are scoped to the right user
@@ -55,9 +44,9 @@ export async function GET(
 
 		const recipeBuffer = await renderRecipeBitmap(
 			recipeSlug,
-			validWidth,
-			validHeight,
-			grayscaleLevels,
+			width,
+			height,
+			grayscale,
 			userId,
 			cookieHeader || undefined,
 		);
@@ -74,12 +63,7 @@ export async function GET(
 			return fallback;
 		}
 
-		return new Response(new Uint8Array(recipeBuffer), {
-			headers: {
-				"Content-Type": "image/bmp",
-				"Content-Length": recipeBuffer.length.toString(),
-			},
-		});
+		return binaryImageResponse(recipeBuffer, "image/bmp");
 	} catch (error) {
 		logger.error("Error generating image:", error);
 
@@ -133,12 +117,7 @@ const renderFallbackBitmap = cache(async (slug: string = "not-found") => {
 			throw new Error("Missing bitmap buffer for fallback");
 		}
 
-		return new Response(new Uint8Array(renders.bitmap), {
-			headers: {
-				"Content-Type": "image/bmp",
-				"Content-Length": renders.bitmap.length.toString(),
-			},
-		});
+		return binaryImageResponse(renders.bitmap, "image/bmp");
 	} catch (fallbackError) {
 		logger.error("Error generating fallback image:", fallbackError);
 		return new Response("Error generating image", {

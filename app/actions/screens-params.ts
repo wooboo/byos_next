@@ -8,6 +8,8 @@ import { withExplicitUserScope, withUserScope } from "@/lib/database/scoped-db";
 import { checkDbConnection } from "@/lib/database/utils";
 import type { RecipeParamDefinitions } from "@/lib/recipes/recipe-renderer";
 
+type ScopedDb = Parameters<Parameters<typeof withUserScope>[0]>[0];
+
 /**
  *
  * @param slug - The slug of the screen to update
@@ -78,6 +80,69 @@ export async function updateScreenParams(
 	}
 }
 
+function getDefaultParams(
+	definitions?: RecipeParamDefinitions,
+): Record<string, unknown> {
+	const params: Record<string, unknown> = {};
+	if (!definitions) {
+		return params;
+	}
+
+	for (const [key, definition] of Object.entries(definitions)) {
+		if (definition.default !== undefined) {
+			params[key] = definition.default;
+		}
+	}
+
+	return params;
+}
+
+async function getScreenParamsRow(slug: string, userId?: string) {
+	const query = (scopedDb: ScopedDb) =>
+		scopedDb
+			.selectFrom("screen_configs")
+			.select(["params"])
+			.where("screen_id", "=", slug)
+			.orderBy(
+				sql`CASE WHEN user_id = current_setting('app.current_user_id', true) THEN 0 ELSE 1 END`,
+			)
+			.executeTakeFirst();
+
+	return userId ? withExplicitUserScope(userId, query) : withUserScope(query);
+}
+
+function parseScreenParams(rawParams: unknown): JsonObject {
+	return typeof rawParams === "string"
+		? (JSON.parse(rawParams) as JsonObject)
+		: (rawParams as JsonObject);
+}
+
+function hasParamValue(value: unknown): boolean {
+	return (
+		value !== undefined &&
+		value !== null &&
+		!(typeof value === "string" && value.trim() === "")
+	);
+}
+
+function mergeScreenParamsWithDefinitions(
+	parsedParams: JsonObject | undefined,
+	definitions: RecipeParamDefinitions,
+): Record<string, unknown> {
+	const merged: Record<string, unknown> = {};
+
+	for (const [key, definition] of Object.entries(definitions)) {
+		const incoming = parsedParams?.[key];
+		if (hasParamValue(incoming)) {
+			merged[key] = incoming;
+		} else if (definition.default !== undefined) {
+			merged[key] = definition.default;
+		}
+	}
+
+	return merged;
+}
+
 /**
  * Get the screen params from the database
  * @param slug - The slug of the screen to get the params for
@@ -91,56 +156,16 @@ export async function getScreenParams(
 ): Promise<Record<string, unknown>> {
 	const { ready } = await checkDbConnection();
 	if (!ready) {
-		const params: Record<string, unknown> = {};
-		if (definitions) {
-			for (const [key, definition] of Object.entries(definitions)) {
-				if (definition.default !== undefined) {
-					params[key] = definition.default;
-				}
-			}
-		}
-		return params;
+		return getDefaultParams(definitions);
 	}
 
-	const query = (
-		scopedDb: Parameters<Parameters<typeof withUserScope>[0]>[0],
-	) =>
-		scopedDb
-			.selectFrom("screen_configs")
-			.select(["params"])
-			.where("screen_id", "=", slug)
-			.orderBy(
-				sql`CASE WHEN user_id = current_setting('app.current_user_id', true) THEN 0 ELSE 1 END`,
-			)
-			.executeTakeFirst();
-
-	const row = userId
-		? await withExplicitUserScope(userId, query)
-		: await withUserScope(query);
-
+	const row = await getScreenParamsRow(slug, userId);
 	const rawParams = row?.params ?? {};
-	const parsedParams =
-		typeof rawParams === "string"
-			? (JSON.parse(rawParams) as JsonObject)
-			: (rawParams as JsonObject);
+	const parsedParams = parseScreenParams(rawParams);
 
-	const merged: Record<string, unknown> = {};
-	if (definitions) {
-		for (const [key, definition] of Object.entries(definitions)) {
-			const incoming = parsedParams?.[key];
-			if (
-				incoming !== undefined &&
-				incoming !== null &&
-				!(typeof incoming === "string" && incoming.trim() === "")
-			) {
-				merged[key] = incoming;
-			} else if (definition.default !== undefined) {
-				merged[key] = definition.default;
-			}
-		}
-	} else {
+	if (!definitions) {
 		return parsedParams ?? {};
 	}
 
-	return merged;
+	return mergeScreenParamsWithDefinitions(parsedParams, definitions);
 }

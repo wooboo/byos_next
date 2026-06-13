@@ -104,11 +104,3 @@ export async function getLatestFirmware(): Promise<FirmwareRelease | null> {
 		return cachedRelease; // Return stale cache if available
 	}
 }
-
-/**
- * Clear the firmware cache (useful for testing)
- */
-export function clearFirmwareCache(): void {
-	cachedRelease = null;
-	cacheTime = 0;
-}

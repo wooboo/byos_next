@@ -38,6 +38,23 @@ type LiquidRenderResult = {
 	settings: SettingsYml;
 };
 
+const BLOCKED_POLLING_HOSTS = new Set(["localhost", "0.0.0.0", "::", "::1"]);
+
+const BLOCKED_POLLING_HOST_SUFFIXES = [".localhost", ".internal", ".local"];
+
+const IPV4_LITERAL_PATTERN = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+
+const BLOCKED_IPV4_FIRST_OCTETS = new Set([0, 10, 127]);
+
+const BLOCKED_IPV4_SECOND_OCTET_RANGES: Record<number, [number, number][]> = {
+	100: [[64, 127]],
+	169: [[254, 254]],
+	172: [[16, 31]],
+	192: [[168, 168]],
+};
+
+const BLOCKED_IPV6_PREFIXES = ["fc", "fd", "fe8", "fe9", "fea", "feb"];
+
 /**
  * Custom liquidjs block tag for TRMNL's {% template name %}...{% endtemplate %}.
  * Simply renders its body content — the tag is organizational in TRMNL.
@@ -165,66 +182,70 @@ function extractCustomFieldDefaults(
 	return defaults;
 }
 
+function parsePollingUrl(raw: string): URL | null {
+	try {
+		return new URL(raw);
+	} catch {
+		return null;
+	}
+}
+
+function hasSafePollingProtocol(url: URL): boolean {
+	return url.protocol === "http:" || url.protocol === "https:";
+}
+
+function isBlockedPollingHostname(host: string): boolean {
+	return (
+		BLOCKED_POLLING_HOSTS.has(host) ||
+		BLOCKED_POLLING_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix))
+	);
+}
+
+function isBlockedIpv4PollingHost(host: string): boolean {
+	const v4 = host.match(IPV4_LITERAL_PATTERN);
+	if (!v4) {
+		return false;
+	}
+
+	const [a, b] = [Number(v4[1]), Number(v4[2])];
+
+	// 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12,
+	// 192.168.0.0/16, 100.64.0.0/10 (CGNAT), 0.0.0.0/8
+	if (BLOCKED_IPV4_FIRST_OCTETS.has(a)) {
+		return true;
+	}
+
+	const ranges = BLOCKED_IPV4_SECOND_OCTET_RANGES[a] ?? [];
+	return ranges.some(([min, max]) => b >= min && b <= max);
+}
+
+function isBlockedIpv6PollingHost(host: string): boolean {
+	if (!host.includes(":")) {
+		return false;
+	}
+
+	// URL.hostname strips brackets. Block unique-local (fc00::/7) and
+	// link-local (fe80::/10).
+	return BLOCKED_IPV6_PREFIXES.some((prefix) => host.startsWith(prefix));
+}
+
 /**
  * Block private/link-local/loopback ranges to prevent SSRF against
  * internal services (cloud metadata, RDS proxies, localhost admin).
  * Only http/https schemes allowed.
  */
 function isSafePollingUrl(raw: string): boolean {
-	let parsed: URL;
-	try {
-		parsed = new URL(raw);
-	} catch {
+	const parsed = parsePollingUrl(raw);
+	if (!parsed || !hasSafePollingProtocol(parsed)) {
 		return false;
 	}
-	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-		return false;
-	}
+
 	const host = parsed.hostname.toLowerCase();
-	if (
-		host === "localhost" ||
-		host === "0.0.0.0" ||
-		host === "::" ||
-		host === "::1" ||
-		host.endsWith(".localhost") ||
-		host.endsWith(".internal") ||
-		host.endsWith(".local")
-	) {
-		return false;
-	}
-	// IPv4 literal checks
-	const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-	if (v4) {
-		const [a, b] = [Number(v4[1]), Number(v4[2])];
-		// 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12,
-		// 192.168.0.0/16, 100.64.0.0/10 (CGNAT), 0.0.0.0/8
-		if (
-			a === 0 ||
-			a === 10 ||
-			a === 127 ||
-			(a === 169 && b === 254) ||
-			(a === 172 && b >= 16 && b <= 31) ||
-			(a === 192 && b === 168) ||
-			(a === 100 && b >= 64 && b <= 127)
-		) {
-			return false;
-		}
-	}
-	// IPv6: URL.hostname strips brackets, so detect by presence of a colon.
-	// Block unique-local (fc00::/7) and link-local (fe80::/10).
-	if (host.includes(":")) {
-		if (
-			host.startsWith("fc") ||
-			host.startsWith("fd") ||
-			host.startsWith("fe8") ||
-			host.startsWith("fe9") ||
-			host.startsWith("fea") ||
-			host.startsWith("feb")
-		) {
-			return false;
-		}
-	}
-	return true;
+	return (
+		!isBlockedPollingHostname(host) &&
+		!isBlockedIpv4PollingHost(host) &&
+		!isBlockedIpv6PollingHost(host)
+	);
 }
 
 /**

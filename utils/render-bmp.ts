@@ -34,6 +34,68 @@ const shouldSetMonochromeBit = (
 	grayscale: number,
 ): boolean => paletteIndex === grayscale - 1;
 
+function getPaletteIndex(
+	value: number,
+	grayscale: number,
+	inverted: boolean,
+): number {
+	const paletteIndex = mapGrayscaleValueToPaletteIndex(value, grayscale);
+	return inverted ? grayscale - 1 - paletteIndex : paletteIndex;
+}
+
+function writePackedBitmapRows({
+	buffer,
+	dataOffset,
+	dithered,
+	grayscale,
+	inverted,
+	rowSize,
+	targetHeight,
+	targetWidth,
+	bitsPerPixel,
+}: {
+	buffer: Buffer;
+	dataOffset: number;
+	dithered: Uint8Array;
+	grayscale: number;
+	inverted: boolean;
+	rowSize: number;
+	targetHeight: number;
+	targetWidth: number;
+	bitsPerPixel: number;
+}) {
+	const pixelsPerByte = 8 / bitsPerPixel;
+	const byteIndexShift = Math.log2(pixelsPerByte);
+
+	for (let y = 0; y < targetHeight; y++) {
+		// BMP is stored bottom-up
+		const targetY = targetHeight - 1 - y;
+		const yOffset = targetY * targetWidth;
+		const destRowOffset = dataOffset + y * rowSize;
+
+		for (let x = 0; x < targetWidth; x += pixelsPerByte) {
+			let byte = 0;
+			const remainingPixels = Math.min(pixelsPerByte, targetWidth - x);
+
+			for (let bit = 0; bit < remainingPixels; bit++) {
+				const idx = yOffset + x + bit;
+				const paletteIndex = getPaletteIndex(
+					dithered[idx],
+					grayscale,
+					inverted,
+				);
+				const pixelValue =
+					bitsPerPixel === 1
+						? Number(shouldSetMonochromeBit(paletteIndex, grayscale))
+						: paletteIndex;
+				byte |= pixelValue << ((pixelsPerByte - 1 - bit) * bitsPerPixel);
+			}
+
+			buffer[destRowOffset + (x >> byteIndexShift)] = byte;
+		}
+	}
+}
+
 export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 	const {
 		ditheringMethod = DitheringMethod.FLOYD_STEINBERG,
@@ -131,60 +193,19 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 		buffer.writeUInt32LE(paletteEntry, paletteOffset + index * 4);
 	}
 
-	const valueToIndex = (value: number): number =>
-		mapGrayscaleValueToPaletteIndex(value, grayscale);
-
 	// Step 4: Generate the final bitmap
 	const dataOffset = fileHeaderSize + infoHeaderSize + paletteSize;
-	for (let y = 0; y < targetHeight; y++) {
-		// BMP is stored bottom-up
-		const targetY = targetHeight - 1 - y;
-		const yOffset = targetY * targetWidth;
-		const destRowOffset = dataOffset + y * rowSize;
-
-		if (bitsPerPixel === 1) {
-			// 1-bit: 8 pixels per byte
-			for (let x = 0; x < targetWidth; x += 8) {
-				let byte = 0;
-				const remainingPixels = Math.min(8, targetWidth - x);
-				for (let bit = 0; bit < remainingPixels; bit++) {
-					const idx = yOffset + x + bit;
-					let paletteIndex = valueToIndex(dithered[idx]);
-					if (inverted) paletteIndex = grayscale - 1 - paletteIndex;
-					if (shouldSetMonochromeBit(paletteIndex, grayscale)) {
-						byte |= 1 << (7 - bit);
-					}
-				}
-				buffer[destRowOffset + (x >> 3)] = byte;
-			}
-		} else if (bitsPerPixel === 2) {
-			// 2-bit: 4 pixels per byte
-			for (let x = 0; x < targetWidth; x += 4) {
-				let byte = 0;
-				const remainingPixels = Math.min(4, targetWidth - x);
-				for (let bit = 0; bit < remainingPixels; bit++) {
-					const idx = yOffset + x + bit;
-					let paletteIndex = valueToIndex(dithered[idx]);
-					if (inverted) paletteIndex = grayscale - 1 - paletteIndex;
-					byte |= paletteIndex << (6 - bit * 2);
-				}
-				buffer[destRowOffset + (x >> 2)] = byte;
-			}
-		} else if (bitsPerPixel === 4) {
-			// 4-bit: 2 pixels per byte
-			for (let x = 0; x < targetWidth; x += 2) {
-				let byte = 0;
-				const remainingPixels = Math.min(2, targetWidth - x);
-				for (let bit = 0; bit < remainingPixels; bit++) {
-					const idx = yOffset + x + bit;
-					let paletteIndex = valueToIndex(dithered[idx]);
-					if (inverted) paletteIndex = grayscale - 1 - paletteIndex;
-					byte |= paletteIndex << (4 - bit * 4);
-				}
-				buffer[destRowOffset + (x >> 1)] = byte;
-			}
-		}
-	}
+	writePackedBitmapRows({
+		buffer,
+		dataOffset,
+		dithered,
+		grayscale,
+		inverted,
+		rowSize,
+		targetHeight,
+		targetWidth,
+		bitsPerPixel,
+	});
 
 	return buffer;
 }

@@ -1,4 +1,10 @@
 import { type CalendarEvent, fetchCalendarEvents } from "@/lib/calendar/ics";
+import {
+	eventsForDate,
+	groupEventsByCalendarDate,
+	isWeekendDate,
+	startOfLocalDay,
+} from "../calendar-data";
 
 export interface CalendarData {
 	year: number;
@@ -28,7 +34,54 @@ const MONTHS_PL = [
 	"grudzień",
 ];
 
-const DAY_NAMES = ["PN", "WT", "ŚR", "CZ", "PT", "SO", "ND"];
+function monthRange(year: number, month: number) {
+	const firstDay = new Date(year, month, 1);
+	const lastDay = new Date(year, month + 1, 0);
+	const startPad = (firstDay.getDay() + 6) % 7;
+	const endPad = 6 - ((lastDay.getDay() + 6) % 7);
+
+	return {
+		rangeStart: new Date(year, month, 1 - startPad),
+		rangeEnd: new Date(year, month + 1, endPad),
+	};
+}
+
+function buildCalendarDay(
+	date: Date,
+	month: number,
+	today: Date,
+	eventsByDate: Map<string, CalendarEvent[]>,
+): CalendarData["days"][0][0] {
+	return {
+		day: date.getMonth() === month ? date.getDate() : null,
+		date: new Date(date),
+		isToday: date.getTime() === today.getTime(),
+		isWeekend: isWeekendDate(date),
+		events: eventsForDate(eventsByDate, date),
+	};
+}
+
+function buildCalendarWeeks(
+	rangeStart: Date,
+	rangeEnd: Date,
+	month: number,
+	today: Date,
+	eventsByDate: Map<string, CalendarEvent[]>,
+): CalendarData["days"] {
+	const weeks: CalendarData["days"] = [];
+	const current = new Date(rangeStart);
+
+	while (current <= rangeEnd) {
+		const week: CalendarData["days"][0] = [];
+		for (let d = 0; d < 7; d++) {
+			week.push(buildCalendarDay(current, month, today, eventsByDate));
+			current.setDate(current.getDate() + 1);
+		}
+		weeks.push(week);
+	}
+
+	return weeks;
+}
 
 export default async function getData(
 	params?: Record<string, unknown>,
@@ -39,56 +92,19 @@ export default async function getData(
 	const year = now.getFullYear();
 	const month = now.getMonth();
 
-	// Calculate range: full month + padding days
-	const firstDay = new Date(year, month, 1);
-	const lastDay = new Date(year, month + 1, 0);
-
-	// Extend to full weeks (Monday = 1, Sunday = 7 → 0 in JS)
-	const startPad = (firstDay.getDay() + 6) % 7; // days from Monday
-	const endPad = 6 - ((lastDay.getDay() + 6) % 7); // days to Sunday
-
-	const rangeStart = new Date(year, month, 1 - startPad);
-	const rangeEnd = new Date(year, month + 1, endPad);
-
+	const { rangeStart, rangeEnd } = monthRange(year, month);
 	const events = icsUrl
 		? await fetchCalendarEvents(icsUrl, rangeStart, rangeEnd)
 		: [];
-
-	// Build calendar grid
-	const weeks: CalendarData["days"] = [];
-	const current = new Date(rangeStart);
-	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-	while (current <= rangeEnd) {
-		const week: CalendarData["days"][0] = [];
-		for (let d = 0; d < 7; d++) {
-			const date = new Date(current);
-			const inMonth = date.getMonth() === month;
-			const isToday = date.getTime() === today.getTime();
-			const dayOfWeek = date.getDay();
-			const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
-			const dayEvents = events.filter((e) => {
-				const es = new Date(e.start);
-				return (
-					es.getFullYear() === date.getFullYear() &&
-					es.getMonth() === date.getMonth() &&
-					es.getDate() === date.getDate()
-				);
-			});
-
-			week.push({
-				day: inMonth ? date.getDate() : null,
-				date: new Date(date),
-				isToday,
-				isWeekend,
-				events: dayEvents,
-			});
-
-			current.setDate(current.getDate() + 1);
-		}
-		weeks.push(week);
-	}
+	const eventsByDate = groupEventsByCalendarDate(events);
+	const today = startOfLocalDay(now);
+	const weeks = buildCalendarWeeks(
+		rangeStart,
+		rangeEnd,
+		month,
+		today,
+		eventsByDate,
+	);
 
 	return {
 		year,

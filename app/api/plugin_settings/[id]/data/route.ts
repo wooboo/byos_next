@@ -1,4 +1,5 @@
 import { proxyToTRMNL } from "@/lib/api/proxy";
+import { proxyPluginSetting } from "../proxy";
 
 /**
  * GET /api/plugin_settings/{id}/data
@@ -10,10 +11,7 @@ export async function GET(
 	request: Request,
 	{ params }: { params: Promise<{ id: string }> },
 ) {
-	const { id } = await params;
-	return proxyToTRMNL(`/api/plugin_settings/${id}/data`, "GET", request, {
-		forwardAuth: true,
-	});
+	return proxyPluginSetting(request, { params }, "/data");
 }
 
 /**

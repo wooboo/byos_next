@@ -14,6 +14,11 @@ import {
 	parseRequestHeaders,
 	resolveUserIdFromApiKey,
 } from "../../../display/utils";
+import {
+	binaryImageResponse,
+	parsePreviewGrayscale,
+	parsePreviewSize,
+} from "../../render-utils";
 
 export async function GET(
 	req: NextRequest,
@@ -23,15 +28,8 @@ export async function GET(
 	try {
 		const { id } = await params;
 		const screenId = id.replace(".bmp", "");
-		const { searchParams } = new URL(req.url);
-		const width =
-			Number.parseInt(searchParams.get("width") || "", 10) ||
-			DEFAULT_IMAGE_WIDTH;
-		const height =
-			Number.parseInt(searchParams.get("height") || "", 10) ||
-			DEFAULT_IMAGE_HEIGHT;
-		const grayscale =
-			Number.parseInt(searchParams.get("grayscale") || "", 10) || 16;
+		const { width, height } = parsePreviewSize(req);
+		const grayscale = parsePreviewGrayscale(req);
 		const userId = headers.apiKey
 			? await resolveUserIdFromApiKey(headers.apiKey)
 			: await getCurrentUserId();
@@ -46,12 +44,7 @@ export async function GET(
 			cookieHeader,
 		);
 		if (!bitmap?.length) return await renderFallbackBitmap(screenId);
-		return new Response(new Uint8Array(bitmap), {
-			headers: {
-				"Content-Type": "image/bmp",
-				"Content-Length": bitmap.length.toString(),
-			},
-		});
+		return binaryImageResponse(bitmap, "image/bmp");
 	} catch (error) {
 		logger.error("Error generating screen bitmap:", error);
 		return await renderFallbackBitmap("screen");
@@ -100,10 +93,5 @@ const renderFallbackBitmap = cache(async (slug: string = "not-found") => {
 	});
 	if (!renders.bitmap)
 		return new Response("Error generating image", { status: 500 });
-	return new Response(new Uint8Array(renders.bitmap), {
-		headers: {
-			"Content-Type": "image/bmp",
-			"Content-Length": renders.bitmap.length.toString(),
-		},
-	});
+	return binaryImageResponse(renders.bitmap, "image/bmp");
 });

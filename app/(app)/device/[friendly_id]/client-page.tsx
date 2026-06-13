@@ -83,6 +83,26 @@ export default function DeviceClientPage({
 		},
 	);
 
+	const updateEditedDeviceField = (name: string, value: string | number) => {
+		setEditedDevice((currentDevice) => {
+			if (!name.includes(".")) {
+				return {
+					...currentDevice,
+					[name]: value,
+				};
+			}
+
+			const [parent, child] = name.split(".");
+			return {
+				...currentDevice,
+				[parent]: {
+					...(currentDevice[parent as keyof Device] as Record<string, unknown>),
+					[child]: value,
+				},
+			};
+		});
+	};
+
 	// Handle form input changes
 	const handleInputChange = (
 		e: React.ChangeEvent<
@@ -113,22 +133,7 @@ export default function DeviceClientPage({
 			}
 		}
 
-		// Handle nested properties
-		if (name.includes(".")) {
-			const [parent, child] = name.split(".");
-			setEditedDevice({
-				...editedDevice,
-				[parent]: {
-					...(editedDevice[parent as keyof Device] as Record<string, unknown>),
-					[child]: value,
-				},
-			});
-		} else {
-			setEditedDevice({
-				...editedDevice,
-				[name]: value,
-			});
-		}
+		updateEditedDeviceField(name, value);
 	};
 
 	// Handle nested input changes (for arrays)
@@ -172,30 +177,10 @@ export default function DeviceClientPage({
 
 	// Handle select changes
 	const handleSelectChange = (name: string, value: string) => {
-		// Handle nested properties
-		if (name.includes(".")) {
-			const [parent, child] = name.split(".");
-			setEditedDevice({
-				...editedDevice,
-				[parent]: {
-					...(editedDevice[parent as keyof Device] as Record<string, unknown>),
-					[child]: value,
-				},
-			});
-		} else {
-			// Convert grayscale to number
-			if (name === "grayscale") {
-				setEditedDevice({
-					...editedDevice,
-					[name]: Number.parseInt(value, 10),
-				});
-			} else {
-				setEditedDevice({
-					...editedDevice,
-					[name]: value,
-				});
-			}
-		}
+		updateEditedDeviceField(
+			name,
+			name === "grayscale" ? Number.parseInt(value, 10) : value,
+		);
 	};
 
 	const handleContentRefChange = async (

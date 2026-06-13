@@ -1,6 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import {
+	actionErrorResult,
+	databaseUnavailableResult,
+} from "@/app/actions/action-results";
 import { getCurrentUserId } from "@/lib/auth/get-user";
 import type { MixupLayoutId as DbMixupLayoutId } from "@/lib/database/db.d";
 import {
@@ -86,8 +90,7 @@ export async function createMixup(
 	const { ready } = await checkDbConnection();
 
 	if (!ready) {
-		console.warn("Database client not initialized");
-		return { success: false, error: "Database client not initialized" };
+		return databaseUnavailableResult();
 	}
 
 	const userId = await getCurrentUserId();
@@ -107,11 +110,7 @@ export async function createMixup(
 
 		return { success: true, mixup: mixup as unknown as Mixup };
 	} catch (error) {
-		console.error("Error creating mixup:", error);
-		return {
-			success: false,
-			error: error instanceof Error ? error.message : String(error),
-		};
+		return actionErrorResult("Error creating mixup:", error);
 	}
 }
 
@@ -126,8 +125,7 @@ export async function updateMixup(
 	const { ready } = await checkDbConnection();
 
 	if (!ready) {
-		console.warn("Database client not initialized");
-		return { success: false, error: "Database client not initialized" };
+		return databaseUnavailableResult();
 	}
 
 	try {
@@ -145,11 +143,7 @@ export async function updateMixup(
 
 		return { success: true };
 	} catch (error) {
-		console.error("Error updating mixup:", error);
-		return {
-			success: false,
-			error: error instanceof Error ? error.message : String(error),
-		};
+		return actionErrorResult("Error updating mixup:", error);
 	}
 }
 
@@ -163,8 +157,7 @@ export async function deleteMixup(mixupId: string): Promise<{
 	const { ready } = await checkDbConnection();
 
 	if (!ready) {
-		console.warn("Database client not initialized");
-		return { success: false, error: "Database client not initialized" };
+		return databaseUnavailableResult();
 	}
 
 	try {
@@ -175,11 +168,7 @@ export async function deleteMixup(mixupId: string): Promise<{
 		revalidatePath("/mixup");
 		return { success: true };
 	} catch (error) {
-		console.error("Error deleting mixup:", error);
-		return {
-			success: false,
-			error: error instanceof Error ? error.message : String(error),
-		};
+		return actionErrorResult("Error deleting mixup:", error);
 	}
 }
 
@@ -196,8 +185,7 @@ export async function saveMixupWithSlots(mixupData: {
 	const { ready } = await checkDbConnection();
 
 	if (!ready) {
-		console.warn("Database client not initialized");
-		return { success: false, error: "Database client not initialized" };
+		return databaseUnavailableResult();
 	}
 
 	const userId = await getCurrentUserId();
@@ -265,11 +253,7 @@ export async function saveMixupWithSlots(mixupData: {
 			return { success: true, mixupId };
 		});
 	} catch (error) {
-		console.error("Error saving mixup with slots:", error);
-		return {
-			success: false,
-			error: error instanceof Error ? error.message : String(error),
-		};
+		return actionErrorResult("Error saving mixup with slots:", error);
 	}
 }
 

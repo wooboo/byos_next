@@ -1,12 +1,6 @@
 "use client";
 
-import {
-	MoreHorizontal,
-	RefreshCw,
-	Trash2,
-	UserMinus,
-	UserPlus,
-} from "lucide-react";
+import { RefreshCw, Trash2, UserMinus, UserPlus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -22,6 +16,12 @@ import {
 	deleteAllDeviceLogs,
 	deleteAllSystemLogs,
 } from "@/app/actions/admin-maintenance";
+import {
+	AdminResourceTable,
+	AdminRowActions,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+} from "@/components/admin/admin-resource-table";
 import { PageTemplate } from "@/components/common/page-template";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,27 +41,13 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
+import { TableCell, TableRow } from "@/components/ui/table";
 
 function maskApiKey(key: string) {
 	if (key.length <= 8) return "****";
@@ -192,119 +178,91 @@ export default function AdminDevicesClientPage() {
 				</CardContent>
 			</Card>
 
-			<Card>
-				<CardHeader>
-					<CardTitle>Devices</CardTitle>
-					<CardDescription>
+			<AdminResourceTable
+				title="Devices"
+				description={
+					<>
 						{devices.length} device{devices.length !== 1 ? "s" : ""} registered
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Name</TableHead>
-								<TableHead>Friendly ID</TableHead>
-								<TableHead>API Key</TableHead>
-								<TableHead>MAC Address</TableHead>
-								<TableHead>Owner</TableHead>
-								<TableHead>Created</TableHead>
-								<TableHead className="w-[70px]" />
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{loading ? (
-								<TableRow>
-									<TableCell colSpan={7} className="text-center py-8">
-										Loading devices...
-									</TableCell>
-								</TableRow>
-							) : devices.length === 0 ? (
-								<TableRow>
-									<TableCell colSpan={7} className="text-center py-8">
-										No devices found
-									</TableCell>
-								</TableRow>
+					</>
+				}
+				headers={[
+					"Name",
+					"Friendly ID",
+					"API Key",
+					"MAC Address",
+					"Owner",
+					"Created",
+				]}
+				colSpan={7}
+				loading={loading}
+				empty={devices.length === 0}
+				loadingLabel="Loading devices..."
+				emptyLabel="No devices found"
+			>
+				{devices.map((device) => (
+					<TableRow key={device.id}>
+						<TableCell className="font-medium">{device.name}</TableCell>
+						<TableCell>
+							<code className="text-xs">{device.friendly_id}</code>
+						</TableCell>
+						<TableCell>
+							<code className="text-xs">{maskApiKey(device.api_key)}</code>
+						</TableCell>
+						<TableCell>
+							<code className="text-xs">{device.mac_address}</code>
+						</TableCell>
+						<TableCell>
+							{device.user_name ? (
+								<div>
+									<span className="text-sm">{device.user_name}</span>
+									<br />
+									<span className="text-xs text-muted-foreground">
+										{device.user_email}
+									</span>
+								</div>
 							) : (
-								devices.map((device) => (
-									<TableRow key={device.id}>
-										<TableCell className="font-medium">{device.name}</TableCell>
-										<TableCell>
-											<code className="text-xs">{device.friendly_id}</code>
-										</TableCell>
-										<TableCell>
-											<code className="text-xs">
-												{maskApiKey(device.api_key)}
-											</code>
-										</TableCell>
-										<TableCell>
-											<code className="text-xs">{device.mac_address}</code>
-										</TableCell>
-										<TableCell>
-											{device.user_name ? (
-												<div>
-													<span className="text-sm">{device.user_name}</span>
-													<br />
-													<span className="text-xs text-muted-foreground">
-														{device.user_email}
-													</span>
-												</div>
-											) : (
-												<Badge variant="outline">Unassigned</Badge>
-											)}
-										</TableCell>
-										<TableCell>
-											{device.created_at
-												? new Date(device.created_at).toLocaleDateString()
-												: "—"}
-										</TableCell>
-										<TableCell>
-											<DropdownMenu>
-												<DropdownMenuTrigger asChild>
-													<Button variant="ghost" size="icon">
-														<MoreHorizontal className="size-4" />
-													</Button>
-												</DropdownMenuTrigger>
-												<DropdownMenuContent align="end">
-													<DropdownMenuItem
-														onClick={() => {
-															setSelectedDevice(device);
-															setSelectedUserId(device.user_id || "");
-															setAssignDialogOpen(true);
-														}}
-													>
-														<UserPlus className="mr-2 size-4" />
-														Assign to user
-													</DropdownMenuItem>
-													{device.user_id && (
-														<DropdownMenuItem
-															onClick={() => handleUnassign(device)}
-														>
-															<UserMinus className="mr-2 size-4" />
-															Unassign
-														</DropdownMenuItem>
-													)}
-													<DropdownMenuSeparator />
-													<DropdownMenuItem
-														className="text-destructive"
-														onClick={() => {
-															setSelectedDevice(device);
-															setDeleteDialogOpen(true);
-														}}
-													>
-														<Trash2 className="mr-2 size-4" />
-														Delete device
-													</DropdownMenuItem>
-												</DropdownMenuContent>
-											</DropdownMenu>
-										</TableCell>
-									</TableRow>
-								))
+								<Badge variant="outline">Unassigned</Badge>
 							)}
-						</TableBody>
-					</Table>
-				</CardContent>
-			</Card>
+						</TableCell>
+						<TableCell>
+							{device.created_at
+								? new Date(device.created_at).toLocaleDateString()
+								: "—"}
+						</TableCell>
+						<TableCell>
+							<AdminRowActions>
+								<DropdownMenuItem
+									onClick={() => {
+										setSelectedDevice(device);
+										setSelectedUserId(device.user_id || "");
+										setAssignDialogOpen(true);
+									}}
+								>
+									<UserPlus className="mr-2 size-4" />
+									Assign to user
+								</DropdownMenuItem>
+								{device.user_id && (
+									<DropdownMenuItem onClick={() => handleUnassign(device)}>
+										<UserMinus className="mr-2 size-4" />
+										Unassign
+									</DropdownMenuItem>
+								)}
+								<DropdownMenuSeparator />
+								<DropdownMenuItem
+									className="text-destructive"
+									onClick={() => {
+										setSelectedDevice(device);
+										setDeleteDialogOpen(true);
+									}}
+								>
+									<Trash2 className="mr-2 size-4" />
+									Delete device
+								</DropdownMenuItem>
+							</AdminRowActions>
+						</TableCell>
+					</TableRow>
+				))}
+			</AdminResourceTable>
 
 			{/* Assign Device Dialog */}
 			<Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>

@@ -29,6 +29,7 @@ export type SqlExecutionState = {
 };
 
 const SCHEMA_MIGRATIONS_MIGRATION = "0012_create_schema_migrations";
+type SqlStatementKey = keyof typeof SQL_STATEMENTS;
 
 function checksumSql(sql: string): string {
 	return createHash("sha256").update(sql).digest("hex");
@@ -38,6 +39,65 @@ function migrationEntries() {
 	return Object.entries(SQL_STATEMENTS).filter(
 		([key]) => key !== "validate_schema" && key !== SCHEMA_MIGRATIONS_MIGRATION,
 	);
+}
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function errorResult(
+	error: string,
+	notices: Record<string, unknown>[] = [],
+): SqlExecutionResult {
+	return {
+		status: "error",
+		result: [],
+		notices,
+		error,
+	};
+}
+
+function buildResultState(
+	status: SqlExecutionStatus,
+	error?: string,
+): SqlExecutionState {
+	return Object.keys(SQL_STATEMENTS).reduce((acc, key) => {
+		acc[key as SqlStatementKey] = {
+			status,
+			result: [],
+			notices: [],
+			...(error ? { error } : {}),
+		};
+		return acc;
+	}, {} as SqlExecutionState);
+}
+
+function transformPostgresUrl(url: string): string {
+	try {
+		const parsedUrl = new URL(url);
+		const username = parsedUrl.username;
+		const password = parsedUrl.password;
+		return `postgresql://${username}:${password}@${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}`;
+	} catch (error) {
+		console.error("Error transforming URL:", error);
+		throw new Error("Invalid URL format");
+	}
+}
+
+function postgresSsl(connectionString: string) {
+	return connectionString.includes("sslmode=disable") ? false : "require";
+}
+
+function createSqlClient(
+	connectionString: string,
+	onnotice: postgres.Options<Record<string, never>>["onnotice"] = () => {
+		// We'll handle notices per query.
+	},
+) {
+	return postgres(connectionString, {
+		ssl: postgresSsl(connectionString),
+		onnotice,
+	});
 }
 
 async function authTablesExist(): Promise<boolean> {
@@ -121,191 +181,179 @@ async function ensureMigrationLedger(
 	};
 }
 
+function markExistingMigration(
+	resultState: SqlExecutionState,
+	key: string,
+	checksum: string,
+	appliedChecksum: string | undefined,
+	notices: Record<string, unknown>[],
+): "pending" | "skipped" | "failed" {
+	if (!appliedChecksum) {
+		return "pending";
+	}
+
+	if (appliedChecksum !== checksum) {
+		resultState[key as SqlStatementKey] = errorResult(
+			`Migration ${key} was already applied with a different checksum`,
+			notices,
+		);
+		return "failed";
+	}
+
+	resultState[key as SqlStatementKey] = {
+		status: "success",
+		result: [{ skipped: true, reason: "Already applied" }],
+		notices,
+	};
+	return "skipped";
+}
+
+async function applyMigration(
+	sqlWithNotices: postgres.Sql,
+	key: string,
+	statementSql: string,
+	checksum: string,
+) {
+	await sqlWithNotices.begin(async (trx) => {
+		await trx.unsafe(statementSql);
+		await trx`
+			INSERT INTO schema_migrations (name, checksum)
+			VALUES (${key}, ${checksum})
+		`;
+	});
+}
+
+async function executeMigrationEntry(
+	connectionString: string,
+	resultState: SqlExecutionState,
+	applied: Map<string, string>,
+	[key, statement]: ReturnType<typeof migrationEntries>[number],
+): Promise<string | null> {
+	const notices: Record<string, unknown>[] = [];
+	const sqlWithNotices = createSqlClient(connectionString, (notice) => {
+		console.log(`Database notice for ${key}:`, notice);
+		notices.push(notice);
+	});
+
+	try {
+		const checksum = checksumSql(statement.sql);
+		const existingStatus = markExistingMigration(
+			resultState,
+			key,
+			checksum,
+			applied.get(key),
+			notices,
+		);
+
+		if (existingStatus === "failed") {
+			return key;
+		}
+
+		if (existingStatus === "skipped") {
+			return null;
+		}
+
+		const startTime = performance.now();
+		await applyMigration(sqlWithNotices, key, statement.sql, checksum);
+
+		resultState[key as SqlStatementKey] = {
+			status: "success",
+			result: [{ applied: true }],
+			notices,
+			executionTime: Math.round(performance.now() - startTime),
+		};
+		return null;
+	} catch (error) {
+		console.error(`Error executing SQL for ${key}:`, error);
+		resultState[key as SqlStatementKey] = errorResult(
+			errorMessage(error),
+			notices,
+		);
+		return key;
+	} finally {
+		await sqlWithNotices.end();
+	}
+}
+
+async function executeMigrations(
+	connectionString: string,
+	sql: postgres.Sql,
+	resultState: SqlExecutionState,
+): Promise<string | null> {
+	try {
+		await ensureMigrationLedger(sql, resultState);
+	} catch (error) {
+		resultState[SCHEMA_MIGRATIONS_MIGRATION] = errorResult(errorMessage(error));
+		return SCHEMA_MIGRATIONS_MIGRATION;
+	}
+
+	const applied = await getAppliedMigrations(sql);
+	for (const entry of migrationEntries()) {
+		const failedMigration = await executeMigrationEntry(
+			connectionString,
+			resultState,
+			applied,
+			entry,
+		);
+		if (failedMigration) {
+			return failedMigration;
+		}
+	}
+
+	return null;
+}
+
+async function validateSchema(
+	sql: postgres.Sql,
+	resultState: SqlExecutionState,
+	migrationFailed: string | null,
+): Promise<void> {
+	if (migrationFailed) {
+		resultState.validate_schema = errorResult(
+			`Skipped schema validation because migration ${migrationFailed} failed`,
+		);
+		return;
+	}
+
+	const validationStartTime = performance.now();
+	const validationResult = await sql.unsafe(SQL_STATEMENTS.validate_schema.sql);
+	resultState.validate_schema = {
+		status: validationResult.length === 0 ? "success" : "error",
+		result: validationResult,
+		notices: [],
+		error:
+			validationResult.length === 0
+				? undefined
+				: "Schema validation found missing tables",
+		executionTime: Math.round(performance.now() - validationStartTime),
+	};
+}
+
 export async function executeSqlStatements(): Promise<SqlExecutionState> {
 	if (!(await canRunSetupSql())) {
-		return Object.keys(SQL_STATEMENTS).reduce((acc, key) => {
-			acc[key as keyof typeof SQL_STATEMENTS] = {
-				status: "error",
-				result: [],
-				notices: [],
-				error: "Unauthorized",
-			};
-			return acc;
-		}, {} as SqlExecutionState);
+		return buildResultState("error", "Unauthorized");
 	}
 
 	const postgresUrl = process.env.DATABASE_URL;
 
 	if (!postgresUrl) {
-		// Return error state for all statements
-		return Object.keys(SQL_STATEMENTS).reduce((acc, key) => {
-			acc[key as keyof typeof SQL_STATEMENTS] = {
-				status: "error",
-				result: [],
-				notices: [],
-				error: "DATABASE_URL is not defined",
-			};
-			return acc;
-		}, {} as SqlExecutionState);
-	}
-
-	// Transform DATABASE_URL to the correct format
-	function transformPostgresUrl(url: string): string {
-		try {
-			const parsedUrl = new URL(url);
-			const username = parsedUrl.username;
-			const password = parsedUrl.password;
-			return `postgresql://${username}:${password}@${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}`;
-		} catch (error) {
-			console.error("Error transforming URL:", error);
-			throw new Error("Invalid URL format");
-		}
+		return buildResultState("error", "DATABASE_URL is not defined");
 	}
 
 	const connectionString = transformPostgresUrl(postgresUrl);
-
-	// The client shows a local loading state while this server action runs.
-	const resultState: SqlExecutionState = Object.keys(SQL_STATEMENTS).reduce(
-		(acc, key) => {
-			acc[key as keyof typeof SQL_STATEMENTS] = {
-				status: "idle",
-				result: [],
-				notices: [],
-			};
-			return acc;
-		},
-		{} as SqlExecutionState,
-	);
-
-	const sql = postgres(connectionString, {
-		ssl: connectionString.includes("sslmode=disable") ? false : "require",
-		onnotice: () => {
-			// We'll handle notices per query
-		},
-	});
+	const resultState = buildResultState("idle");
+	const sql = createSqlClient(connectionString);
 
 	try {
-		let migrationFailed: string | null = null;
-
-		try {
-			await ensureMigrationLedger(sql, resultState);
-		} catch (error) {
-			migrationFailed = SCHEMA_MIGRATIONS_MIGRATION;
-			resultState[SCHEMA_MIGRATIONS_MIGRATION] = {
-				status: "error",
-				result: [],
-				notices: [],
-				error: error instanceof Error ? error.message : String(error),
-			};
-		}
-
-		const entries = migrationFailed ? [] : migrationEntries();
-		const applied = migrationFailed
-			? new Map()
-			: await getAppliedMigrations(sql);
-
-		for (const [key, statement] of entries) {
-			const notices: Record<string, unknown>[] = [];
-
-			const sqlWithNotices = postgres(connectionString, {
-				ssl: connectionString.includes("sslmode=disable") ? false : "require",
-				onnotice: (notice) => {
-					console.log(`Database notice for ${key}:`, notice);
-					notices.push(notice);
-				},
-			});
-
-			try {
-				const checksum = checksumSql(statement.sql);
-				const appliedChecksum = applied.get(key);
-				if (appliedChecksum) {
-					if (appliedChecksum !== checksum) {
-						resultState[key as keyof typeof SQL_STATEMENTS] = {
-							status: "error",
-							result: [],
-							notices,
-							error: `Migration ${key} was already applied with a different checksum`,
-						};
-						migrationFailed = key;
-						break;
-					}
-
-					resultState[key as keyof typeof SQL_STATEMENTS] = {
-						status: "success",
-						result: [{ skipped: true, reason: "Already applied" }],
-						notices,
-					};
-					continue;
-				}
-
-				const startTime = performance.now();
-				await sqlWithNotices.begin(async (trx) => {
-					await trx.unsafe(statement.sql);
-					await trx`
-						INSERT INTO schema_migrations (name, checksum)
-						VALUES (${key}, ${checksum})
-					`;
-				});
-				const endTime = performance.now();
-
-				resultState[key as keyof typeof SQL_STATEMENTS] = {
-					status: "success",
-					result: [{ applied: true }],
-					notices,
-					executionTime: Math.round(endTime - startTime),
-				};
-			} catch (error) {
-				console.error(`Error executing SQL for ${key}:`, error);
-
-				const errorMessage =
-					error instanceof Error ? error.message : String(error);
-
-				resultState[key as keyof typeof SQL_STATEMENTS] = {
-					status: "error",
-					result: [],
-					notices,
-					error: errorMessage,
-				};
-
-				migrationFailed = key;
-				break;
-			} finally {
-				await sqlWithNotices.end();
-			}
-		}
-
-		if (migrationFailed) {
-			resultState.validate_schema = {
-				status: "error",
-				result: [],
-				notices: [],
-				error: `Skipped schema validation because migration ${migrationFailed} failed`,
-			};
-			return resultState;
-		}
-
-		const validationStartTime = performance.now();
-		const validationResult = await sql.unsafe(
-			SQL_STATEMENTS.validate_schema.sql,
+		const migrationFailed = await executeMigrations(
+			connectionString,
+			sql,
+			resultState,
 		);
-		resultState.validate_schema = {
-			status: validationResult.length === 0 ? "success" : "error",
-			result: validationResult,
-			notices: [],
-			error:
-				validationResult.length === 0
-					? undefined
-					: "Schema validation found missing tables",
-			executionTime: Math.round(performance.now() - validationStartTime),
-		};
+		await validateSchema(sql, resultState, migrationFailed);
 	} catch (error) {
 		console.error("Unexpected error during SQL execution:", error);
-		resultState.validate_schema = {
-			status: "error",
-			result: [],
-			notices: [],
-			error: error instanceof Error ? error.message : String(error),
-		};
+		resultState.validate_schema = errorResult(errorMessage(error));
 	} finally {
 		// Close the main connection
 		await sql.end();

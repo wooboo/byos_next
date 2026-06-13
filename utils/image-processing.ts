@@ -28,19 +28,73 @@ export const ditherThreshold = (
 	return result;
 };
 
-/** Floyd-Steinberg error diffusion dithering */
-export const ditherFloydSteinberg = (
+type ErrorDiffusionOffset = readonly [dx: number, dy: number, weight: number];
+
+const FLOYD_STEINBERG_KERNEL: readonly ErrorDiffusionOffset[] = [
+	[1, 0, 7],
+	[-1, 1, 3],
+	[0, 1, 5],
+	[1, 1, 1],
+];
+
+const ATKINSON_KERNEL: readonly ErrorDiffusionOffset[] = [
+	[1, 0, 1],
+	[2, 0, 1],
+	[-1, 1, 1],
+	[0, 1, 1],
+	[1, 1, 1],
+	[0, 2, 1],
+];
+
+const JARVIS_JUDICE_NINKE_KERNEL: readonly ErrorDiffusionOffset[] = [
+	[1, 0, 7],
+	[2, 0, 5],
+	[-2, 1, 3],
+	[-1, 1, 5],
+	[0, 1, 7],
+	[1, 1, 5],
+	[2, 1, 3],
+	[-2, 2, 1],
+	[-1, 2, 3],
+	[0, 2, 5],
+	[1, 2, 3],
+	[2, 2, 1],
+];
+
+const copyToFloatBuffer = (grayscale: Uint8Array): Float32Array => {
+	const buffer = new Float32Array(grayscale.length);
+	buffer.set(grayscale);
+	return buffer;
+};
+
+const spreadError = (
+	buffer: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	error: number,
+	kernel: readonly ErrorDiffusionOffset[],
+	divisor: number,
+) => {
+	for (const [dx, dy, weight] of kernel) {
+		const targetX = x + dx;
+		const targetY = y + dy;
+		if (targetX >>> 0 >= width || targetY >>> 0 >= height) continue;
+		buffer[targetY * width + targetX] += (error * weight) / divisor;
+	}
+};
+
+const ditherErrorDiffusion = (
 	grayscale: Uint8Array,
 	width: number,
 	height: number,
-	levels = 2,
+	levels: number,
+	kernel: readonly ErrorDiffusionOffset[],
+	divisor: number,
 ): Uint8Array => {
 	const result = new Uint8Array(grayscale.length);
-	const buffer = new Float32Array(grayscale.length);
-
-	for (let i = 0; i < grayscale.length; i++) {
-		buffer[i] = grayscale[i];
-	}
+	const buffer = copyToFloatBuffer(grayscale);
 
 	for (let y = 0; y < height; y++) {
 		for (let x = 0; x < width; x++) {
@@ -48,18 +102,37 @@ export const ditherFloydSteinberg = (
 			const oldPixel = buffer[index];
 			const newPixel = quantizeValue(oldPixel, levels);
 			result[index] = newPixel;
-			const error = oldPixel - newPixel;
-
-			if (x + 1 < width) buffer[index + 1] += (error * 7) / 16;
-			if (y + 1 < height && x > 0)
-				buffer[index + width - 1] += (error * 3) / 16;
-			if (y + 1 < height) buffer[index + width] += (error * 5) / 16;
-			if (y + 1 < height && x + 1 < width)
-				buffer[index + width + 1] += (error * 1) / 16;
+			spreadError(
+				buffer,
+				width,
+				height,
+				x,
+				y,
+				oldPixel - newPixel,
+				kernel,
+				divisor,
+			);
 		}
 	}
 
 	return result;
+};
+
+/** Floyd-Steinberg error diffusion dithering */
+export const ditherFloydSteinberg = (
+	grayscale: Uint8Array,
+	width: number,
+	height: number,
+	levels = 2,
+): Uint8Array => {
+	return ditherErrorDiffusion(
+		grayscale,
+		width,
+		height,
+		levels,
+		FLOYD_STEINBERG_KERNEL,
+		16,
+	);
 };
 
 /** Atkinson error diffusion dithering */
@@ -69,31 +142,14 @@ export const ditherAtkinson = (
 	height: number,
 	levels = 2,
 ): Uint8Array => {
-	const result = new Uint8Array(grayscale.length);
-	const buffer = new Float32Array(grayscale.length);
-
-	for (let i = 0; i < grayscale.length; i++) {
-		buffer[i] = grayscale[i];
-	}
-
-	for (let y = 0; y < height; y++) {
-		for (let x = 0; x < width; x++) {
-			const index = y * width + x;
-			const oldPixel = buffer[index];
-			const newPixel = quantizeValue(oldPixel, levels);
-			result[index] = newPixel;
-			const error = (oldPixel - newPixel) / 8;
-
-			if (x + 1 < width) buffer[index + 1] += error;
-			if (x + 2 < width) buffer[index + 2] += error;
-			if (y + 1 < height && x - 1 >= 0) buffer[index + width - 1] += error;
-			if (y + 1 < height) buffer[index + width] += error;
-			if (y + 1 < height && x + 1 < width) buffer[index + width + 1] += error;
-			if (y + 2 < height) buffer[index + width * 2] += error;
-		}
-	}
-
-	return result;
+	return ditherErrorDiffusion(
+		grayscale,
+		width,
+		height,
+		levels,
+		ATKINSON_KERNEL,
+		8,
+	);
 };
 
 /** Jarvis-Judice-Ninke error diffusion — smoother than Atkinson for photos */
@@ -103,44 +159,14 @@ const ditherJarvisJudiceNinke = (
 	height: number,
 	levels = 2,
 ): Uint8Array => {
-	const result = new Uint8Array(grayscale.length);
-	const buffer = new Float32Array(grayscale.length);
-
-	for (let i = 0; i < grayscale.length; i++) {
-		buffer[i] = grayscale[i];
-	}
-
-	for (let y = 0; y < height; y++) {
-		for (let x = 0; x < width; x++) {
-			const index = y * width + x;
-			const oldPixel = buffer[index];
-			const newPixel = quantizeValue(oldPixel, levels);
-			result[index] = newPixel;
-			const error = oldPixel - newPixel;
-
-			// Row 0
-			if (x + 1 < width) buffer[index + 1] += (error * 7) / 48;
-			if (x + 2 < width) buffer[index + 2] += (error * 5) / 48;
-			// Row 1
-			if (y + 1 < height) {
-				if (x - 2 >= 0) buffer[index + width - 2] += (error * 3) / 48;
-				if (x - 1 >= 0) buffer[index + width - 1] += (error * 5) / 48;
-				buffer[index + width] += (error * 7) / 48;
-				if (x + 1 < width) buffer[index + width + 1] += (error * 5) / 48;
-				if (x + 2 < width) buffer[index + width + 2] += (error * 3) / 48;
-			}
-			// Row 2
-			if (y + 2 < height) {
-				if (x - 2 >= 0) buffer[index + width * 2 - 2] += (error * 1) / 48;
-				if (x - 1 >= 0) buffer[index + width * 2 - 1] += (error * 3) / 48;
-				buffer[index + width * 2] += (error * 5) / 48;
-				if (x + 1 < width) buffer[index + width * 2 + 1] += (error * 3) / 48;
-				if (x + 2 < width) buffer[index + width * 2 + 2] += (error * 1) / 48;
-			}
-		}
-	}
-
-	return result;
+	return ditherErrorDiffusion(
+		grayscale,
+		width,
+		height,
+		levels,
+		JARVIS_JUDICE_NINKE_KERNEL,
+		48,
+	);
 };
 
 const BAYER_MATRICES: Record<number, number[][]> = {
@@ -166,6 +192,19 @@ const BAYER_MATRICES: Record<number, number[][]> = {
 	],
 };
 
+const resolveBayerMatrixSize = (patternSize: number): 2 | 4 | 8 => {
+	if (patternSize <= 2) return 2;
+	if (patternSize <= 4) return 4;
+	return 8;
+};
+
+const normalizeBayerMatrix = (matrix: number[][]): number[][] => {
+	const matrixLength = matrix.length;
+	return matrix.map((row) =>
+		row.map((val) => Math.floor((val * 255) / (matrixLength * matrixLength))),
+	);
+};
+
 /** Bayer ordered dithering. patternSize selects the matrix: 2, 4, or 8 */
 export const ditherBayer = (
 	grayscale: Uint8Array,
@@ -176,13 +215,10 @@ export const ditherBayer = (
 ): Uint8Array => {
 	const result = new Uint8Array(grayscale.length);
 
-	const matrixSize = patternSize <= 2 ? 2 : patternSize <= 4 ? 4 : 8;
+	const matrixSize = resolveBayerMatrixSize(patternSize);
 	const matrix = BAYER_MATRICES[matrixSize];
 	const matrixLength = matrix.length;
-
-	const normalizedMatrix = matrix.map((row) =>
-		row.map((val) => Math.floor((val * 255) / (matrixLength * matrixLength))),
-	);
+	const normalizedMatrix = normalizeBayerMatrix(matrix);
 
 	for (let y = 0; y < height; y++) {
 		for (let x = 0; x < width; x++) {
@@ -209,6 +245,42 @@ export const ditherRandom = (grayscale: Uint8Array, levels = 2): Uint8Array => {
 	return result;
 };
 
+const EDGE_NEIGHBOR_OFFSETS = [0, -1, 1] as const;
+
+const isExtremeValue = (value: number, fuzziness: number, limit: number) =>
+	value < fuzziness || value > limit;
+
+const hasExtremeHorizontalNeighbor = (
+	grayscale: Uint8Array,
+	idx: number,
+	fuzziness: number,
+	limit: number,
+) =>
+	EDGE_NEIGHBOR_OFFSETS.some((offset) =>
+		isExtremeValue(grayscale[idx + offset], fuzziness, limit),
+	);
+
+const hasExtremeVerticalNeighbor = (
+	grayscale: Uint8Array,
+	idx: number,
+	width: number,
+	fuzziness: number,
+	limit: number,
+) =>
+	[-width, width].some((offset) =>
+		isExtremeValue(grayscale[idx + offset], fuzziness, limit),
+	);
+
+const hasExtremeEdgeSample = (
+	grayscale: Uint8Array,
+	idx: number,
+	width: number,
+	fuzziness: number,
+	limit: number,
+) =>
+	hasExtremeHorizontalNeighbor(grayscale, idx, fuzziness, limit) ||
+	hasExtremeVerticalNeighbor(grayscale, idx, width, fuzziness, limit);
+
 /** Detect edge pixels by checking if a pixel or any 4-directional neighbor is near pure black or white.
  *  Returns a Uint8Array where 1 = edge pixel, 0 = non-edge. Border pixels are always 0. */
 export const detectEdges = (
@@ -223,14 +295,15 @@ export const detectEdges = (
 	for (let y = 1; y < height - 1; y++) {
 		for (let x = 1; x < width - 1; x++) {
 			const idx = y * width + x;
-			const isExtreme = (v: number) => v < fuzziness || v > limit;
-			const hasExtreme =
-				isExtreme(grayscale[idx]) ||
-				isExtreme(grayscale[idx - 1]) ||
-				isExtreme(grayscale[idx + 1]) ||
-				isExtreme(grayscale[idx - width]) ||
-				isExtreme(grayscale[idx + width]);
-			result[idx] = hasExtreme ? 1 : 0;
+			result[idx] = hasExtremeEdgeSample(
+				grayscale,
+				idx,
+				width,
+				fuzziness,
+				limit,
+			)
+				? 1
+				: 0;
 		}
 	}
 
@@ -257,8 +330,8 @@ export enum DitheringMethod {
 	FLOYD_STEINBERG = "floyd-steinberg",
 	ATKINSON = "atkinson",
 	BAYER = "bayer",
-	JARVIS_JUDICE_NINKE = "jarvis-judice-ninke",
 	RANDOM = "random",
+	JARVIS_JUDICE_NINKE = "jarvis-judice-ninke",
 	NONE = "none",
 }
 
@@ -272,100 +345,112 @@ export interface DitheringOptions {
 	bayerPatternSize?: 2 | 4 | 8;
 }
 
+type ResolvedDimensions = {
+	width: number;
+	height: number;
+};
+
+type DitheringStrategy = (
+	grayscale: Uint8Array,
+	options: DitheringOptions,
+	dimensions: ResolvedDimensions,
+) => Uint8Array;
+
+const EMPTY_DIMENSIONS: ResolvedDimensions = { width: 0, height: 0 };
+
+const DIMENSIONAL_METHODS = new Set<DitheringMethod>([
+	DitheringMethod.FLOYD_STEINBERG,
+	DitheringMethod.ATKINSON,
+	DitheringMethod.BAYER,
+	DitheringMethod.JARVIS_JUDICE_NINKE,
+]);
+
+const DITHERING_STRATEGIES: Record<DitheringMethod, DitheringStrategy> = {
+	[DitheringMethod.THRESHOLD]: (grayscale, options) =>
+		ditherThreshold(grayscale, options.threshold),
+	[DitheringMethod.FLOYD_STEINBERG]: (grayscale, options, dimensions) =>
+		ditherFloydSteinberg(
+			grayscale,
+			dimensions.width,
+			dimensions.height,
+			options.levels,
+		),
+	[DitheringMethod.ATKINSON]: (grayscale, options, dimensions) =>
+		ditherAtkinson(
+			grayscale,
+			dimensions.width,
+			dimensions.height,
+			options.levels,
+		),
+	[DitheringMethod.BAYER]: (grayscale, options, dimensions) =>
+		ditherBayer(
+			grayscale,
+			dimensions.width,
+			dimensions.height,
+			options.levels,
+			options.bayerPatternSize,
+		),
+	[DitheringMethod.RANDOM]: (grayscale, options) =>
+		ditherRandom(grayscale, options.levels),
+	[DitheringMethod.JARVIS_JUDICE_NINKE]: (grayscale, options, dimensions) =>
+		ditherJarvisJudiceNinke(
+			grayscale,
+			dimensions.width,
+			dimensions.height,
+			options.levels,
+		),
+	[DitheringMethod.NONE]: (grayscale, options) =>
+		quantize(grayscale, options.levels),
+};
+
+const assertValidBayerPatternSize = (bayerPatternSize?: number) => {
+	if (bayerPatternSize !== undefined && ![2, 4, 8].includes(bayerPatternSize)) {
+		throw new Error("bayerPatternSize must be 2, 4, or 8");
+	}
+};
+
+const requireDimensions = (
+	method: DitheringMethod,
+	options: DitheringOptions,
+): ResolvedDimensions => {
+	const { width, height } = options;
+	if (width === undefined) {
+		throw new Error(`width and height are required for ${method} dithering`);
+	}
+	if (height === undefined) {
+		throw new Error(`width and height are required for ${method} dithering`);
+	}
+
+	return { width, height };
+};
+
+const resolveDimensions = (
+	method: DitheringMethod,
+	options: DitheringOptions,
+): ResolvedDimensions | undefined => {
+	if (DIMENSIONAL_METHODS.has(method))
+		return requireDimensions(method, options);
+	if (options.applyEdgeSnap === true) return requireDimensions(method, options);
+	return undefined;
+};
+
 export function applyDithering(
 	method: DitheringMethod,
 	grayscale: Uint8Array,
 	options: DitheringOptions = {},
 ): Uint8Array {
-	const {
-		width,
-		height,
-		levels,
-		threshold,
-		applyEdgeSnap: edgeSnap = false,
-		edgeDetectionFuzziness,
-		bayerPatternSize,
-	} = options;
+	assertValidBayerPatternSize(options.bayerPatternSize);
+	const dimensions = resolveDimensions(method, options) ?? EMPTY_DIMENSIONS;
+	const result = DITHERING_STRATEGIES[method](grayscale, options, dimensions);
 
-	const needsDimensions =
-		method === DitheringMethod.FLOYD_STEINBERG ||
-		method === DitheringMethod.ATKINSON ||
-		method === DitheringMethod.BAYER ||
-		edgeSnap;
-
-	if (needsDimensions && (width === undefined || height === undefined)) {
-		throw new Error(`width and height are required for ${method} dithering`);
-	}
-	if (bayerPatternSize !== undefined && ![2, 4, 8].includes(bayerPatternSize)) {
-		throw new Error("bayerPatternSize must be 2, 4, or 8");
-	}
-
-	const requireDimensions = (): [number, number] => {
-		if (width === undefined || height === undefined) {
-			throw new Error(`width and height are required for ${method} dithering`);
-		}
-
-		return [width, height];
-	};
-
-	let result: Uint8Array;
-	switch (method) {
-		case DitheringMethod.THRESHOLD:
-			result = ditherThreshold(grayscale, threshold);
-			break;
-		case DitheringMethod.FLOYD_STEINBERG: {
-			const [resolvedWidth, resolvedHeight] = requireDimensions();
-			result = ditherFloydSteinberg(
-				grayscale,
-				resolvedWidth,
-				resolvedHeight,
-				levels,
-			);
-			break;
-		}
-		case DitheringMethod.ATKINSON: {
-			const [resolvedWidth, resolvedHeight] = requireDimensions();
-			result = ditherAtkinson(grayscale, resolvedWidth, resolvedHeight, levels);
-			break;
-		}
-		case DitheringMethod.BAYER: {
-			const [resolvedWidth, resolvedHeight] = requireDimensions();
-			result = ditherBayer(
-				grayscale,
-				resolvedWidth,
-				resolvedHeight,
-				levels,
-				bayerPatternSize,
-			);
-			break;
-		}
-		case DitheringMethod.JARVIS_JUDICE_NINKE: {
-			const [resolvedWidth, resolvedHeight] = requireDimensions();
-			result = ditherJarvisJudiceNinke(
-				grayscale,
-				resolvedWidth,
-				resolvedHeight,
-				levels,
-			);
-			break;
-		}
-		case DitheringMethod.RANDOM:
-			result = ditherRandom(grayscale, levels);
-			break;
-		case DitheringMethod.NONE:
-			result = quantize(grayscale, levels);
-			break;
-	}
-
-	if (edgeSnap) {
-		const [resolvedWidth, resolvedHeight] = requireDimensions();
+	if (options.applyEdgeSnap) {
 		const edges = detectEdges(
 			grayscale,
-			resolvedWidth,
-			resolvedHeight,
-			edgeDetectionFuzziness,
+			dimensions.width,
+			dimensions.height,
+			options.edgeDetectionFuzziness,
 		);
-		return applyEdgeSnap(grayscale, result, edges, levels);
+		return applyEdgeSnap(grayscale, result, edges, options.levels);
 	}
 
 	return result;

@@ -1,32 +1,12 @@
 import { PreSatori } from "@/utils/pre-satori";
+import {
+	createCalendarScale as sc,
+	calendarTextStyle as t,
+} from "../calendar-ui";
 import type { WeekData } from "./getData";
 
 const DAY_ABBRS = ["PN", "WT", "ŚR", "CZ", "PT", "SO", "ND"];
 const HOURS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
-
-const BASE_W = 800;
-function sc(w: number) {
-	const s = w / BASE_W;
-	return {
-		f: (n: number) => Math.round(n * s),
-		p: (n: number) => Math.round(n * s),
-		b: (n: number) => Math.max(1, Math.round(n * s)),
-	};
-}
-function t(
-	s: ReturnType<typeof sc>,
-	size: number,
-	weight = 400,
-	color = "#333",
-) {
-	return {
-		fontFamily: "inter",
-		fontSize: s.f(size),
-		fontWeight: weight,
-		lineHeight: 1.15,
-		color,
-	};
-}
 
 function fmtTime(d: Date): string {
 	return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;

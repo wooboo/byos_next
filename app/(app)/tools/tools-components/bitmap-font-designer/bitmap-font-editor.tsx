@@ -20,7 +20,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { binaryToGrid, gridToBinary } from "./bitmap-font-utils";
+import {
+	cloneGrid,
+	copyGridIntoDimensions,
+	createEmptyGrid,
+	createGridFromBinary,
+	getGridDimensions,
+	gridToBinary,
+	parseGridSize,
+	rotateGrid,
+} from "./bitmap-font-utils";
 
 interface BitmapFontEditorProps {
 	selectedGridSize: string;
@@ -61,6 +70,13 @@ const interpolatePoints = (
 	return points;
 };
 
+const isInsideGrid = (
+	gridX: number,
+	gridY: number,
+	width: number,
+	height: number,
+) => gridX >= 0 && gridX < width && gridY >= 0 && gridY < height;
+
 export default function BitmapFontEditor({
 	selectedGridSize,
 	selectedCharCode,
@@ -68,7 +84,7 @@ export default function BitmapFontEditor({
 	setCurrentCharacterBitmap,
 	onDataChange,
 }: BitmapFontEditorProps) {
-	const [width, height] = selectedGridSize.split("x").map(Number);
+	const [width, height] = parseGridSize(selectedGridSize);
 	const cellSize = 40; // Fixed cell size for better visibility
 	const previewRef = useRef<HTMLCanvasElement>(null);
 
@@ -142,22 +158,26 @@ export default function BitmapFontEditor({
 		});
 	}, [getHistoryKey]);
 
-	// Update the preview canvas
-	const updatePreview = useCallback(() => {
-		const canvas = previewRef.current;
+	const getCanvasDrawState = useCallback((canvas: HTMLCanvasElement | null) => {
 		const ctx = canvas?.getContext("2d");
-		if (!canvas || !ctx) return;
+		if (!canvas || !ctx) return null;
 
-		// Clear canvas
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-		// Get actual grid dimensions
 		const grid = gridRef.current;
-		const actualHeight = grid.length;
-		const actualWidth = actualHeight > 0 ? grid[0].length : 0;
+		const { width: actualWidth, height: actualHeight } =
+			getGridDimensions(grid);
 
-		// Safety check for empty grid
-		if (actualHeight === 0 || actualWidth === 0) return;
+		if (actualHeight === 0 || actualWidth === 0) return null;
+
+		return { canvas, ctx, actualWidth, actualHeight };
+	}, []);
+
+	// Update the preview canvas
+	const updatePreview = useCallback(() => {
+		const drawState = getCanvasDrawState(previewRef.current);
+		if (!drawState) return;
+		const { canvas, ctx, actualWidth, actualHeight } = drawState;
 
 		// Set pixel size (1 pixel per grid cell)
 		const pixelSize = 1;
@@ -179,24 +199,13 @@ export default function BitmapFontEditor({
 				}
 			}
 		}
-	}, []);
+	}, [getCanvasDrawState]);
 
 	// Draw the grid on the canvas
 	const drawGrid = useCallback(() => {
-		const canvas = canvasRef.current;
-		const ctx = canvas?.getContext("2d");
-		if (!canvas || !ctx) return;
-
-		// Clear canvas
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-		// Get actual grid dimensions which may have changed after rotation
-		const grid = gridRef.current;
-		const actualHeight = grid.length;
-		const actualWidth = actualHeight > 0 ? grid[0].length : 0;
-
-		// Safety check for empty grid
-		if (actualHeight === 0 || actualWidth === 0) return;
+		const drawState = getCanvasDrawState(canvasRef.current);
+		if (!drawState) return;
+		const { canvas, ctx, actualWidth, actualHeight } = drawState;
 
 		const borderWidth = 1;
 		const cellSizeWithBorder = cellSize + borderWidth;
@@ -220,7 +229,7 @@ export default function BitmapFontEditor({
 				const cellY = y * cellSizeWithBorder;
 
 				// Draw cell background with safe access to grid
-				const cellValue = grid[y]?.[x] ?? 0;
+				const cellValue = gridRef.current[y]?.[x] ?? 0;
 				ctx.fillStyle = cellValue ? "#000000" : "#ffffff";
 				ctx.fillRect(cellX, cellY, cellSize, cellSize);
 
@@ -254,7 +263,7 @@ export default function BitmapFontEditor({
 
 		// Update the preview
 		updatePreview();
-	}, [xHeight, baseline, updatePreview]);
+	}, [xHeight, baseline, updatePreview, getCanvasDrawState]);
 
 	// Reset grid when selectedCharacter changes
 	useEffect(() => {
@@ -262,15 +271,11 @@ export default function BitmapFontEditor({
 			// Save history for previous character
 			saveHistoryForCurrentChar();
 
-			// Always reset grid to match the component props dimensions when character changes
-			gridRef.current = Array(height)
-				.fill(0)
-				.map(() => Array(width).fill(0));
-
-			// Convert binary data to grid if available
-			if (currentCharacterBitmap) {
-				gridRef.current = binaryToGrid(currentCharacterBitmap, width, height);
-			}
+			gridRef.current = createGridFromBinary(
+				currentCharacterBitmap,
+				width,
+				height,
+			);
 
 			// Update current character ref
 			currentCharRef.current = selectedCharCode;
@@ -293,15 +298,11 @@ export default function BitmapFontEditor({
 
 	// Initialize grid when size changes or component mounts
 	useEffect(() => {
-		// Always reset grid to the component props dimensions when size changes
-		gridRef.current = Array(height)
-			.fill(0)
-			.map(() => Array(width).fill(0));
-
-		// Convert binary data to grid if available
-		if (currentCharacterBitmap) {
-			gridRef.current = binaryToGrid(currentCharacterBitmap, width, height);
-		}
+		gridRef.current = createGridFromBinary(
+			currentCharacterBitmap,
+			width,
+			height,
+		);
 
 		// Load or initialize history for current character
 		loadHistoryForCurrentChar();
@@ -411,19 +412,29 @@ export default function BitmapFontEditor({
 		return [gridX, gridY];
 	}, []);
 
-	// Handle mouse down
-	const handleMouseDown = useCallback(
+	const getPointerGridPosition = useCallback(
 		(e: React.MouseEvent<HTMLCanvasElement>) => {
 			const canvas = canvasRef.current;
-			if (!canvas) return;
+			if (!canvas) return null;
 
 			const rect = canvas.getBoundingClientRect();
 			const x = e.clientX - rect.left;
 			const y = e.clientY - rect.top;
 			const [gridX, gridY] = canvasToGrid(x, y);
 
-			// Ensure coordinates are within bounds
-			if (gridX < 0 || gridX >= width || gridY < 0 || gridY >= height) return;
+			if (!isInsideGrid(gridX, gridY, width, height)) return null;
+
+			return [gridX, gridY] as const;
+		},
+		[width, height, canvasToGrid],
+	);
+
+	// Handle mouse down
+	const handleMouseDown = useCallback(
+		(e: React.MouseEvent<HTMLCanvasElement>) => {
+			const gridPosition = getPointerGridPosition(e);
+			if (!gridPosition) return;
+			const [gridX, gridY] = gridPosition;
 
 			// Set drawing state
 			isDraggingRef.current = true;
@@ -438,7 +449,7 @@ export default function BitmapFontEditor({
 			// Redraw
 			drawGrid();
 		},
-		[width, height, canvasToGrid, drawGrid],
+		[getPointerGridPosition, drawGrid],
 	);
 
 	// Handle mouse move
@@ -446,16 +457,9 @@ export default function BitmapFontEditor({
 		(e: React.MouseEvent<HTMLCanvasElement>) => {
 			if (!isDraggingRef.current || drawModeRef.current === null) return;
 
-			const canvas = canvasRef.current;
-			if (!canvas) return;
-
-			const rect = canvas.getBoundingClientRect();
-			const x = e.clientX - rect.left;
-			const y = e.clientY - rect.top;
-			const [gridX, gridY] = canvasToGrid(x, y);
-
-			// Ensure coordinates are within bounds
-			if (gridX < 0 || gridX >= width || gridY < 0 || gridY >= height) return;
+			const gridPosition = getPointerGridPosition(e);
+			if (!gridPosition) return;
+			const [gridX, gridY] = gridPosition;
 
 			// Update last interaction time
 			lastInteractionTimeRef.current = Date.now();
@@ -467,7 +471,7 @@ export default function BitmapFontEditor({
 
 				// Fill all points along the line
 				for (const [px, py] of points) {
-					if (px >= 0 && px < width && py >= 0 && py < height) {
+					if (isInsideGrid(px, py, width, height)) {
 						gridRef.current[py][px] = drawModeRef.current;
 					}
 				}
@@ -483,7 +487,7 @@ export default function BitmapFontEditor({
 			// Redraw
 			drawGrid();
 		},
-		[width, height, canvasToGrid, drawGrid],
+		[width, height, getPointerGridPosition, drawGrid],
 	);
 
 	// Handle mouse up
@@ -525,131 +529,56 @@ export default function BitmapFontEditor({
 
 	// Helper function to reset grid to component dimensions
 	const resetToComponentDimensions = useCallback(() => {
-		// Create a new grid matching component dimensions
-		const newGrid: number[][] = Array(height)
-			.fill(0)
-			.map(() => Array(width).fill(0));
-
-		// Copy over data from old grid where possible
-		const oldGrid = gridRef.current;
-		const oldHeight = oldGrid.length;
-		const oldWidth = oldHeight > 0 ? oldGrid[0].length : 0;
-
-		// Copy as much data as will fit in the new dimensions
-		for (let y = 0; y < Math.min(height, oldHeight); y++) {
-			for (let x = 0; x < Math.min(width, oldWidth); x++) {
-				newGrid[y][x] = oldGrid[y][x];
-			}
-		}
-
-		return newGrid;
+		return copyGridIntoDimensions(gridRef.current, width, height);
 	}, [width, height]);
 
+	const rotate = useCallback(
+		(direction: "clockwise" | "counter-clockwise") => {
+			const { width: currentWidth, height: currentHeight } = getGridDimensions(
+				gridRef.current,
+			);
+			const newGrid = rotateGrid(gridRef.current, direction);
+
+			// Check if resulting dimensions would be compatible with the component
+			if (currentWidth === height && currentHeight === width) {
+				gridRef.current = newGrid;
+			} else {
+				// Rotations would result in incompatible dimensions - reset to component dimensions
+				// and copy over what will fit
+				gridRef.current = copyGridIntoDimensions(
+					newGrid,
+					width,
+					height,
+					resetToComponentDimensions(),
+				);
+			}
+
+			gridChangedRef.current = true;
+			drawGrid();
+			addToHistory();
+			updateCharData();
+		},
+		[
+			drawGrid,
+			addToHistory,
+			updateCharData,
+			resetToComponentDimensions,
+			width,
+			height,
+		],
+	);
+
 	const rotateClockwise = useCallback(() => {
-		// Get current dimensions from grid reference
-		const currentHeight = gridRef.current.length;
-		const currentWidth = currentHeight > 0 ? gridRef.current[0].length : 0;
-
-		// Create a new grid with swapped dimensions
-		const newGrid: number[][] = Array(currentWidth)
-			.fill(0)
-			.map(() => Array(currentHeight).fill(0));
-
-		for (let y = 0; y < currentHeight; y++) {
-			for (let x = 0; x < currentWidth; x++) {
-				newGrid[x][currentHeight - 1 - y] = gridRef.current[y][x];
-			}
-		}
-
-		// Check if resulting dimensions would be compatible with the component
-		if (currentWidth === height && currentHeight === width) {
-			gridRef.current = newGrid;
-		} else {
-			// Rotations would result in incompatible dimensions - reset to component dimensions
-			// and copy over what will fit
-			const resetGrid = resetToComponentDimensions();
-
-			// Copy rotated data where it will fit
-			const newHeight = newGrid.length;
-			const newWidth = newHeight > 0 ? newGrid[0].length : 0;
-
-			for (let y = 0; y < Math.min(height, newHeight); y++) {
-				for (let x = 0; x < Math.min(width, newWidth); x++) {
-					resetGrid[y][x] = newGrid[y][x];
-				}
-			}
-
-			gridRef.current = resetGrid;
-		}
-
-		gridChangedRef.current = true;
-		drawGrid();
-		addToHistory();
-		updateCharData();
-	}, [
-		drawGrid,
-		addToHistory,
-		updateCharData,
-		resetToComponentDimensions,
-		width,
-		height,
-	]);
+		rotate("clockwise");
+	}, [rotate]);
 
 	const rotateCounterClockwise = useCallback(() => {
-		// Get current dimensions from grid reference
-		const currentHeight = gridRef.current.length;
-		const currentWidth = currentHeight > 0 ? gridRef.current[0].length : 0;
-
-		// Create a new grid with swapped dimensions
-		const newGrid: number[][] = Array(currentWidth)
-			.fill(0)
-			.map(() => Array(currentHeight).fill(0));
-
-		for (let y = 0; y < currentHeight; y++) {
-			for (let x = 0; x < currentWidth; x++) {
-				newGrid[currentWidth - 1 - x][y] = gridRef.current[y][x];
-			}
-		}
-
-		// Check if resulting dimensions would be compatible with the component
-		if (currentWidth === height && currentHeight === width) {
-			gridRef.current = newGrid;
-		} else {
-			// Rotations would result in incompatible dimensions - reset to component dimensions
-			// and copy over what will fit
-			const resetGrid = resetToComponentDimensions();
-
-			// Copy rotated data where it will fit
-			const newHeight = newGrid.length;
-			const newWidth = newHeight > 0 ? newGrid[0].length : 0;
-
-			for (let y = 0; y < Math.min(height, newHeight); y++) {
-				for (let x = 0; x < Math.min(width, newWidth); x++) {
-					resetGrid[y][x] = newGrid[y][x];
-				}
-			}
-
-			gridRef.current = resetGrid;
-		}
-
-		gridChangedRef.current = true;
-		drawGrid();
-		addToHistory();
-		updateCharData();
-	}, [
-		drawGrid,
-		addToHistory,
-		updateCharData,
-		resetToComponentDimensions,
-		width,
-		height,
-	]);
+		rotate("counter-clockwise");
+	}, [rotate]);
 
 	const shift = useCallback(
 		(direction: "up" | "down" | "left" | "right") => {
-			const newGrid: number[][] = Array(height)
-				.fill(0)
-				.map(() => Array(width).fill(0));
+			const newGrid = createEmptyGrid(width, height);
 
 			for (let y = 0; y < height; y++) {
 				for (let x = 0; x < width; x++) {
@@ -680,9 +609,7 @@ export default function BitmapFontEditor({
 	);
 
 	const clear = useCallback(() => {
-		gridRef.current = Array(height)
-			.fill(0)
-			.map(() => Array(width).fill(0));
+		gridRef.current = createEmptyGrid(width, height);
 
 		gridChangedRef.current = true;
 		drawGrid();
@@ -698,7 +625,7 @@ export default function BitmapFontEditor({
 			const prevState = historyRef.current[historyIndexRef.current];
 
 			// Apply the state
-			gridRef.current = JSON.parse(JSON.stringify(prevState));
+			gridRef.current = cloneGrid(prevState);
 
 			// Mark grid as changed
 			gridChangedRef.current = true;
@@ -724,7 +651,7 @@ export default function BitmapFontEditor({
 			const nextState = historyRef.current[historyIndexRef.current];
 
 			// Apply the state
-			gridRef.current = JSON.parse(JSON.stringify(nextState));
+			gridRef.current = cloneGrid(nextState);
 
 			// Mark grid as changed
 			gridChangedRef.current = true;

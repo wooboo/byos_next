@@ -1,11 +1,11 @@
 import type { NextRequest } from "next/server";
 import { getCurrentUserId } from "@/lib/auth/get-user";
-import {
-	DEFAULT_IMAGE_HEIGHT,
-	DEFAULT_IMAGE_WIDTH,
-	renderRecipeToImage,
-} from "@/lib/recipes/recipe-renderer";
+import { renderRecipeToImage } from "@/lib/recipes/recipe-renderer";
 import { resolveRenderableRef } from "@/lib/screens/render-target";
+import {
+	binaryImageResponse,
+	parsePreviewSize,
+} from "../../../bitmap/render-utils";
 
 export async function GET(
 	req: NextRequest,
@@ -16,12 +16,7 @@ export async function GET(
 		return new Response("Unsupported preview type", { status: 400 });
 	}
 
-	const { searchParams } = new URL(req.url);
-	const width =
-		Number.parseInt(searchParams.get("width") || "", 10) || DEFAULT_IMAGE_WIDTH;
-	const height =
-		Number.parseInt(searchParams.get("height") || "", 10) ||
-		DEFAULT_IMAGE_HEIGHT;
+	const { width, height } = parsePreviewSize(req);
 	const userId = await getCurrentUserId();
 	const target = await resolveRenderableRef({ type, id, userId });
 	if (!target) return new Response("Not found", { status: 404 });
@@ -36,10 +31,5 @@ export async function GET(
 	});
 
 	if (!renders.png) return new Response("Failed to render", { status: 500 });
-	return new Response(new Uint8Array(renders.png), {
-		headers: {
-			"Content-Type": "image/png",
-			"Content-Length": renders.png.length.toString(),
-		},
-	});
+	return binaryImageResponse(renders.png, "image/png");
 }

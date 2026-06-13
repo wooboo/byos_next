@@ -22,6 +22,13 @@ const devCache = IS_DEV
 	? new Map<string, { data: Buffer; timestamp: string; expiresAt: number }>()
 	: null;
 
+type ImageDataResult = {
+	data?: Buffer;
+	timestamp: string;
+	error?: string;
+	cached?: boolean;
+};
+
 // Function to simulate random errors (10% chance)
 function shouldSimulateError() {
 	return Math.random() < 0.1; // 10% chance of error for testing
@@ -301,122 +308,152 @@ async function getFromDevCache(slug: string): Promise<{
 	return { ...result, cached: false };
 }
 
+function resolveSlug(params: { slug?: string[] } | undefined) {
+	return params?.slug ? params.slug.join("/") : "default";
+}
+
+async function getRouteImageData(slug: string): Promise<ImageDataResult> {
+	// SIMPLIFIED LOGIC: Get data, using appropriate cache strategy based on environment
+	return IS_DEV && devCache
+		? await getFromDevCache(slug)
+		: await getCachedImageData(slug);
+}
+
+function getImageSource(result: ImageDataResult) {
+	if (IS_DEV) {
+		return result.cached ? "dev-cache" : "dev-fresh";
+	}
+
+	return result.cached ? "prod-cache" : "prod-fresh";
+}
+
+function createBmpResponse(
+	data: Buffer,
+	headers: Record<string, string>,
+	useFallbackContentLength = false,
+): Response {
+	const contentLength =
+		useFallbackContentLength && !data.length
+			? `${800 * 480}`
+			: data.length.toString();
+
+	return new Response(new Uint8Array(data), {
+		headers: {
+			"Content-Type": "image/bmp",
+			"Content-Length": contentLength,
+			...headers,
+		} as HeadersInit,
+	});
+}
+
+function createImageDataResponse(result: ImageDataResult): Response {
+	if (!result.data) {
+		throw new Error("Missing image data");
+	}
+
+	const source = getImageSource(result);
+	if (IS_DEV) console.log(`✅ Returning image from ${source}`);
+
+	return createBmpResponse(
+		result.data,
+		{
+			"X-Image-Timestamp": result.timestamp || new Date().toISOString(),
+			"X-Image-Source": source,
+			"Cache-Control": "no-cache", // Always check with server
+		},
+		true,
+	);
+}
+
+async function createFallbackImageResponse(
+	errorMessage: string,
+): Promise<Response> {
+	const fallback = await generateFallbackImage(errorMessage);
+
+	// Safety check for fallback data
+	if (!fallback?.data) {
+		throw new Error("Failed to generate fallback image");
+	}
+
+	return createBmpResponse(fallback.data, {
+		"X-Image-Timestamp": fallback.timestamp,
+		"X-Image-Source": "fallback",
+		"X-Image-Error": errorMessage,
+		"Cache-Control": "no-store",
+	});
+}
+
+function createCriticalFailureResponse(message: string): Response {
+	return new Response(message, {
+		status: 500,
+		headers: {
+			"Content-Type": "text/plain",
+			"Cache-Control": "no-store",
+		} as HeadersInit,
+	});
+}
+
+async function createCriticalErrorImageResponse(
+	error: unknown,
+): Promise<Response> {
+	const errorMessage = error instanceof Error ? error.message : "Unknown error";
+	if (IS_DEV) console.log("🚨 Critical error, showing error image");
+	const fallback = await generateFallbackImage(errorMessage);
+
+	// Final safety check
+	if (!fallback?.data) {
+		return createCriticalFailureResponse(
+			`Critical failure: Failed to generate error image`,
+		);
+	}
+
+	return createBmpResponse(fallback.data, {
+		"X-Image-Timestamp": fallback.timestamp || new Date().toISOString(),
+		"X-Image-Source": "critical-error",
+		"X-Image-Error": errorMessage,
+		"Cache-Control": "no-store",
+	});
+}
+
+async function handleRouteError(error: unknown): Promise<Response> {
+	console.error("❌ Unexpected error in route handler:", error);
+
+	try {
+		return await createCriticalErrorImageResponse(error);
+	} catch (fallbackError) {
+		console.error(
+			"💥 Fatal failure - could not generate error image:",
+			fallbackError,
+		);
+		return createCriticalFailureResponse(
+			`Critical failure: ${error instanceof Error ? error.message : "Unknown error"}`,
+		);
+	}
+}
+
 export async function GET(
 	request: Request,
 	{ params }: { params: Promise<{ slug?: string[] }> },
 ) {
 	const resolvedParams = await params;
-	const slug = resolvedParams?.slug ? resolvedParams.slug.join("/") : "default";
+	const slug = resolveSlug(resolvedParams);
 	if (IS_DEV) console.log("📥 Received request for slug:", slug);
 
 	const requestHeaders = new Headers(request.headers);
 	console.log("🔍 Request headers:", requestHeaders);
 
 	try {
-		// SIMPLIFIED LOGIC: Get data, using appropriate cache strategy based on environment
-		const result =
-			IS_DEV && devCache
-				? await getFromDevCache(slug)
-				: await getCachedImageData(slug);
+		const result = await getRouteImageData(slug);
 
 		// If we have image data, return it immediately
 		if (result.data) {
-			const source = IS_DEV
-				? result.cached
-					? "dev-cache"
-					: "dev-fresh"
-				: result.cached
-					? "prod-cache"
-					: "prod-fresh";
-
-			if (IS_DEV) console.log(`✅ Returning image from ${source}`);
-
-			// Make sure buffer length exists and is safe to convert
-			const contentLength = result.data?.length
-				? result.data.length.toString()
-				: `${800 * 480}`;
-
-			return new Response(new Uint8Array(result.data), {
-				headers: {
-					"Content-Type": "image/bmp",
-					"Content-Length": contentLength,
-					"X-Image-Timestamp": result.timestamp || new Date().toISOString(),
-					"X-Image-Source": source,
-					"Cache-Control": "no-cache", // Always check with server
-				} as HeadersInit,
-			});
+			return createImageDataResponse(result);
 		}
 
 		// If generation failed and we have no cache - show error image
 		if (IS_DEV) console.log("❌ No image data available, showing error image");
-		const fallback = await generateFallbackImage(
-			result.error || "Unknown error",
-		);
-
-		// Safety check for fallback data
-		if (!fallback?.data) {
-			throw new Error("Failed to generate fallback image");
-		}
-
-		return new Response(new Uint8Array(fallback.data), {
-			headers: {
-				"Content-Type": "image/bmp",
-				"Content-Length": fallback.data.length.toString(),
-				"X-Image-Timestamp": fallback.timestamp,
-				"X-Image-Source": "fallback",
-				"X-Image-Error": result.error || "Unknown error",
-				"Cache-Control": "no-store",
-			} as HeadersInit,
-		});
+		return await createFallbackImageResponse(result.error || "Unknown error");
 	} catch (error) {
-		console.error("❌ Unexpected error in route handler:", error);
-
-		// Show error image
-		try {
-			const errorMessage =
-				error instanceof Error ? error.message : "Unknown error";
-			if (IS_DEV) console.log("🚨 Critical error, showing error image");
-			const fallback = await generateFallbackImage(errorMessage);
-
-			// Final safety check
-			if (!fallback?.data) {
-				return new Response(
-					`Critical failure: Failed to generate error image`,
-					{
-						status: 500,
-						headers: {
-							"Content-Type": "text/plain",
-							"Cache-Control": "no-store",
-						} as HeadersInit,
-					},
-				);
-			}
-
-			return new Response(new Uint8Array(fallback.data), {
-				headers: {
-					"Content-Type": "image/bmp",
-					"Content-Length": fallback.data.length.toString(),
-					"X-Image-Timestamp": fallback.timestamp || new Date().toISOString(),
-					"X-Image-Source": "critical-error",
-					"X-Image-Error": errorMessage,
-					"Cache-Control": "no-store",
-				} as HeadersInit,
-			});
-		} catch (fallbackError) {
-			console.error(
-				"💥 Fatal failure - could not generate error image:",
-				fallbackError,
-			);
-			return new Response(
-				`Critical failure: ${error instanceof Error ? error.message : "Unknown error"}`,
-				{
-					status: 500,
-					headers: {
-						"Content-Type": "text/plain",
-						"Cache-Control": "no-store",
-					} as HeadersInit,
-				},
-			);
-		}
+		return await handleRouteError(error);
 	}
 }

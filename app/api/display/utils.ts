@@ -1,5 +1,8 @@
-import crypto from "crypto";
 import { NextResponse } from "next/server";
+import {
+	createMockDeviceIdentity,
+	generateMockMacAddress,
+} from "@/app/api/device-api-key";
 import { getCurrentUserId } from "@/lib/auth/get-user";
 import { db } from "@/lib/database/db";
 import { withExplicitUserScope } from "@/lib/database/scoped-db";
@@ -12,7 +15,7 @@ import type {
 	RefreshSchedule,
 	TimeRange,
 } from "@/lib/types";
-import { generateApiKey, generateFriendlyId, timezones } from "@/utils/helpers";
+import { generateFriendlyId, timezones } from "@/utils/helpers";
 import { DEFAULT_SCREEN } from "./constants";
 
 // --- Types ---
@@ -66,10 +69,71 @@ export const parseRequestHeaders = (request: Request): RequestHeaders => {
 
 // --- Helper Functions ---
 
-export const generateMockMacAddress = (apiKey: string): string => {
-	const hash = crypto.createHash("sha256").update(apiKey).digest("hex");
-	const macPart = hash.substring(hash.length - 6).toUpperCase();
-	return `A1:B2:C3:${macPart.substring(0, 2)}:${macPart.substring(2, 4)}:${macPart.substring(4, 6)}`;
+type DisplayDeviceInsert = {
+	macAddress: string;
+	name: string;
+	friendlyId: string;
+	apiKey: string;
+	defaultRefreshRate: number;
+	model: string | null;
+	userId: string;
+};
+
+const insertDisplayDevice = ({
+	macAddress,
+	name,
+	friendlyId,
+	apiKey,
+	defaultRefreshRate,
+	model,
+	userId,
+}: DisplayDeviceInsert) =>
+	db
+		.insertInto("devices")
+		.values({
+			mac_address: macAddress,
+			name,
+			friendly_id: friendlyId,
+			api_key: apiKey,
+			refresh_schedule: JSON.stringify({
+				default_refresh_rate: defaultRefreshRate,
+				time_ranges: [],
+			}),
+			last_update_time: new Date().toISOString(),
+			next_expected_update: new Date(Date.now() + 3600 * 1000).toISOString(),
+			timezone: "UTC",
+			screen: DEFAULT_SCREEN,
+			model,
+			user_id: userId,
+		})
+		.returningAll()
+		.executeTakeFirst();
+
+const updateDeviceIdentity = async (
+	device: Device,
+	patch: Partial<Device>,
+): Promise<Device> => {
+	if (Object.keys(patch).length === 0) {
+		return device;
+	}
+
+	patch.updated_at = new Date().toISOString();
+	await db
+		.updateTable("devices")
+		.set(patch)
+		.where("id", "=", device.id.toString())
+		.execute();
+
+	Object.assign(device, patch);
+	logInfo("Updated device identity from headers", {
+		source: "api/display",
+		metadata: {
+			deviceId: device.friendly_id,
+			fields: Object.keys(patch),
+		},
+	});
+
+	return device;
 };
 
 export const precacheImageInBackground = (
@@ -291,229 +355,233 @@ export const updateDeviceStatus = async (
 	}
 };
 
-export const findOrCreateDevice = async (
+const findDeviceByApiKey = async (
 	headers: RequestHeaders,
 ): Promise<Device | null> => {
-	const { apiKey, macAddress } = headers;
-
-	// 1. Try finding by API Key
-	if (apiKey) {
-		const deviceByApiKey = await db
-			.selectFrom("devices")
-			.selectAll()
-			.where("api_key", "=", apiKey)
-			.executeTakeFirst();
-
-		if (deviceByApiKey) {
-			const device = deviceByApiKey as unknown as Device;
-			const patch: Partial<Device> = {};
-			if (macAddress && macAddress !== device.mac_address) {
-				patch.mac_address = macAddress;
-			}
-			if (headers.model && headers.model !== device.model) {
-				patch.model = headers.model;
-			}
-			if (Object.keys(patch).length > 0) {
-				patch.updated_at = new Date().toISOString();
-				await db
-					.updateTable("devices")
-					.set(patch)
-					.where("id", "=", device.id.toString())
-					.execute();
-				Object.assign(device, patch);
-				logInfo("Updated device identity from headers", {
-					source: "api/display",
-					metadata: {
-						deviceId: device.friendly_id,
-						fields: Object.keys(patch),
-					},
-				});
-			}
-			return device;
-		}
+	if (!headers.apiKey) {
+		return null;
 	}
 
-	// 2. Try finding by MAC Address
-	if (macAddress) {
-		const deviceByMac = await db
-			.selectFrom("devices")
-			.selectAll()
-			.where("mac_address", "=", macAddress)
-			.executeTakeFirst();
+	const deviceByApiKey = await db
+		.selectFrom("devices")
+		.selectAll()
+		.where("api_key", "=", headers.apiKey)
+		.executeTakeFirst();
 
-		if (deviceByMac) {
-			const device = deviceByMac as unknown as Device;
-			const patch: Partial<Device> = {};
-			if (apiKey && apiKey !== device.api_key) {
-				const currentUserId = await getCurrentUserId();
-				if (!currentUserId || device.user_id !== currentUserId) {
-					logError("Refusing to rotate device API key from MAC-only match", {
-						source: "api/display",
-						metadata: {
-							deviceId: device.friendly_id,
-							macAddress,
-							hasApiKey: true,
-						},
-					});
-					return null;
-				}
-				patch.api_key = apiKey;
-			}
-			if (headers.model && headers.model !== device.model) {
-				patch.model = headers.model;
-			}
-			if (Object.keys(patch).length > 0) {
-				patch.updated_at = new Date().toISOString();
-				await db
-					.updateTable("devices")
-					.set(patch)
-					.where("id", "=", device.id.toString())
-					.execute();
-				Object.assign(device, patch);
-				logInfo("Updated device identity from headers", {
-					source: "api/display",
-					metadata: {
-						deviceId: device.friendly_id,
-						fields: Object.keys(patch),
-					},
-				});
-			}
-			return device;
-		}
+	if (!deviceByApiKey) {
+		return null;
 	}
 
-	// 3. Create new device or use mock
-	if (apiKey) {
+	const device = deviceByApiKey as unknown as Device;
+	const patch: Partial<Device> = {};
+	if (headers.macAddress && headers.macAddress !== device.mac_address) {
+		patch.mac_address = headers.macAddress;
+	}
+	if (headers.model && headers.model !== device.model) {
+		patch.model = headers.model;
+	}
+
+	return updateDeviceIdentity(device, patch);
+};
+
+const buildMacMatchPatch = async (
+	device: Device,
+	headers: RequestHeaders,
+): Promise<Partial<Device> | null> => {
+	const patch: Partial<Device> = {};
+
+	if (headers.apiKey && headers.apiKey !== device.api_key) {
 		const currentUserId = await getCurrentUserId();
-		if (!currentUserId) {
-			logError("Refusing to auto-provision an unowned device", {
+		if (!currentUserId || device.user_id !== currentUserId) {
+			logError("Refusing to rotate device API key from MAC-only match", {
 				source: "api/display",
 				metadata: {
-					macAddress,
+					deviceId: device.friendly_id,
+					macAddress: headers.macAddress,
 					hasApiKey: true,
-					model: headers.model,
 				},
 			});
 			return null;
 		}
+		patch.api_key = headers.apiKey;
+	}
 
-		// New device by explicit MAC
-		if (macAddress) {
-			const friendly_id = generateFriendlyId(
-				macAddress,
-				new Date().toISOString().replace(/[-:Z]/g, ""),
-			);
-			try {
-				const newDevice = await db
-					.insertInto("devices")
-					.values({
-						mac_address: macAddress,
-						name: `TRMNL Device ${friendly_id}`,
-						friendly_id: friendly_id,
-						api_key: apiKey,
-						refresh_schedule: JSON.stringify({
-							default_refresh_rate: headers.refreshRate
-								? Number.parseInt(headers.refreshRate, 10)
-								: 60,
-							time_ranges: [],
-						}),
-						last_update_time: new Date().toISOString(),
-						next_expected_update: new Date(
-							Date.now() + 3600 * 1000,
-						).toISOString(),
-						timezone: "UTC",
-						screen: DEFAULT_SCREEN,
-						model: headers.model,
-						user_id: currentUserId,
-					})
-					.returningAll()
-					.executeTakeFirst();
+	if (headers.model && headers.model !== device.model) {
+		patch.model = headers.model;
+	}
 
-				if (newDevice) {
-					logInfo("Created new device with provided MAC address", {
-						source: "api/display",
-						metadata: { friendly_id },
-					});
-					return newDevice as unknown as Device;
-				}
-			} catch (e) {
-				logError("Error creating device with provided MAC", {
-					source: "api/display",
-					metadata: { error: e },
-				});
-			}
-		}
+	return patch;
+};
 
-		// Mock Device logic
-		const mockMacAddress = generateMockMacAddress(apiKey);
-		const existingMock = await db
-			.selectFrom("devices")
-			.selectAll()
-			.where("mac_address", "=", mockMacAddress)
-			.executeTakeFirst();
+const findDeviceByMacAddress = async (
+	headers: RequestHeaders,
+): Promise<Device | null> => {
+	if (!headers.macAddress) {
+		return null;
+	}
 
-		if (existingMock) {
-			const device = existingMock as unknown as Device;
-			if (macAddress) {
-				await db
-					.updateTable("devices")
-					.set({ mac_address: macAddress })
-					.where("id", "=", device.id.toString())
-					.execute();
-			}
-			logInfo("Using existing mock device", {
+	const deviceByMac = await db
+		.selectFrom("devices")
+		.selectAll()
+		.where("mac_address", "=", headers.macAddress)
+		.executeTakeFirst();
+
+	if (!deviceByMac) {
+		return null;
+	}
+
+	const device = deviceByMac as unknown as Device;
+	const patch = await buildMacMatchPatch(device, headers);
+	if (!patch) {
+		return null;
+	}
+
+	return updateDeviceIdentity(device, patch);
+};
+
+const createDeviceWithProvidedMac = async (
+	headers: RequestHeaders,
+	currentUserId: string,
+): Promise<Device | null> => {
+	if (!headers.apiKey || !headers.macAddress) {
+		return null;
+	}
+
+	const friendlyId = generateFriendlyId(
+		headers.macAddress,
+		new Date().toISOString().replace(/[-:Z]/g, ""),
+	);
+
+	try {
+		const newDevice = await insertDisplayDevice({
+			macAddress: headers.macAddress,
+			name: `TRMNL Device ${friendlyId}`,
+			friendlyId,
+			apiKey: headers.apiKey,
+			defaultRefreshRate: headers.refreshRate
+				? Number.parseInt(headers.refreshRate, 10)
+				: 60,
+			model: headers.model,
+			userId: currentUserId,
+		});
+
+		if (newDevice) {
+			logInfo("Created new device with provided MAC address", {
 				source: "api/display",
-				metadata: { friendly_id: device.friendly_id },
+				metadata: { friendly_id: friendlyId },
 			});
-			return device;
+			return newDevice as unknown as Device;
 		}
-
-		// Create Mock Device
-		const friendly_id = generateFriendlyId(
-			mockMacAddress,
-			new Date().toISOString().replace(/[-:Z]/g, ""),
-		);
-		const new_api_key = macAddress
-			? apiKey
-			: generateApiKey(
-					mockMacAddress,
-					new Date().toISOString().replace(/[-:Z]/g, ""),
-				);
-
-		try {
-			const newDevice = await db
-				.insertInto("devices")
-				.values({
-					mac_address: macAddress || mockMacAddress,
-					name: `Unknown device with API ${apiKey.substring(0, 4)}...`,
-					friendly_id: friendly_id,
-					api_key: new_api_key,
-					refresh_schedule: JSON.stringify({
-						default_refresh_rate: 60,
-						time_ranges: [],
-					}),
-					last_update_time: new Date().toISOString(),
-					next_expected_update: new Date(
-						Date.now() + 3600 * 1000,
-					).toISOString(),
-					timezone: "UTC",
-					screen: DEFAULT_SCREEN,
-					model: headers.model,
-					user_id: currentUserId,
-				})
-				.returningAll()
-				.executeTakeFirst();
-
-			if (newDevice) {
-				logger.info(`Created new mock device: ${friendly_id}`);
-				return newDevice as unknown as Device;
-			}
-		} catch (e) {
-			logger.error("Error creating mock device", { error: e });
-		}
+	} catch (e) {
+		logError("Error creating device with provided MAC", {
+			source: "api/display",
+			metadata: { error: e },
+		});
 	}
 
 	return null;
+};
+
+const getExistingMockDevice = async (
+	apiKey: string,
+	macAddress: string | null,
+): Promise<Device | null> => {
+	const mockMacAddress = generateMockMacAddress(apiKey);
+	const existingMock = await db
+		.selectFrom("devices")
+		.selectAll()
+		.where("mac_address", "=", mockMacAddress)
+		.executeTakeFirst();
+
+	if (!existingMock) {
+		return null;
+	}
+
+	const device = existingMock as unknown as Device;
+	if (macAddress) {
+		await db
+			.updateTable("devices")
+			.set({ mac_address: macAddress })
+			.where("id", "=", device.id.toString())
+			.execute();
+	}
+	logInfo("Using existing mock device", {
+		source: "api/display",
+		metadata: { friendly_id: device.friendly_id },
+	});
+	return device;
+};
+
+const createMockDisplayDevice = async (
+	headers: RequestHeaders,
+	currentUserId: string,
+): Promise<Device | null> => {
+	if (!headers.apiKey) {
+		return null;
+	}
+
+	const mockIdentity = createMockDeviceIdentity(
+		headers.apiKey,
+		headers.macAddress,
+	);
+
+	try {
+		const newDevice = await insertDisplayDevice({
+			macAddress: headers.macAddress || generateMockMacAddress(headers.apiKey),
+			name: `Unknown device with API ${headers.apiKey.substring(0, 4)}...`,
+			friendlyId: mockIdentity.friendlyId,
+			apiKey: mockIdentity.apiKey,
+			defaultRefreshRate: 60,
+			model: headers.model,
+			userId: currentUserId,
+		});
+
+		if (newDevice) {
+			logger.info(`Created new mock device: ${mockIdentity.friendlyId}`);
+			return newDevice as unknown as Device;
+		}
+	} catch (e) {
+		logger.error("Error creating mock device", { error: e });
+	}
+
+	return null;
+};
+
+const createDeviceForApiKey = async (
+	headers: RequestHeaders,
+): Promise<Device | null> => {
+	if (!headers.apiKey) {
+		return null;
+	}
+
+	const currentUserId = await getCurrentUserId();
+	if (!currentUserId) {
+		logError("Refusing to auto-provision an unowned device", {
+			source: "api/display",
+			metadata: {
+				macAddress: headers.macAddress,
+				hasApiKey: true,
+				model: headers.model,
+			},
+		});
+		return null;
+	}
+
+	return (
+		(await createDeviceWithProvidedMac(headers, currentUserId)) ??
+		(await getExistingMockDevice(headers.apiKey, headers.macAddress)) ??
+		(await createMockDisplayDevice(headers, currentUserId))
+	);
+};
+
+export const findOrCreateDevice = async (
+	headers: RequestHeaders,
+): Promise<Device | null> => {
+	return (
+		(await findDeviceByApiKey(headers)) ??
+		(await findDeviceByMacAddress(headers)) ??
+		(await createDeviceForApiKey(headers))
+	);
 };
 
 // --- Response Builder ---

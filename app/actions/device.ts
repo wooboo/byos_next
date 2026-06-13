@@ -178,8 +178,77 @@ export async function fetchDeviceLogsWithFilters({
 /**
  * Update a device
  */
+type UpdateDeviceInput = Partial<Device> & { id: number };
+
+const DEVICE_UPDATE_FIELDS_BEFORE_REFRESH = [
+	"name",
+	"mac_address",
+	"api_key",
+	"friendly_id",
+	"timezone",
+] as const satisfies readonly (keyof Device)[];
+
+const DEVICE_UPDATE_FIELDS_AFTER_REFRESH = [
+	"screen",
+	"screen_id",
+	"screen_type",
+	"playlist_id",
+	"mixup_id",
+	"display_mode",
+	"battery_voltage",
+	"firmware_version",
+	"rssi",
+	"screen_width",
+	"screen_height",
+	"screen_orientation",
+	"grayscale",
+] as const satisfies readonly (keyof Device)[];
+
+type DeviceUpdateField =
+	| (typeof DEVICE_UPDATE_FIELDS_BEFORE_REFRESH)[number]
+	| (typeof DEVICE_UPDATE_FIELDS_AFTER_REFRESH)[number];
+
+function setDefinedDeviceUpdateField(
+	updateData: Record<string, unknown>,
+	device: UpdateDeviceInput,
+	field: DeviceUpdateField,
+) {
+	const value = device[field];
+	if (value !== undefined) {
+		updateData[field] = value;
+	}
+}
+
+function setRefreshScheduleUpdate(
+	updateData: Record<string, unknown>,
+	device: UpdateDeviceInput,
+) {
+	if (device.refresh_schedule !== undefined) {
+		updateData.refresh_schedule = device.refresh_schedule
+			? JSON.stringify(device.refresh_schedule)
+			: null;
+	}
+}
+
+function buildDeviceUpdateData(
+	device: UpdateDeviceInput,
+): Record<string, unknown> {
+	const updateData: Record<string, unknown> = {};
+
+	for (const field of DEVICE_UPDATE_FIELDS_BEFORE_REFRESH) {
+		setDefinedDeviceUpdateField(updateData, device, field);
+	}
+	setRefreshScheduleUpdate(updateData, device);
+	for (const field of DEVICE_UPDATE_FIELDS_AFTER_REFRESH) {
+		setDefinedDeviceUpdateField(updateData, device, field);
+	}
+	updateData.updated_at = new Date().toISOString();
+
+	return updateData;
+}
+
 export async function updateDevice(
-	device: Partial<Device> & { id: number },
+	device: UpdateDeviceInput,
 ): Promise<{ success: boolean; error?: string }> {
 	const { ready } = await checkDbConnection();
 
@@ -188,44 +257,7 @@ export async function updateDevice(
 		return { success: false, error: "Database client not initialized" };
 	}
 
-	// Prepare the update data
-	// We construct object with optional properties explicitly
-	const updateData: Record<string, unknown> = {};
-
-	if (device.name !== undefined) updateData.name = device.name;
-	if (device.mac_address !== undefined)
-		updateData.mac_address = device.mac_address;
-	if (device.api_key !== undefined) updateData.api_key = device.api_key;
-	if (device.friendly_id !== undefined)
-		updateData.friendly_id = device.friendly_id;
-	if (device.timezone !== undefined) updateData.timezone = device.timezone;
-	if (device.refresh_schedule !== undefined)
-		updateData.refresh_schedule = device.refresh_schedule
-			? JSON.stringify(device.refresh_schedule)
-			: null;
-	if (device.screen !== undefined) updateData.screen = device.screen;
-	if (device.screen_id !== undefined) updateData.screen_id = device.screen_id;
-	if (device.screen_type !== undefined)
-		updateData.screen_type = device.screen_type;
-	if (device.playlist_id !== undefined)
-		updateData.playlist_id = device.playlist_id;
-	if (device.mixup_id !== undefined) updateData.mixup_id = device.mixup_id;
-	if (device.display_mode !== undefined)
-		updateData.display_mode = device.display_mode;
-	if (device.battery_voltage !== undefined)
-		updateData.battery_voltage = device.battery_voltage;
-	if (device.firmware_version !== undefined)
-		updateData.firmware_version = device.firmware_version;
-	if (device.rssi !== undefined) updateData.rssi = device.rssi;
-	if (device.screen_width !== undefined)
-		updateData.screen_width = device.screen_width;
-	if (device.screen_height !== undefined)
-		updateData.screen_height = device.screen_height;
-	if (device.screen_orientation !== undefined)
-		updateData.screen_orientation = device.screen_orientation;
-	if (device.grayscale !== undefined) updateData.grayscale = device.grayscale;
-
-	updateData.updated_at = new Date().toISOString();
+	const updateData = buildDeviceUpdateData(device);
 
 	try {
 		await withUserScope((scopedDb) =>
