@@ -1,4 +1,9 @@
 import { type CalendarEvent, fetchCalendarEvents } from "@/lib/calendar/ics";
+import {
+	eventsForDate,
+	groupEventsByCalendarDate,
+	startOfLocalDay,
+} from "../calendar-data";
 
 export interface WeekData {
 	days: {
@@ -20,13 +25,7 @@ const DAY_NAMES = [
 	"niedziela",
 ];
 
-export default async function getData(
-	params?: Record<string, unknown>,
-): Promise<WeekData> {
-	const icsUrl = (params?.icsUrl as string) || "";
-	const now = new Date();
-
-	// Find Monday of current week
+function currentWeekRange(now: Date) {
 	const day = now.getDay();
 	const monday = new Date(now);
 	monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
@@ -35,35 +34,51 @@ export default async function getData(
 	const sunday = new Date(monday);
 	sunday.setDate(monday.getDate() + 7);
 
+	return { monday, sunday };
+}
+
+function buildWeekDay(
+	monday: Date,
+	index: number,
+	today: Date,
+	eventsByDate: Map<string, CalendarEvent[]>,
+): WeekData["days"][0] {
+	const date = new Date(monday);
+	date.setDate(monday.getDate() + index);
+
+	return {
+		name: DAY_NAMES[index],
+		date: new Date(date),
+		isToday: date.getTime() === today.getTime(),
+		isWeekend: index >= 5,
+		events: eventsForDate(eventsByDate, date),
+	};
+}
+
+function buildWeekDays(
+	monday: Date,
+	today: Date,
+	eventsByDate: Map<string, CalendarEvent[]>,
+): WeekData["days"] {
+	return DAY_NAMES.map((_, index) =>
+		buildWeekDay(monday, index, today, eventsByDate),
+	);
+}
+
+export default async function getData(
+	params?: Record<string, unknown>,
+): Promise<WeekData> {
+	const icsUrl = (params?.icsUrl as string) || "";
+	const now = new Date();
+
+	const { monday, sunday } = currentWeekRange(now);
 	const events = icsUrl
 		? await fetchCalendarEvents(icsUrl, monday, sunday)
 		: [];
+	const eventsByDate = groupEventsByCalendarDate(events);
 
-	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-	const days: WeekData["days"] = [];
-
-	for (let i = 0; i < 7; i++) {
-		const date = new Date(monday);
-		date.setDate(monday.getDate() + i);
-		const isToday = date.getTime() === today.getTime();
-
-		const dayEvents = events.filter((e) => {
-			const es = new Date(e.start);
-			return (
-				es.getFullYear() === date.getFullYear() &&
-				es.getMonth() === date.getMonth() &&
-				es.getDate() === date.getDate()
-			);
-		});
-
-		days.push({
-			name: DAY_NAMES[i],
-			date: new Date(date),
-			isToday,
-			isWeekend: i >= 5,
-			events: dayEvents,
-		});
-	}
+	const today = startOfLocalDay(now);
+	const days = buildWeekDays(monday, today, eventsByDate);
 
 	return { days };
 }

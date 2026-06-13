@@ -10,6 +10,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { isGridSizeUnavailable } from "./bitmap-font-utils";
 
 const maxGridSize = 17;
 
@@ -27,6 +28,18 @@ export default function AddGridSize({
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const cellSize = 8; // 2px for cell + gap
 	const canvasSize = maxGridSize * cellSize;
+	const addHoveredSize = () => {
+		if (
+			!hoveredSize ||
+			isGridSizeUnavailable(hoveredSize, availableGridSizes)
+		) {
+			return;
+		}
+
+		onAddSize(hoveredSize);
+		toast.success(`Added grid size: ${hoveredSize}`);
+		setOpen(false); // Close dropdown when size is selected
+	};
 
 	// Draw the grid on canvas
 	const renderCanvas = useCallback(() => {
@@ -47,8 +60,7 @@ export default function AddGridSize({
 			for (let rowIdx = 1; rowIdx <= maxGridSize; rowIdx++) {
 				for (let colIdx = 1; colIdx <= maxGridSize; colIdx++) {
 					const size = `${colIdx}x${rowIdx}`;
-					const isDisabled =
-						availableGridSizes.includes(size) || (colIdx <= 4 && rowIdx <= 4);
+					const isDisabled = isGridSizeUnavailable(size, availableGridSizes);
 
 					const x = (colIdx - 1) * cellSize;
 					const y = (rowIdx - 1) * cellSize;
@@ -104,29 +116,12 @@ export default function AddGridSize({
 		const canvas = canvasRef.current;
 		if (!canvas || !hoveredSize) return;
 
-		const [colIdx, rowIdx] = hoveredSize.split("x").map(Number);
-		const isDisabled =
-			availableGridSizes.includes(hoveredSize) || (colIdx <= 4 && rowIdx <= 4);
-
-		if (!isDisabled) {
-			onAddSize(hoveredSize);
-			toast.success(`Added grid size: ${hoveredSize}`);
-			setOpen(false); // Close dropdown when size is selected
-		}
+		addHoveredSize();
 	};
 
 	const handleCanvasKeyDown = (e: React.KeyboardEvent<HTMLCanvasElement>) => {
 		if ((e.key === "Enter" || e.key === " ") && hoveredSize) {
-			const [colIdx, rowIdx] = hoveredSize.split("x").map(Number);
-			const isDisabled =
-				availableGridSizes.includes(hoveredSize) ||
-				(colIdx <= 4 && rowIdx <= 4);
-
-			if (!isDisabled) {
-				onAddSize(hoveredSize);
-				toast.success(`Added grid size: ${hoveredSize}`);
-				setOpen(false); // Close dropdown when size is selected
-			}
+			addHoveredSize();
 		}
 	};
 

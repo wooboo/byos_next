@@ -21,9 +21,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { addUserDevice } from "@/app/actions/device";
-import type { ComponentConfig } from "@/components/client-sidebar";
 import { StatusIndicator } from "@/components/common/status-indicator";
 import { NavUser } from "@/components/nav-user";
+import type { ComponentConfig } from "@/components/sidebar-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

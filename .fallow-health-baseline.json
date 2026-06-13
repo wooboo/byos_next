@@ -1,0 +1,608 @@
+{
+  "finding_counts": {
+    "app/(app)/admin/devices/client-page.tsx": {
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "app/(app)/admin/layout.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/(app)/admin/users/client-page.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/(app)/catalog/catalog-grid.tsx": {
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "app/(app)/device/[friendly_id]/client-page.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 5
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "app/(app)/mixup/client-page.tsx": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/(app)/playlists/client-page.tsx": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/(app)/recipes/[slug]/page.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/(app)/recipes/page.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/(app)/recipes/screens/bitcoin-price/getData.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "app/(app)/recipes/screens/immich-favorites/getData.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "app/(app)/recipes/screens/weather/getData.ts": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/(app)/recipes/screens/wikipedia/getData.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 4
+      },
+      "crap_moderate": {
+        "count": 6
+      }
+    },
+    "app/(app)/screens/[id]/page.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "app/(app)/tools/tools-components/bitmap-font-designer/add-grid-size.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/(app)/tools/tools-components/bitmap-font-designer/bitmap-font-designer-client.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "app/(app)/tools/tools-components/bitmap-font-designer/bitmap-font-editor.tsx": {
+      "crap_high": {
+        "count": 4
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "app/(app)/tools/tools-components/image-ditherer/image-ditherer.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/(auth)/recover/page.tsx": {
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "app/(auth)/sign-in/sign-in-form.tsx": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/(auth)/sign-up/page.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "app/(render)/preview/[type]/[id]/page.tsx": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "app/(render)/recipes/[slug]/preview/page.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "app/actions/admin-utils.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/actions/catalog.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "app/actions/device.ts": {
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "app/actions/execute-sql.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/actions/mixup.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/actions/playlist.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/actions/screens-params.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/actions/screens.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/actions/system.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "app/api/bitmap/[[...slug]]/route.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/api/bitmap/mixup/[id]/route.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/api/bitmap/render-utils.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/api/bitmap/screen/[id]/route.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/api/display/current/route.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/api/display/route.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "app/api/display/utils.ts": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "app/api/log/route.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "app/api/markup/route.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "app/api/playlists/items/[id]/route.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/api/png/[type]/[id]/route.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/api/setup/route.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "app/api/test-img/[[...slug]]/route.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "components/app-sidebar.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "components/common/graph.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "components/common/page-template.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "components/dashboard/db-initializer.tsx": {
+      "crap_moderate": {
+        "count": 6
+      }
+    },
+    "components/device-logs/device-logs-viewer.tsx": {
+      "crap_critical": {
+        "count": 5
+      }
+    },
+    "components/device/device-edit-form.tsx": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 4
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "components/device/device-view.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 5
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "components/logs/log-viewer-helpers.tsx": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "components/mixup/mixup-builder.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "components/playlists/duration-format.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "components/playlists/playlist-builder.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "components/playlists/playlist-filmstrip.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "components/playlists/playlist-frame-settings.tsx": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "components/playlists/playlist-live-preview.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "components/playlists/playlist-reel-card.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "components/preview/render-output-preview.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "components/preview/scaled-react-preview.tsx": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "components/preview/screen-preview-controls.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "components/recipes/recipe-preview-stage.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "components/recipes/screen-params-form.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "components/screens/create-screen-form.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "components/screens/screen-render-preview.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "components/system-logs/system-logs-viewer.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "components/ui/sheet.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "components/ui/toggle-group.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "lib/api/proxy.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "lib/catalog.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "lib/firmware.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "lib/fonts.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "lib/getInitData.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "lib/logger.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "lib/mixup/constants.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "lib/recipes/chrome-pool.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "lib/recipes/liquid-renderer.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 5
+      }
+    },
+    "lib/recipes/recipe-renderer.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "lib/recipes/renderers/takumi.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "lib/recipes/sync-react-recipes.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "lib/screens/render-target.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "scripts/take-screenshots.mjs": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "utils/helpers.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "utils/pre-satori-tailwind.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "utils/pre-satori.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "utils/render-bmp.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    }
+  },
+  "runtime_coverage_findings": [],
+  "target_keys": []
+}

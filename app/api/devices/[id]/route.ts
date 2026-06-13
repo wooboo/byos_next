@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withUserScope } from "@/lib/database/scoped-db";
 import { checkDbConnection } from "@/lib/database/utils";
 import { logError, logInfo } from "@/lib/logger";
-import type { Device } from "@/lib/types";
+import { findDeviceByIdOrFriendlyId, toDeviceApiData } from "../devices-api";
 
 /**
  * GET /api/devices/{id}
@@ -31,26 +31,9 @@ export async function GET(
 	}
 
 	try {
-		// Try to find by numeric ID first, then by friendly_id
-		// RLS handles user filtering automatically
-		const numericId = Number.parseInt(id, 10);
-
-		const device = await withUserScope(async (scopedDb) => {
-			if (!Number.isNaN(numericId)) {
-				const byId = await scopedDb
-					.selectFrom("devices")
-					.selectAll()
-					.where("id", "=", numericId.toString())
-					.executeTakeFirst();
-				if (byId) return byId;
-			}
-
-			return scopedDb
-				.selectFrom("devices")
-				.selectAll()
-				.where("friendly_id", "=", id)
-				.executeTakeFirst();
-		});
+		const device = await withUserScope((scopedDb) =>
+			findDeviceByIdOrFriendlyId(scopedDb, id),
+		);
 
 		if (!device) {
 			return NextResponse.json(
@@ -61,33 +44,8 @@ export async function GET(
 			);
 		}
 
-		const deviceObj = device as unknown as Device;
-
 		// Transform device to match TRMNL API format
-		const deviceData = {
-			id: Number.parseInt(device.id.toString(), 10),
-			name: deviceObj.name,
-			friendly_id: deviceObj.friendly_id,
-			mac_address: deviceObj.mac_address,
-			battery_voltage: deviceObj.battery_voltage
-				? Number.parseFloat(deviceObj.battery_voltage.toString())
-				: null,
-			rssi: deviceObj.rssi,
-			percent_charged: deviceObj.battery_voltage
-				? Math.min(
-						100,
-						Math.max(
-							0,
-							((Number.parseFloat(deviceObj.battery_voltage.toString()) - 3.0) /
-								(4.2 - 3.0)) *
-								100,
-						),
-					)
-				: null,
-			wifi_strength: deviceObj.rssi
-				? Math.min(100, Math.max(0, ((deviceObj.rssi + 100) / 70) * 100))
-				: null,
-		};
+		const deviceData = toDeviceApiData(device);
 
 		logInfo("Device data request successful", {
 			source: "api/devices/[id]",

@@ -1,5 +1,10 @@
-import Image from "next/image";
 import { Suspense, use } from "react";
+import {
+	EmptyRenderState,
+	RenderLoadingState,
+	RenderOutputImage,
+	ScaledRenderPreview,
+} from "@/components/preview/render-output-preview";
 import { RecipePreviewStage } from "@/components/recipes/recipe-preview-stage";
 import {
 	addDimensionsToProps,
@@ -23,48 +28,6 @@ type ScreenRenderProps = {
 	userId?: string | null;
 };
 
-function EmptyState({ children }: { children: React.ReactNode }) {
-	return (
-		<div className="absolute inset-0 flex items-center justify-center text-sm text-neutral-500">
-			{children}
-		</div>
-	);
-}
-
-function LoadingState({ label }: { label: string }) {
-	return (
-		<div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-neutral-500">
-			<span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" />
-			{label}
-		</div>
-	);
-}
-
-function ScaledToFit({
-	imageWidth,
-	imageHeight,
-	children,
-}: {
-	imageWidth: number;
-	imageHeight: number;
-	children: React.ReactNode;
-}) {
-	return (
-		<div className="absolute inset-0" style={{ containerType: "inline-size" }}>
-			<div
-				style={{
-					width: `${imageWidth}px`,
-					height: `${imageHeight}px`,
-					transform: `scale(calc(100cqi / ${imageWidth}px))`,
-					transformOrigin: "top left",
-				}}
-			>
-				{children}
-			</div>
-		</div>
-	);
-}
-
 function ScreenRenderComponent({
 	screenId,
 	recipeSlug,
@@ -76,10 +39,12 @@ function ScreenRenderComponent({
 	userId,
 }: ScreenRenderProps) {
 	const config = use(fetchRecipeConfig(recipeSlug, userId ?? undefined));
-	if (!config) return <EmptyState>Configuration not found</EmptyState>;
+	if (!config)
+		return <EmptyRenderState>Configuration not found</EmptyRenderState>;
 
 	const Component = use(Promise.resolve(fetchRecipeComponent(recipeSlug)));
-	if (!Component) return <EmptyState>Component not found</EmptyState>;
+	if (!Component)
+		return <EmptyRenderState>Component not found</EmptyRenderState>;
 
 	const props = use(
 		Promise.resolve(
@@ -104,9 +69,9 @@ function ScreenRenderComponent({
 
 	if (format === "react") {
 		return (
-			<ScaledToFit imageWidth={imageWidth} imageHeight={imageHeight}>
+			<ScaledRenderPreview imageWidth={imageWidth} imageHeight={imageHeight}>
 				<Component {...reactProps} />
-			</ScaledToFit>
+			</ScaledRenderPreview>
 		);
 	}
 
@@ -123,29 +88,24 @@ function ScreenRenderComponent({
 	);
 
 	if (format === "bitmap") {
-		if (!renders.bitmap)
-			return <EmptyState>Failed to generate bitmap</EmptyState>;
 		return (
-			<Image
-				width={imageWidth}
-				height={imageHeight}
-				src={`data:image/bmp;base64,${renders.bitmap.toString("base64")}`}
-				style={{ imageRendering: "pixelated" }}
-				alt={`${title} BMP render`}
-				className="absolute inset-0 h-full w-full object-cover"
+			<RenderOutputImage
+				format="bitmap"
+				image={renders.bitmap}
+				title={title}
+				imageWidth={imageWidth}
+				imageHeight={imageHeight}
 			/>
 		);
 	}
 
-	if (!renders.png) return <EmptyState>Failed to generate PNG</EmptyState>;
 	return (
-		<Image
-			width={imageWidth}
-			height={imageHeight}
-			src={`data:image/png;base64,${renders.png.toString("base64")}`}
-			style={{ imageRendering: "pixelated" }}
-			alt={`${title} PNG render`}
-			className="absolute inset-0 h-full w-full object-cover"
+		<RenderOutputImage
+			format="png"
+			image={renders.png}
+			title={title}
+			imageWidth={imageWidth}
+			imageHeight={imageHeight}
 		/>
 	);
 }
@@ -176,7 +136,7 @@ export function ScreenRenderPreview({
 			bitmapUrl={`/api/bitmap/screen/${screenId}.bmp`}
 			isPortrait={isPortrait}
 			bmpNode={
-				<Suspense fallback={<LoadingState label="Rendering bitmap…" />}>
+				<Suspense fallback={<RenderLoadingState label="Rendering bitmap…" />}>
 					<ScreenRenderComponent
 						screenId={screenId}
 						recipeSlug={recipeSlug}
@@ -190,7 +150,7 @@ export function ScreenRenderPreview({
 				</Suspense>
 			}
 			pngNode={
-				<Suspense fallback={<LoadingState label="Rendering PNG…" />}>
+				<Suspense fallback={<RenderLoadingState label="Rendering PNG…" />}>
 					<ScreenRenderComponent
 						screenId={screenId}
 						recipeSlug={recipeSlug}

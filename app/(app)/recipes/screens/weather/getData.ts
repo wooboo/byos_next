@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { formatShortDateTime } from "../date-format";
 
 // Export config to mark this component as dynamic
 export const dynamic = "force-dynamic";
@@ -91,6 +92,15 @@ function getWeatherDescription(code: number): string {
 	return weatherCodes[code] || "Unknown";
 }
 
+function isPrerenderFetchError(error: unknown): boolean {
+	const errorMessage = error instanceof Error ? error.message : String(error);
+	return (
+		errorMessage.includes("prerender") ||
+		errorMessage.includes("HANGING_PROMISE_REJECTION") ||
+		errorMessage.includes("prerender is complete")
+	);
+}
+
 /**
  * Geocode a location name to coordinates
  */
@@ -129,12 +139,7 @@ async function geocodeLocation(
 	} catch (error) {
 		// Silently handle prerendering errors - fetch() rejects during prerendering
 		// which is expected behavior in Next.js
-		const errorMessage = error instanceof Error ? error.message : String(error);
-		if (
-			errorMessage.includes("prerender") ||
-			errorMessage.includes("HANGING_PROMISE_REJECTION") ||
-			errorMessage.includes("prerender is complete")
-		) {
+		if (isPrerenderFetchError(error)) {
 			// Silently return null for prerendering errors
 			return null;
 		}
@@ -209,17 +214,6 @@ async function getWeatherData(
 			});
 		};
 
-		// Format the date
-		const formatDate = (dateString: string): string => {
-			const date = new Date(dateString);
-			return date.toLocaleString("en-US", {
-				month: "short",
-				day: "numeric",
-				hour: "2-digit",
-				minute: "2-digit",
-			});
-		};
-
 		// Check if we have valid current data
 		if (!data.current) {
 			throw new Error("No current weather data available");
@@ -235,7 +229,7 @@ async function getWeatherData(
 			windSpeed: formatWindSpeed(current.wind_speed_10m),
 			description: getWeatherDescription(current.weather_code),
 			location: locationName || "San Francisco, CA",
-			lastUpdated: formatDate(current.time),
+			lastUpdated: formatShortDateTime(current.time),
 			highTemp: formatTemperature(daily.temperature_2m_max[0]),
 			lowTemp: formatTemperature(daily.temperature_2m_min[0]),
 			pressure: formatPressure(current.surface_pressure),
@@ -247,12 +241,7 @@ async function getWeatherData(
 	} catch (error) {
 		// Silently handle prerendering errors - fetch() rejects during prerendering
 		// which is expected behavior in Next.js
-		const errorMessage = error instanceof Error ? error.message : String(error);
-		if (
-			errorMessage.includes("prerender") ||
-			errorMessage.includes("HANGING_PROMISE_REJECTION") ||
-			errorMessage.includes("prerender is complete")
-		) {
+		if (isPrerenderFetchError(error)) {
 			// Silently return null for prerendering errors
 			return null;
 		}

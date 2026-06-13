@@ -1,4 +1,4 @@
-import { getRegistry } from "@/lib/trmnl/registry";
+import { registryResponse } from "@/lib/trmnl/registry";
 
 /**
  * GET /api/models
@@ -8,16 +8,5 @@ import { getRegistry } from "@/lib/trmnl/registry";
  * Set TRMNL_PROXY_LIVE=true to always proxy upstream.
  */
 export async function GET() {
-	try {
-		const data = await getRegistry("models");
-		return Response.json(data);
-	} catch (error) {
-		return Response.json(
-			{
-				error: "Failed to load models registry",
-				message: error instanceof Error ? error.message : "Unknown error",
-			},
-			{ status: 502 },
-		);
-	}
+	return registryResponse("models");
 }

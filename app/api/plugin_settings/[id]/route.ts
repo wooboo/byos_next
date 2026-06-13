@@ -1,4 +1,4 @@
-import { proxyToTRMNL } from "@/lib/api/proxy";
+import { proxyPluginSetting } from "./proxy";
 
 /**
  * DELETE /api/plugin_settings/{id}
@@ -10,8 +10,5 @@ export async function DELETE(
 	request: Request,
 	{ params }: { params: Promise<{ id: string }> },
 ) {
-	const { id } = await params;
-	return proxyToTRMNL(`/api/plugin_settings/${id}`, "DELETE", request, {
-		forwardAuth: true,
-	});
+	return proxyPluginSetting(request, { params }, "", "DELETE");
 }

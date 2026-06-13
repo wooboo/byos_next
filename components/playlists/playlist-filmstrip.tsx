@@ -3,12 +3,14 @@
 import { Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
+import { PerforationMarks } from "@/components/playlists/perforation-marks";
 import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/constants";
 import { cn } from "@/lib/utils";
+import { formatPlaylistDuration } from "./duration-format";
 
 export interface FilmstripFrame {
 	id: string;
@@ -38,7 +40,7 @@ export function PlaylistFilmstrip({
 	const scrollerRef = useRef<HTMLDivElement>(null);
 
 	const totalSeconds = frames.reduce((sum, f) => sum + f.duration, 0);
-	const totalLabel = formatDuration(totalSeconds);
+	const totalLabel = formatPlaylistDuration(totalSeconds);
 
 	return (
 		<div className="rounded-2xl border bg-card">
@@ -106,7 +108,11 @@ export function PlaylistFilmstrip({
 							aria-label={`Frame ${index + 1}: ${frame.label}`}
 							aria-pressed={isActive}
 						>
-							<FilmPerforations />
+							<PerforationMarks
+								count={8}
+								containerClassName="flex h-3 items-center justify-around bg-neutral-950 px-1"
+								markClassName="h-1.5 w-2 rounded-[2px] bg-neutral-800"
+							/>
 
 							<div className="px-3 py-2">
 								<div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-neutral-300">
@@ -150,7 +156,11 @@ export function PlaylistFilmstrip({
 								</div>
 							</div>
 
-							<FilmPerforations />
+							<PerforationMarks
+								count={8}
+								containerClassName="flex h-3 items-center justify-around bg-neutral-950 px-1"
+								markClassName="h-1.5 w-2 rounded-[2px] bg-neutral-800"
+							/>
 						</button>
 					);
 				})}
@@ -171,27 +181,4 @@ export function PlaylistFilmstrip({
 			</div>
 		</div>
 	);
-}
-
-function FilmPerforations() {
-	return (
-		<div className="flex h-3 items-center justify-around bg-neutral-950 px-1">
-			{Array.from({ length: 8 }).map((_, i) => (
-				<span
-					key={i}
-					className="h-1.5 w-2 rounded-[2px] bg-neutral-800"
-					aria-hidden
-				/>
-			))}
-		</div>
-	);
-}
-
-function formatDuration(seconds: number): string {
-	if (seconds <= 0) return "0s";
-	const m = Math.floor(seconds / 60);
-	const s = seconds % 60;
-	if (m === 0) return `${s}s`;
-	if (s === 0) return `${m}m`;
-	return `${m}m ${s}s`;
 }

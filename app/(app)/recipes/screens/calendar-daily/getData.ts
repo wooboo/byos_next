@@ -16,21 +16,6 @@ const DAY_NAMES = [
 	"piątek",
 	"sobota",
 ];
-const MONTHS_PL = [
-	"stycznia",
-	"lutego",
-	"marca",
-	"kwietnia",
-	"maja",
-	"czerwca",
-	"lipca",
-	"sierpnia",
-	"września",
-	"października",
-	"listopada",
-	"grudnia",
-];
-
 export default async function getData(
 	params?: Record<string, unknown>,
 ): Promise<DayData> {

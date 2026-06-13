@@ -23,7 +23,12 @@ import {
 import { cn } from "@/lib/utils";
 import AddGridSize from "./add-grid-size";
 import BitmapFontEditor from "./bitmap-font-editor";
-import { base64ToBinary, binaryToBase64 } from "./bitmap-font-utils";
+import {
+	base64ToBinary,
+	binaryToBase64,
+	binaryToSvgPath,
+	parseGridSize,
+} from "./bitmap-font-utils";
 
 // Custom debounce hook
 function useDebounce<T>(value: T, delay: number): T {
@@ -240,7 +245,7 @@ const CharacterItem = memo(
 		selectedGridSize: string;
 		isSelected?: boolean;
 	}) => {
-		const [width, height] = selectedGridSize.split("x").map(Number);
+		const [width, height] = parseGridSize(selectedGridSize);
 
 		// Render SVG content inline instead of using a separate component
 		const renderSvgContent = () => {
@@ -253,22 +258,8 @@ const CharacterItem = memo(
 			}
 
 			try {
-				// Use binary string directly, ensure it's the right length
-				const binaryArray = charData
-					.padEnd(width * height, "0")
-					.slice(0, width * height);
-
 				// Create a single path element instead of multiple rects
-				const pathData = Array.from({ length: width * height })
-					.map((_, i) => {
-						if (i >= binaryArray.length) return "";
-						const isBlack = binaryArray[i] === "1";
-						if (!isBlack) return "";
-						const x = i % width;
-						const y = Math.floor(i / width);
-						return `M ${x} ${y} h 1 v 1 h -1 z`;
-					})
-					.join(" ");
+				const pathData = binaryToSvgPath(charData, width, height);
 
 				return (
 					<svg
@@ -426,7 +417,7 @@ const SentencePreview = memo(
 		onPreviewScaleChange: (newScale: number) => void;
 		onPreviewGapChange: (newGap: number) => void;
 	}) => {
-		const [width, height] = selectedGridSize.split("x").map(Number);
+		const [width, height] = parseGridSize(selectedGridSize);
 		const charMap = characterBitmaps;
 		const uniqueChars = new Set(Array.from(previewText)).size;
 
@@ -511,19 +502,7 @@ const SentencePreview = memo(
 				}
 
 				// Generate path for this character
-				const binaryArray = binaryString
-					.padEnd(width * height, "0")
-					.slice(0, width * height);
-				const pathData = Array.from({ length: width * height })
-					.map((_, i) => {
-						if (i >= binaryArray.length) return "";
-						const isBlack = binaryArray[i] === "1";
-						if (!isBlack) return "";
-						const x = i % width;
-						const y = Math.floor(i / width);
-						return `M ${x} ${y} h 1 v 1 h -1 z`;
-					})
-					.join(" ");
+				const pathData = binaryToSvgPath(binaryString, width, height);
 
 				// Add path with position
 				paths.push({
@@ -807,7 +786,7 @@ export default function BitmapFontDesignerClient() {
 		// Update the availableGridSizes list
 		setAvailableGridSizes((prev) => {
 			const newSizes = [...prev, newSize].sort(
-				(a, b) => parseInt(a.split("x")[0], 10) - parseInt(b.split("x")[0], 10),
+				(a, b) => parseGridSize(a)[0] - parseGridSize(b)[0],
 			);
 			return newSizes;
 		});
@@ -986,7 +965,7 @@ export default function BitmapFontDesignerClient() {
 		// Get the latest character maps from the local state object
 		const fontDataToSave = availableGridSizes
 			.map((size) => {
-				const [width, height] = size.split("x").map(Number);
+				const [width, height] = parseGridSize(size);
 				const charMap = fontDataRef.current[size] || new Map();
 
 				// Make sure to use the latest data for the current grid size

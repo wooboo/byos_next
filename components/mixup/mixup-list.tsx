@@ -1,6 +1,7 @@
 "use client";
 
 import { Edit3, LayoutGrid, Plus, Trash2 } from "lucide-react";
+import { CreateActionTile } from "@/components/common/create-action-tile";
 import { FormattedDate } from "@/components/common/formatted-date";
 import { Button } from "@/components/ui/button";
 import { getLayoutById } from "@/lib/mixup/constants";
@@ -28,28 +29,19 @@ export function MixupList({
 }: MixupListProps) {
 	if (mixups.length === 0) {
 		return (
-			<button
-				type="button"
+			<CreateActionTile
 				onClick={onCreateMixup}
-				className={cn(
-					"flex w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed bg-muted/20 px-6 py-16 text-center",
-					"transition-colors hover:border-primary hover:bg-primary/5",
-				)}
-			>
-				<div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-					<LayoutGrid className="h-7 w-7" />
-				</div>
-				<div>
-					<div className="text-base font-semibold">No mixups yet</div>
-					<p className="mt-1 text-sm text-muted-foreground">
-						Blend up to four recipes on one screen with a layout of your choice.
-					</p>
-				</div>
-				<div className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
-					<Plus className="h-4 w-4" />
-					Create your first mixup
-				</div>
-			</button>
+				icon={<LayoutGrid className="h-7 w-7" />}
+				title="No mixups yet"
+				description="Blend up to four recipes on one screen with a layout of your choice."
+				actionLabel={
+					<>
+						<Plus className="h-4 w-4" />
+						Create your first mixup
+					</>
+				}
+				className="w-full px-6 py-16 text-base [&_p]:text-sm"
+			/>
 		);
 	}
 
@@ -146,24 +138,14 @@ export function MixupList({
 				);
 			})}
 			{onCreateMixup && (
-				<button
-					type="button"
+				<CreateActionTile
 					onClick={onCreateMixup}
-					className={cn(
-						"flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed bg-muted/20 p-6",
-						"transition-colors hover:border-primary hover:bg-primary/5",
-					)}
-				>
-					<div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-						<Plus className="h-6 w-6" />
-					</div>
-					<div className="text-center">
-						<div className="text-sm font-semibold">New mixup</div>
-						<p className="mt-0.5 text-xs text-muted-foreground">
-							Blend recipes onto a single screen
-						</p>
-					</div>
-				</button>
+					icon={<Plus className="h-6 w-6" />}
+					title="New mixup"
+					description="Blend recipes onto a single screen"
+					className="min-h-[320px] p-6 text-sm [&_p]:mt-0.5 [&_p]:text-xs"
+					iconClassName="h-12 w-12"
+				/>
 			)}
 		</div>
 	);

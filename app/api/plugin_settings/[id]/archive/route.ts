@@ -1,4 +1,5 @@
-import { proxyToTRMNL, proxyToTRMNLMultipart } from "@/lib/api/proxy";
+import { proxyToTRMNLMultipart } from "@/lib/api/proxy";
+import { pluginSettingPath, proxyPluginSetting } from "../proxy";
 
 /**
  * GET /api/plugin_settings/{id}/archive
@@ -10,10 +11,7 @@ export async function GET(
 	request: Request,
 	{ params }: { params: Promise<{ id: string }> },
 ) {
-	const { id } = await params;
-	return proxyToTRMNL(`/api/plugin_settings/${id}/archive`, "GET", request, {
-		forwardAuth: true,
-	});
+	return proxyPluginSetting(request, { params }, "/archive");
 }
 
 /**
@@ -26,8 +24,8 @@ export async function POST(
 	request: Request,
 	{ params }: { params: Promise<{ id: string }> },
 ) {
-	const { id } = await params;
-	return proxyToTRMNLMultipart(`/api/plugin_settings/${id}/archive`, request, {
+	const path = await pluginSettingPath({ params }, "/archive");
+	return proxyToTRMNLMultipart(path, request, {
 		forwardAuth: true,
 	});
 }

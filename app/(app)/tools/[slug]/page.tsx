@@ -1,7 +1,14 @@
 import { notFound } from "next/navigation";
-import { cache, Suspense } from "react";
+import { type ComponentType, cache, Suspense } from "react";
 import tools from "@/app/(app)/tools/tools.json";
+import BitmapFontDesigner from "@/app/(app)/tools/tools-components/bitmap-font-designer/bitmap-font-designer";
+import ImageDitherer from "@/app/(app)/tools/tools-components/image-ditherer/image-ditherer";
 import { PageTemplate } from "@/components/common/page-template";
+
+const toolComponents = {
+	"bitmap-font-designer": BitmapFontDesigner,
+	"image-ditherer": ImageDitherer,
+} satisfies Record<keyof typeof tools, ComponentType>;
 
 export async function generateMetadata({
 	params,
@@ -30,19 +37,13 @@ export async function generateStaticParams() {
 
 // Fetch component for a recipe
 const fetchComponent = cache(async (slug: string) => {
-	try {
-		// Use the componentPath from tools.json
-		console.log(
-			`Loading component: @/app/(app)/tools/tools-components/${slug}/${slug}.tsx`,
-		);
-		const { default: Component } = await import(
-			`@/app/(app)/tools/tools-components/${slug}/${slug}.tsx`
-		);
-		return Component;
-	} catch (error) {
-		console.error(`Error loading component for ${slug}:`, error);
+	const loadComponent = toolComponents[slug as keyof typeof toolComponents];
+
+	if (!loadComponent) {
 		return null;
 	}
+
+	return loadComponent;
 });
 
 // Dynamic tool component loader

@@ -9,7 +9,168 @@ import {
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/recipe-renderer";
 import type { Device } from "@/lib/types";
-import { parseRequestHeaders } from "../utils";
+import { parseRequestHeaders, type RequestHeaders } from "../utils";
+
+const jsonError = (status: number, error: string) =>
+	NextResponse.json({ status, error }, { status });
+
+const unauthorizedResponse = () =>
+	jsonError(401, "Access-Token header is required");
+
+const databaseUnavailableResponse = (apiKey: string) => {
+	logInfo("Database not available for /api/display/current", {
+		source: "api/display/current",
+		metadata: { apiKey },
+	});
+
+	return jsonError(503, "Database not available");
+};
+
+const deviceNotFoundResponse = () => jsonError(404, "Device not found");
+
+const internalServerErrorResponse = (error: unknown, apiKey: string) => {
+	logError(error as Error, {
+		source: "api/display/current",
+		metadata: { apiKey },
+	});
+
+	return jsonError(500, "Internal server error");
+};
+
+const findDeviceByApiKey = async (apiKey: string) =>
+	db
+		.selectFrom("devices")
+		.selectAll()
+		.where("api_key", "=", apiKey)
+		.executeTakeFirst();
+
+const defaultDimension = (
+	value: Device["screen_width"] | Device["screen_height"],
+	fallback: number,
+) => value || fallback;
+
+const getDeviceDimensions = (device: Device) => {
+	const orientation = device.screen_orientation || "landscape";
+	const landscapeDimensions = {
+		width: defaultDimension(device.screen_width, DEFAULT_IMAGE_WIDTH),
+		height: defaultDimension(device.screen_height, DEFAULT_IMAGE_HEIGHT),
+	};
+	const portraitDimensions = {
+		width: defaultDimension(device.screen_height, DEFAULT_IMAGE_HEIGHT),
+		height: defaultDimension(device.screen_width, DEFAULT_IMAGE_WIDTH),
+	};
+
+	return orientation === "landscape" ? landscapeDimensions : portraitDimensions;
+};
+
+const getGrayscaleLevels = (device: Device) => {
+	if (
+		device.grayscale === 2 ||
+		device.grayscale === 4 ||
+		device.grayscale === 16
+	) {
+		return device.grayscale;
+	}
+
+	return 2;
+};
+
+const getScreenTarget = (device: Device) => {
+	const screenId = device.screen_id || device.screen || "not-found";
+	const screenType = resolveRenderableContentType(device.screen_type, screenId);
+	const mixupPath = getMixupScreenPath(device);
+
+	if (mixupPath) {
+		return {
+			screenId,
+			screenPath: mixupPath,
+			needsAccessToken: true,
+		};
+	}
+
+	if (screenType === "screen") {
+		return {
+			screenId,
+			screenPath: `screen/${screenId}`,
+			needsAccessToken: true,
+		};
+	}
+
+	return {
+		screenId,
+		screenPath: screenId,
+		needsAccessToken: false,
+	};
+};
+
+const getMixupScreenPath = (device: Device) => {
+	if (device.display_mode !== DeviceDisplayMode.MIXUP) {
+		return null;
+	}
+
+	return device.mixup_id ? `mixup/${device.mixup_id}` : null;
+};
+
+const getRefreshRate = (device: Device) => {
+	const refreshSchedule = device.refresh_schedule as {
+		default_refresh_rate: number;
+	} | null;
+
+	return refreshSchedule?.default_refresh_rate || 180;
+};
+
+const buildImageUrl = ({
+	apiKey,
+	device,
+	headers,
+}: {
+	apiKey: string;
+	device: Device;
+	headers: RequestHeaders;
+}) => {
+	const baseUrl = `${headers.hostUrl}/api/bitmap`;
+	const { width, height } = getDeviceDimensions(device);
+	const grayscaleLevels = getGrayscaleLevels(device);
+	const { screenPath, needsAccessToken } = getScreenTarget(device);
+	const accessTokenParam = needsAccessToken
+		? `&access_token=${encodeURIComponent(apiKey)}`
+		: "";
+
+	return `${baseUrl}/${screenPath}.bmp?width=${width}&height=${height}&grayscale=${grayscaleLevels}${accessTokenParam}`;
+};
+
+const currentDisplayResponse = ({
+	apiKey,
+	device,
+	headers,
+}: {
+	apiKey: string;
+	device: Device;
+	headers: RequestHeaders;
+}) => {
+	const { screenId } = getScreenTarget(device);
+	const imageUrl = buildImageUrl({ apiKey, device, headers });
+	const refreshRate = getRefreshRate(device);
+
+	logInfo("Current display request successful", {
+		source: "api/display/current",
+		metadata: {
+			deviceId: device.friendly_id,
+			screen: screenId,
+		},
+	});
+
+	return NextResponse.json(
+		{
+			status: 200,
+			refresh_rate: refreshRate,
+			image_url: imageUrl,
+			filename: `${screenId}.bmp`,
+			rendered_at: device.last_update_time || new Date().toISOString(),
+		},
+		{ status: 200 },
+	);
+};
 
 /**
  * GET /api/display/current
@@ -23,123 +184,24 @@ export async function GET(request: Request) {
 	const { apiKey } = headers;
 
 	if (!apiKey) {
-		return NextResponse.json(
-			{
-				status: 401,
-				error: "Access-Token header is required",
-			},
-			{ status: 401 },
-		);
+		return unauthorizedResponse();
 	}
 
 	const { ready } = await checkDbConnection();
 	if (!ready) {
-		logInfo("Database not available for /api/display/current", {
-			source: "api/display/current",
-			metadata: { apiKey },
-		});
-		return NextResponse.json(
-			{
-				status: 503,
-				error: "Database not available",
-			},
-			{ status: 503 },
-		);
+		return databaseUnavailableResponse(apiKey);
 	}
 
 	try {
-		const device = await db
-			.selectFrom("devices")
-			.selectAll()
-			.where("api_key", "=", apiKey)
-			.executeTakeFirst();
+		const device = await findDeviceByApiKey(apiKey);
 
 		if (!device) {
-			return NextResponse.json(
-				{
-					status: 404,
-					error: "Device not found",
-				},
-				{ status: 404 },
-			);
+			return deviceNotFoundResponse();
 		}
 
 		const deviceData = device as unknown as Device;
-		const baseUrl = `${headers.hostUrl}/api/bitmap`;
-		const orientation = deviceData.screen_orientation || "landscape";
-		const deviceWidth =
-			orientation === "landscape"
-				? deviceData.screen_width || DEFAULT_IMAGE_WIDTH
-				: deviceData.screen_height || DEFAULT_IMAGE_HEIGHT;
-		const deviceHeight =
-			orientation === "landscape"
-				? deviceData.screen_height || DEFAULT_IMAGE_HEIGHT
-				: deviceData.screen_width || DEFAULT_IMAGE_WIDTH;
-
-		// Get grayscale levels (default to 2 if not set)
-		const grayscaleLevels =
-			deviceData.grayscale === 2 ||
-			deviceData.grayscale === 4 ||
-			deviceData.grayscale === 16
-				? deviceData.grayscale
-				: 2;
-
-		const screenId = deviceData.screen_id || deviceData.screen || "not-found";
-		const screenType = resolveRenderableContentType(
-			deviceData.screen_type,
-			screenId,
-		);
-		const needsAccessToken =
-			(deviceData.display_mode === DeviceDisplayMode.MIXUP &&
-				!!deviceData.mixup_id) ||
-			screenType === "screen";
-		const screenPath =
-			deviceData.display_mode === DeviceDisplayMode.MIXUP && deviceData.mixup_id
-				? `mixup/${deviceData.mixup_id}`
-				: screenType === "screen"
-					? `screen/${screenId}`
-					: screenId;
-		const screenToDisplay = screenId;
-		const accessTokenParam = needsAccessToken
-			? `&access_token=${encodeURIComponent(apiKey)}`
-			: "";
-		const imageUrl = `${baseUrl}/${screenPath}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}${accessTokenParam}`;
-
-		// Calculate refresh rate from schedule or use default
-		const refreshSchedule = deviceData.refresh_schedule as {
-			default_refresh_rate: number;
-		} | null;
-		const refreshRate = refreshSchedule?.default_refresh_rate || 180;
-
-		logInfo("Current display request successful", {
-			source: "api/display/current",
-			metadata: {
-				deviceId: deviceData.friendly_id,
-				screen: screenToDisplay,
-			},
-		});
-
-		return NextResponse.json(
-			{
-				status: 200,
-				refresh_rate: refreshRate,
-				image_url: imageUrl,
-				filename: `${screenToDisplay}.bmp`,
-				rendered_at: deviceData.last_update_time || new Date().toISOString(),
-			},
-			{ status: 200 },
-		);
+		return currentDisplayResponse({ apiKey, device: deviceData, headers });
 	} catch (error) {
-		logError(error as Error, {
-			source: "api/display/current",
-			metadata: { apiKey },
-		});
-		return NextResponse.json(
-			{
-				status: 500,
-				error: "Internal server error",
-			},
-			{ status: 500 },
-		);
+		return internalServerErrorResponse(error, apiKey);
 	}
 }
