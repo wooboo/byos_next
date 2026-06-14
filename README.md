@@ -131,7 +131,7 @@ Create `.env.local` (for `pnpm dev`) or `.env` (for Docker Compose) with the key
 - **No-DB mode:** run `pnpm dev` without DB env vars to preview screens only (device management disabled).
 
 ## GitHub + Dokploy Deployment
-The GitHub Actions workflow in `.github/workflows/docker-publish.yml` builds the Docker image and pushes it to GitHub Container Registry.
+The GitHub Actions workflow in `.github/workflows/release.yml` builds the Docker image and pushes it to GitHub Container Registry after a release.
 
 The image is published as:
 
@@ -139,7 +139,7 @@ The image is published as:
 ghcr.io/<owner>/<repo>:latest
 ```
 
-In Dokploy, use `docker-compose.dokploy.yml` and set environment variables from `dokploy.env.example`. `APP_IMAGE` must point at the pushed image, usually `ghcr.io/<owner>/<repo>:latest`. Trigger the Dokploy deploy manually after the GitHub image build finishes.
+In Dokploy, use `docker-compose.dokploy.yml` and set environment variables from `dokploy.env.example`. `APP_IMAGE` must point at the pushed image, usually `ghcr.io/<owner>/<repo>:latest`. Trigger the Dokploy deploy manually after the release image build finishes.
 
 ## Project Structure
 - `app/` - Next.js routes and screens (including `/recipes`).
