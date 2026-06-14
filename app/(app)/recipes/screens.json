@@ -279,6 +279,63 @@
 		"version": "0.1.0",
 		"category": "display-components"
 	},
+	"immich-favorites": {
+		"title": "Immich Favorites",
+		"published": true,
+		"createdAt": "2026-05-24T00:00:00Z",
+		"updatedAt": "2026-05-24T00:00:00Z",
+		"description": "Random favorite photo from Immich. Configure the Immich server URL and API key.",
+		"componentPath": "./screens/immich-favorites",
+		"hasDataFetch": true,
+		"props": {},
+		"params": {
+			"serverUrl": {
+				"type": "string",
+				"label": "Immich Server URL",
+				"description": "Base URL of your Immich instance.",
+				"default": "https://immich.lab.zabowka.pl",
+				"placeholder": "https://immich.example.com"
+			},
+			"apiKey": {
+				"type": "string",
+				"label": "Immich API Key",
+				"description": "API key used to fetch favorite photos. Falls back to IMMICH_API_KEY when empty.",
+				"default": "",
+				"placeholder": "Immich API key"
+			}
+		},
+		"tags": ["photos", "immich", "api", "configurable"],
+		"author": {
+			"name": "wooboo",
+			"github": ""
+		},
+		"renderSettings": {
+			"doubleSizeForSharperText": true
+		},
+		"version": "0.1.0",
+		"category": "display-components"
+	},
+	"school-schedule": {
+		"title": "Plan Lekcji",
+		"published": true,
+		"createdAt": "2026-05-24T00:00:00Z",
+		"updatedAt": "2026-05-24T00:00:00Z",
+		"description": "Weekly school schedule for two children from the bundled schedule data.",
+		"componentPath": "./screens/school-schedule",
+		"hasDataFetch": true,
+		"props": {},
+		"params": {},
+		"tags": ["school", "schedule", "calendar"],
+		"author": {
+			"name": "wooboo",
+			"github": ""
+		},
+		"renderSettings": {
+			"doubleSizeForSharperText": false
+		},
+		"version": "0.1.0",
+		"category": "display-components"
+	},
 	"not-found": {
 		"title": "Not Found Recipe",
 		"published": true,
