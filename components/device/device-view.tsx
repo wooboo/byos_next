@@ -36,7 +36,7 @@ interface FirmwareInfo {
 	isUpdateAvailable: boolean;
 }
 
-const getSignalQuality = (rssi: number): string => {
+export const getSignalQuality = (rssi: number): string => {
 	if (rssi >= -50) return "Excellent";
 	if (rssi >= -60) return "Good";
 	if (rssi >= -70) return "Fair";
@@ -44,7 +44,7 @@ const getSignalQuality = (rssi: number): string => {
 	return "Very Poor";
 };
 
-const calculateRefreshPerDay = (
+export const calculateRefreshPerDay = (
 	deviceData: Device & { status?: string; type?: string },
 ): number => {
 	if (!deviceData?.refresh_schedule) return 0;
@@ -93,7 +93,7 @@ type DevicePreviewModel = {
 	reactSrc: string;
 };
 
-function getDevicePreviewModel({
+export function getDevicePreviewModel({
 	device,
 	playlistScreens,
 	deviceWidth,

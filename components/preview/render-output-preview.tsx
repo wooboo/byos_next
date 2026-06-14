@@ -7,6 +7,31 @@ type EncodedRender = {
 export type RenderOutputFormat = "bitmap" | "png";
 type RenderOutputs = Partial<Record<RenderOutputFormat, EncodedRender | null>>;
 
+export function getScaledRenderPreviewStyle(
+	imageWidth: number,
+	imageHeight: number,
+) {
+	return {
+		container: {
+			containerType: "inline-size",
+		} as React.CSSProperties,
+		content: {
+			width: `${imageWidth}px`,
+			height: `${imageHeight}px`,
+			transform: `scale(calc(100cqi / ${imageWidth}px))`,
+			transformOrigin: "top left",
+		},
+	};
+}
+
+export function getRenderOutputMetadata(format: RenderOutputFormat) {
+	return {
+		errorLabel: format === "bitmap" ? "bitmap" : "PNG",
+		imageType: format === "bitmap" ? "bmp" : "png",
+		label: format === "bitmap" ? "BMP" : "PNG",
+	};
+}
+
 export function EmptyRenderState({ children }: { children: React.ReactNode }) {
 	return (
 		<div className="absolute inset-0 flex items-center justify-center text-sm text-neutral-500">
@@ -33,21 +58,11 @@ export function ScaledRenderPreview({
 	imageHeight: number;
 	children: React.ReactNode;
 }) {
+	const styles = getScaledRenderPreviewStyle(imageWidth, imageHeight);
+
 	return (
-		<div
-			className="absolute inset-0"
-			style={{ containerType: "inline-size" } as React.CSSProperties}
-		>
-			<div
-				style={{
-					width: `${imageWidth}px`,
-					height: `${imageHeight}px`,
-					transform: `scale(calc(100cqi / ${imageWidth}px))`,
-					transformOrigin: "top left",
-				}}
-			>
-				{children}
-			</div>
+		<div className="absolute inset-0" style={styles.container}>
+			<div style={styles.content}>{children}</div>
 		</div>
 	);
 }
@@ -65,24 +80,23 @@ export function RenderOutputImage({
 	imageWidth: number;
 	imageHeight: number;
 }) {
+	const metadata = getRenderOutputMetadata(format);
+
 	if (!image) {
 		return (
 			<EmptyRenderState>
-				Failed to generate {format === "bitmap" ? "bitmap" : "PNG"}
+				Failed to generate {metadata.errorLabel}
 			</EmptyRenderState>
 		);
 	}
-
-	const imageType = format === "bitmap" ? "bmp" : "png";
-	const label = format === "bitmap" ? "BMP" : "PNG";
 
 	return (
 		<Image
 			width={imageWidth}
 			height={imageHeight}
-			src={`data:image/${imageType};base64,${image.toString("base64")}`}
+			src={`data:image/${metadata.imageType};base64,${image.toString("base64")}`}
 			style={{ imageRendering: "pixelated" }}
-			alt={`${title} ${label} render`}
+			alt={`${title} ${metadata.label} render`}
 			className="absolute inset-0 h-full w-full object-cover"
 		/>
 	);

@@ -28,6 +28,44 @@ interface PlaylistFilmstripProps {
 	onAdd: () => void;
 }
 
+export function getPlaylistFilmstripSummary(frames: FilmstripFrame[]) {
+	const totalSeconds = frames.reduce((sum, frame) => sum + frame.duration, 0);
+
+	return {
+		frameCountLabel: `${frames.length} ${frames.length === 1 ? "frame" : "frames"}`,
+		totalLabel: formatPlaylistDuration(totalSeconds),
+	};
+}
+
+export function getPlaylistFilmstripFrameClassName({
+	isActive,
+	isOver,
+	isDragging,
+}: {
+	isActive: boolean;
+	isOver: boolean;
+	isDragging: boolean;
+}) {
+	return cn(
+		"group relative shrink-0 cursor-grab active:cursor-grabbing",
+		"w-[180px] overflow-hidden rounded-xl border-2 bg-neutral-900 transition-all",
+		isActive
+			? "border-primary shadow-[0_0_0_3px] shadow-primary/20"
+			: "border-transparent hover:border-border",
+		isOver && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+		isDragging && "opacity-40",
+	);
+}
+
+export function getPlaylistFilmstripFrameSrc(frame: FilmstripFrame) {
+	return playlistFrameBmpUrl(
+		frame.screen_id,
+		frame.screen_type,
+		DEFAULT_IMAGE_WIDTH,
+		DEFAULT_IMAGE_HEIGHT,
+	);
+}
+
 export function PlaylistFilmstrip({
 	frames,
 	activeIndex,
@@ -38,9 +76,7 @@ export function PlaylistFilmstrip({
 	const [dragIndex, setDragIndex] = useState<number | null>(null);
 	const [overIndex, setOverIndex] = useState<number | null>(null);
 	const scrollerRef = useRef<HTMLDivElement>(null);
-
-	const totalSeconds = frames.reduce((sum, f) => sum + f.duration, 0);
-	const totalLabel = formatPlaylistDuration(totalSeconds);
+	const summary = getPlaylistFilmstripSummary(frames);
 
 	return (
 		<div className="rounded-2xl border bg-card">
@@ -48,8 +84,7 @@ export function PlaylistFilmstrip({
 				<div className="flex items-center gap-2 text-sm">
 					<span className="font-medium">Timeline</span>
 					<span className="text-muted-foreground">
-						{frames.length} {frames.length === 1 ? "frame" : "frames"} ·{" "}
-						{totalLabel} loop
+						{summary.frameCountLabel} · {summary.totalLabel} loop
 					</span>
 				</div>
 			</div>
@@ -95,16 +130,11 @@ export function PlaylistFilmstrip({
 								setDragIndex(null);
 								setOverIndex(null);
 							}}
-							className={cn(
-								"group relative shrink-0 cursor-grab active:cursor-grabbing",
-								"w-[180px] overflow-hidden rounded-xl border-2 bg-neutral-900 transition-all",
-								isActive
-									? "border-primary shadow-[0_0_0_3px] shadow-primary/20"
-									: "border-transparent hover:border-border",
-								isOver &&
-									"ring-2 ring-primary ring-offset-2 ring-offset-background",
-								dragIndex === index && "opacity-40",
-							)}
+							className={getPlaylistFilmstripFrameClassName({
+								isActive,
+								isOver,
+								isDragging: dragIndex === index,
+							})}
 							aria-label={`Frame ${index + 1}: ${frame.label}`}
 							aria-pressed={isActive}
 						>
@@ -125,21 +155,11 @@ export function PlaylistFilmstrip({
 								<DeviceFrame size="sm" flat>
 									<picture>
 										<source
-											srcSet={playlistFrameBmpUrl(
-												frame.screen_id,
-												frame.screen_type,
-												DEFAULT_IMAGE_WIDTH,
-												DEFAULT_IMAGE_HEIGHT,
-											)}
+											srcSet={getPlaylistFilmstripFrameSrc(frame)}
 											type="image/bmp"
 										/>
 										<img
-											src={playlistFrameBmpUrl(
-												frame.screen_id,
-												frame.screen_type,
-												DEFAULT_IMAGE_WIDTH,
-												DEFAULT_IMAGE_HEIGHT,
-											)}
+											src={getPlaylistFilmstripFrameSrc(frame)}
 											alt={frame.label}
 											width={DEFAULT_IMAGE_WIDTH}
 											height={DEFAULT_IMAGE_HEIGHT}

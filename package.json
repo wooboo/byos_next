@@ -10,7 +10,8 @@
 		"dev": "pnpm generate:sql && next dev --turbopack --port 3001",
 		"build": "next build",
 		"start": "next start",
-		"test": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-transform-types --test tests/*.test.ts",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage",
 		"lint": "biome check ./app ./components ./lib ./utils ./hooks ./tests",
 		"lint:fix": "biome check --write --unsafe ./app ./components ./lib ./utils ./hooks ./tests",
 		"typecheck": "tsc --noEmit",
@@ -87,14 +88,19 @@
 		"@types/pg": "^8.20.0",
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
+		"@vitest/coverage-v8": "^4.1.8",
 		"baseline-browser-mapping": "^2.10.21",
+		"c8": "^11.0.0",
 		"eslint": "^9.39.2",
 		"eslint-config-next": "16.1.6",
 		"eslint-plugin-react-hooks": "^7.0.1",
+		"jsdom": "^29.1.1",
 		"kysely-codegen": "^0.20.0",
 		"shadcn": "^4.4.0",
 		"tailwindcss": "^4.2.4",
-		"typescript": "^6.0.3"
+		"tsx": "^4.22.4",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.8"
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [

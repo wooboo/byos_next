@@ -33,7 +33,7 @@ const STATUS_COLORS: Record<SqlExecutionStatus, string> = {
 	warning: "text-amber-600 dark:text-amber-400",
 };
 
-function getStatusText(status: SqlExecutionStatus) {
+export function getStatusText(status: SqlExecutionStatus) {
 	const statusTextByStatus: Partial<Record<SqlExecutionStatus, string>> = {
 		loading: "running...",
 		success: "succeeded!",
@@ -44,13 +44,13 @@ function getStatusText(status: SqlExecutionStatus) {
 	return statusTextByStatus[status] ?? "";
 }
 
-function getTitleWithStatus(title: string, status: SqlExecutionStatus) {
+export function getTitleWithStatus(title: string, status: SqlExecutionStatus) {
 	const statusText = getStatusText(status);
 
 	return `-- ${title}${statusText ? ` (${statusText})` : ""}`;
 }
 
-function getStatusColor(status: SqlExecutionStatus) {
+export function getStatusColor(status: SqlExecutionStatus) {
 	return STATUS_COLORS[status];
 }
 
@@ -65,13 +65,15 @@ function StatusIcon({ status }: { status: SqlExecutionStatus }) {
 	return icons[status] ?? null;
 }
 
-function getSqlStatuses(executionState: SqlExecutionState | null) {
+export function getSqlStatuses(executionState: SqlExecutionState | null) {
 	return executionState
 		? Object.values(executionState).map((item) => item.status)
 		: [];
 }
 
-function allStatementsSucceeded(executionState: SqlExecutionState | null) {
+export function allStatementsSucceeded(
+	executionState: SqlExecutionState | null,
+) {
 	const statuses = getSqlStatuses(executionState);
 	const noLoading = !statuses.some((status) => status === "loading");
 
@@ -82,7 +84,7 @@ function allStatementsSucceeded(executionState: SqlExecutionState | null) {
 	);
 }
 
-function createInitialExecutionState() {
+export function createInitialExecutionState() {
 	return Object.keys(SQL_STATEMENTS).reduce((acc, key) => {
 		acc[key as SqlStatementKey] = {
 			status: "loading",
@@ -93,15 +95,15 @@ function createInitialExecutionState() {
 	}, {} as SqlExecutionState);
 }
 
-function formatJsonAsSqlComment(value: unknown) {
+export function formatJsonAsSqlComment(value: unknown) {
 	return `-- ${JSON.stringify(value, null, 2).replace(/\n/g, "\n-- ")}\n`;
 }
 
-function getEmptyResultSql() {
+export function getEmptyResultSql() {
 	return "-- Empty result (query executed successfully but returned no data)\n";
 }
 
-function getResultRowsSql(
+export function getResultRowsSql(
 	execution: SqlExecutionState[SqlStatementKey] | undefined,
 ) {
 	if (!execution?.result || execution.result.length === 0)
@@ -110,7 +112,7 @@ function getResultRowsSql(
 	return formatJsonAsSqlComment(execution.result);
 }
 
-function getWarningSql(error: string) {
+export function getWarningSql(error: string) {
 	return [
 		`-- WARNING: ${error}`,
 		"-- (This warning was non-fatal and execution continued)",
@@ -118,7 +120,7 @@ function getWarningSql(error: string) {
 	].join("\n");
 }
 
-function getFinishedResultSql(
+export function getFinishedResultSql(
 	status: SqlExecutionStatus,
 	execution: SqlExecutionState[SqlStatementKey] | undefined,
 ) {
@@ -131,7 +133,7 @@ function getFinishedResultSql(
 	return getResultRowsSql(execution);
 }
 
-function getExecutionResultSql(
+export function getExecutionResultSql(
 	status: SqlExecutionStatus,
 	execution: SqlExecutionState[SqlStatementKey] | undefined,
 ) {
@@ -140,7 +142,7 @@ function getExecutionResultSql(
 	return getFinishedResultSql(status, execution);
 }
 
-function getExecutionNoticesSql(
+export function getExecutionNoticesSql(
 	execution: SqlExecutionState[SqlStatementKey] | undefined,
 ) {
 	if (!execution?.notices || execution.notices.length === 0) return "";
@@ -148,17 +150,20 @@ function getExecutionNoticesSql(
 	return `\n-- Database Notices:\n${formatJsonAsSqlComment(execution.notices)}`;
 }
 
-function getStatementBaseSql(item: SqlStatement, status: SqlExecutionStatus) {
+export function getStatementBaseSql(
+	item: SqlStatement,
+	status: SqlExecutionStatus,
+) {
 	return `${getTitleWithStatus(item.title, status)}\n-- ${item.description}\n${item.sql}`;
 }
 
-function getExecutionTimeSql(
+export function getExecutionTimeSql(
 	execution: SqlExecutionState[SqlStatementKey] | undefined,
 ) {
 	return execution?.executionTime ? `(${execution.executionTime}ms)` : "";
 }
 
-function getExecutionAppendixSql(
+export function getExecutionAppendixSql(
 	status: SqlExecutionStatus,
 	execution: SqlExecutionState[SqlStatementKey] | undefined,
 ) {
@@ -172,7 +177,7 @@ function getExecutionAppendixSql(
 	return `\n\n-- Result: ${executionTime}\n${resultSql}${noticesSql}`;
 }
 
-function generateCompleteSql(
+export function generateCompleteSql(
 	key: string,
 	item: SqlStatement,
 	executionState: SqlExecutionState | null,
@@ -183,7 +188,7 @@ function generateCompleteSql(
 	return `${getStatementBaseSql(item, status)}${getExecutionAppendixSql(status, execution)}`;
 }
 
-function getAllSql(executionState: SqlExecutionState | null) {
+export function getAllSql(executionState: SqlExecutionState | null) {
 	return Object.entries(SQL_STATEMENTS)
 		.map(([key, item]) => generateCompleteSql(key, item, executionState))
 		.join("\n\n");
@@ -213,7 +218,7 @@ async function writeClipboardText(text: string) {
 	return writeClipboardFallback(text);
 }
 
-function getExecutionCounts(executionState: SqlExecutionState) {
+export function getExecutionCounts(executionState: SqlExecutionState) {
 	const statuses = getSqlStatuses(executionState);
 
 	return {
@@ -278,7 +283,7 @@ function SummaryCompletionMessage({ allSucceeded }: { allSucceeded: boolean }) {
 	);
 }
 
-function ExecutionSummary({
+export function ExecutionSummary({
 	executionState,
 }: {
 	executionState: SqlExecutionState | null;
@@ -403,7 +408,7 @@ function StatementNotices({
 	);
 }
 
-function StatementExecutionDetails({
+export function StatementExecutionDetails({
 	status,
 	execution,
 }: {
@@ -708,7 +713,7 @@ function SqlPanelHeader({
 	);
 }
 
-function CopyErrorNotice({ copyError }: { copyError: string | null }) {
+export function CopyErrorNotice({ copyError }: { copyError: string | null }) {
 	if (!copyError) return null;
 
 	return (
@@ -758,7 +763,7 @@ function SqlContent({
 	);
 }
 
-function ExpandToggle({
+export function ExpandToggle({
 	isExpanded,
 	onToggle,
 }: {

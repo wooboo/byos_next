@@ -47,7 +47,7 @@ import type { Device, Mixup, Playlist } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { formatTimezone, timezones } from "@/utils/helpers";
 
-const DEVICE_SIZE_PRESETS = {
+export const DEVICE_SIZE_PRESETS = {
 	"800x480": { width: 800, height: 480 },
 	"1872x1404": { width: 1872, height: 1404 },
 	"2048x1536": { width: 2048, height: 1536 },
@@ -95,7 +95,7 @@ interface DeviceEditFormProps {
 	onCancel: () => void;
 }
 
-function getDeviceGrayscale(editedDevice: DeviceEditData) {
+export function getDeviceGrayscale(editedDevice: DeviceEditData) {
 	return editedDevice.grayscale === 2 ||
 		editedDevice.grayscale === 4 ||
 		editedDevice.grayscale === 16
@@ -103,7 +103,7 @@ function getDeviceGrayscale(editedDevice: DeviceEditData) {
 		: 16;
 }
 
-function getSelectedContent({
+export function getSelectedContent({
 	editedDevice,
 	availableScreens,
 	availableRecipes,
@@ -160,7 +160,7 @@ function getSelectedContent({
 	};
 }
 
-function getPreviewSources({
+export function getPreviewSources({
 	editedDevice,
 	isMixup,
 	isPlaylist,

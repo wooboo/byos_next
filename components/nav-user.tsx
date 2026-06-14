@@ -38,7 +38,7 @@ interface NavUserProps {
 	};
 }
 
-function getUserInitials(user: NavUserProps["user"]) {
+export function getUserInitials(user: NavUserProps["user"]) {
 	if (user.name) {
 		const parts = user.name.split(" ");
 		if (parts.length >= 2) {
