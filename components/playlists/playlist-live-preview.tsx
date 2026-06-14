@@ -26,6 +26,42 @@ interface PlaylistLivePreviewProps {
 	onActiveIndexChange: (index: number) => void;
 }
 
+export function getPlaylistLivePreviewDuration(active?: PreviewFrame) {
+	return Math.max(1, active?.duration ?? 30);
+}
+
+export function getWrappedPlaylistIndex(index: number, length: number) {
+	if (length === 0) return null;
+
+	return ((index % length) + length) % length;
+}
+
+export function getPlaylistPreviewProgressWidth(progress: number) {
+	return `${Math.min(100, progress * 100)}%`;
+}
+
+export function getPlaylistCountdownSeconds(
+	duration: number,
+	progress: number,
+) {
+	return Math.max(0, Math.ceil(duration * (1 - progress)));
+}
+
+export function getPlaylistLivePreviewSrc(
+	frame: PreviewFrame,
+	width: number,
+	height: number,
+	grayscale: number,
+) {
+	return playlistFrameBmpUrl(
+		frame.screen_id,
+		frame.screen_type,
+		width,
+		height,
+		grayscale,
+	);
+}
+
 export function PlaylistLivePreview({
 	frames,
 	activeIndex,
@@ -36,7 +72,7 @@ export function PlaylistLivePreview({
 	const preview = useScreenPreviewControls();
 
 	const active = frames[activeIndex];
-	const duration = Math.max(1, active?.duration ?? 30);
+	const duration = getPlaylistLivePreviewDuration(active);
 	const isEmpty = frames.length === 0;
 
 	// Stash dynamic values in refs so the RAF loop sees the latest without
@@ -94,8 +130,8 @@ export function PlaylistLivePreview({
 
 	const goTo = useCallback((index: number) => {
 		const len = stateRef.current.frames.length;
-		if (len === 0) return;
-		const next = ((index % len) + len) % len;
+		const next = getWrappedPlaylistIndex(index, len);
+		if (next === null) return;
 		stateRef.current.onActiveIndexChange(next);
 	}, []);
 
@@ -127,9 +163,8 @@ export function PlaylistLivePreview({
 					) : (
 						<picture key={active.id}>
 							<source
-								srcSet={playlistFrameBmpUrl(
-									active.screen_id,
-									active.screen_type,
+								srcSet={getPlaylistLivePreviewSrc(
+									active,
 									preview.width,
 									preview.height,
 									preview.grayscale,
@@ -137,9 +172,8 @@ export function PlaylistLivePreview({
 								type="image/bmp"
 							/>
 							<img
-								src={playlistFrameBmpUrl(
-									active.screen_id,
-									active.screen_type,
+								src={getPlaylistLivePreviewSrc(
+									active,
 									preview.width,
 									preview.height,
 									preview.grayscale,
@@ -166,12 +200,12 @@ export function PlaylistLivePreview({
 						<div
 							className="h-1.5 bg-neutral-100 transition-[width] duration-100 ease-linear"
 							style={{
-								width: `${Math.min(100, progress * 100)}%`,
+								width: getPlaylistPreviewProgressWidth(progress),
 							}}
 						/>
 					</div>
 					<span className="text-xs tabular-nums text-neutral-400">
-						{Math.max(0, Math.ceil(duration * (1 - progress)))}s
+						{getPlaylistCountdownSeconds(duration, progress)}s
 					</span>
 				</div>
 			</div>

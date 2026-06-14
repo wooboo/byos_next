@@ -29,6 +29,115 @@ export type ComponentProps = Record<string, unknown> & {
 	height?: number;
 };
 
+type RecipeComponentModule = {
+	default: React.ComponentType<ComponentProps>;
+};
+
+type RecipeDataModule = {
+	default: (params?: Record<string, unknown>) => Promise<ComponentProps>;
+};
+
+const asRecipeComponentModule = (module: Promise<unknown>) =>
+	module as Promise<RecipeComponentModule>;
+
+const asRecipeDataModule = (module: Promise<unknown>) =>
+	module as Promise<RecipeDataModule>;
+
+const recipeComponentImporters: Record<
+	string,
+	() => Promise<RecipeComponentModule>
+> = {
+	album: () =>
+		asRecipeComponentModule(import("@/app/(app)/recipes/screens/album/album")),
+	"bitcoin-price": () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/bitcoin-price/bitcoin-price"),
+		),
+	"bitmap-patterns": () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/bitmap-patterns/bitmap-patterns"),
+		),
+	"calendar-daily": () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/calendar-daily/calendar-daily"),
+		),
+	"calendar-monthly": () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/calendar-monthly/calendar-monthly"),
+		),
+	"calendar-weekly": () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/calendar-weekly/calendar-weekly"),
+		),
+	"calibration-square": () =>
+		asRecipeComponentModule(
+			import(
+				"@/app/(app)/recipes/screens/calibration-square/calibration-square"
+			),
+		),
+	"immich-favorites": () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/immich-favorites/immich-favorites"),
+		),
+	"not-found": () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/not-found/not-found"),
+		),
+	"responsive-example": () =>
+		asRecipeComponentModule(
+			import(
+				"@/app/(app)/recipes/screens/responsive-example/responsive-example"
+			),
+		),
+	"school-schedule": () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/school-schedule/school-schedule"),
+		),
+	"simple-text": () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/simple-text/simple-text"),
+		),
+	weather: () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/weather/weather"),
+		),
+	wikipedia: () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/wikipedia/wikipedia"),
+		),
+};
+
+const recipeDataImporters: Record<string, () => Promise<RecipeDataModule>> = {
+	"bitcoin-price": () =>
+		asRecipeDataModule(
+			import("@/app/(app)/recipes/screens/bitcoin-price/getData"),
+		),
+	"calendar-daily": () =>
+		asRecipeDataModule(
+			import("@/app/(app)/recipes/screens/calendar-daily/getData"),
+		),
+	"calendar-monthly": () =>
+		asRecipeDataModule(
+			import("@/app/(app)/recipes/screens/calendar-monthly/getData"),
+		),
+	"calendar-weekly": () =>
+		asRecipeDataModule(
+			import("@/app/(app)/recipes/screens/calendar-weekly/getData"),
+		),
+	"immich-favorites": () =>
+		asRecipeDataModule(
+			import("@/app/(app)/recipes/screens/immich-favorites/getData"),
+		),
+	"school-schedule": () =>
+		asRecipeDataModule(
+			import("@/app/(app)/recipes/screens/school-schedule/getData"),
+		),
+	weather: () =>
+		asRecipeDataModule(import("@/app/(app)/recipes/screens/weather/getData")),
+	wikipedia: () =>
+		asRecipeDataModule(import("@/app/(app)/recipes/screens/wikipedia/getData")),
+};
+
 export type RecipeConfig = {
 	title: string;
 	published?: boolean;
@@ -112,9 +221,12 @@ export const fetchRecipeConfig = cache(
 
 export const fetchRecipeComponent = cache(async (slug: string) => {
 	try {
-		const { default: Component } = await import(
-			`@/app/(app)/recipes/screens/${slug}/${slug}.tsx`
-		);
+		const importer = recipeComponentImporters[slug];
+		if (!importer) {
+			throw new Error(`Unknown recipe component: ${slug}`);
+		}
+
+		const { default: Component } = await importer();
 		return Component;
 	} catch (error) {
 		logger.error(`Error loading component for ${slug}:`, error);
@@ -152,11 +264,13 @@ export const fetchRecipeProps = cache(
 		}
 
 		try {
-			const { default: fetchDataFunction } = (await import(
-				`@/app/(app)/recipes/screens/${slug}/getData.ts`
-			)) as {
-				default: (params?: Record<string, unknown>) => Promise<ComponentProps>;
-			};
+			const importer = recipeDataImporters[slug];
+			if (!importer) {
+				logger.warn(`Missing data fetcher for ${slug}`);
+				return props;
+			}
+
+			const { default: fetchDataFunction } = await importer();
 
 			// Set a timeout for data fetching to prevent hanging
 			const fetchPromise = fetchDataFunction(params);

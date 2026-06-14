@@ -78,7 +78,7 @@ interface MixupBuilderProps {
 	isSaving?: boolean;
 }
 
-function removeSlotAssignment(
+export function removeSlotAssignment(
 	assignments: Record<string, string>,
 	slotId: string,
 ) {
@@ -87,13 +87,13 @@ function removeSlotAssignment(
 	return next;
 }
 
-function recipeTitleById(recipes: MixupRecipe[], recipeId: string) {
+export function recipeTitleById(recipes: MixupRecipe[], recipeId: string) {
 	return (
 		recipes.find((recipe) => recipe.id === recipeId)?.title ?? "New screen"
 	);
 }
 
-function normalizeContentRef(ref: string) {
+export function normalizeContentRef(ref: string) {
 	if (ref.startsWith("screen:") || ref.startsWith("recipe:")) return ref;
 	return `recipe:${ref}`;
 }
@@ -135,12 +135,15 @@ function ContentCommandGroup({
 	);
 }
 
-async function createScreenValueFromRecipe(recipeId: string, name: string) {
+export async function createScreenValueFromRecipe(
+	recipeId: string,
+	name: string,
+) {
 	const screenId = await createScreenIdFromRecipe(recipeId, name);
 	return screenId ? `screen:${screenId}` : null;
 }
 
-async function promoteRecipeValueToScreen(
+export async function promoteRecipeValueToScreen(
 	value: string,
 	recipes: MixupRecipe[],
 ) {
@@ -153,7 +156,7 @@ async function promoteRecipeValueToScreen(
 	return createScreenValueFromRecipe(recipeId, name);
 }
 
-const spanLabel = (slot: LayoutSlot) => {
+export const spanLabel = (slot: LayoutSlot) => {
 	const spanSize = (slot.colSpan ?? 1) * (slot.rowSpan ?? 1);
 	return spanSize > 1 ? `${spanSize} quarters` : "1 quarter";
 };

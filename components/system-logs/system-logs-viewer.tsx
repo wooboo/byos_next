@@ -38,6 +38,213 @@ const LOG_LEVEL_BADGE_CLASSES: Record<string, string> = {
 	debug: "bg-gray-100 text-gray-800 border-gray-200",
 };
 
+export function buildSystemLogsFilterQuery({
+	createQueryString,
+	filterKey,
+	value,
+}: {
+	createQueryString: (params: Record<string, string | number | null>) => string;
+	filterKey: "level" | "source";
+	value: string;
+}) {
+	return createQueryString({
+		[filterKey]: value === "all" ? null : value,
+		page: 1,
+	});
+}
+
+export function getNextExpandedLogs(
+	previous: Record<string, boolean>,
+	id: string,
+) {
+	return {
+		...previous,
+		[id]: !previous[id],
+	};
+}
+
+export function shouldSkipInitialSystemLogsFetch({
+	initialData,
+	page,
+	searchQuery,
+	levelFilter,
+	sourceFilter,
+}: {
+	initialData?: SystemLogsViewerProps["initialData"];
+	page: number;
+	searchQuery: string;
+	levelFilter: string;
+	sourceFilter: string;
+}) {
+	return Boolean(
+		initialData &&
+			page === 1 &&
+			!searchQuery &&
+			levelFilter === "all" &&
+			sourceFilter === "all",
+	);
+}
+
+export function buildSystemLogsFetchParams({
+	page,
+	perPage,
+	searchQuery,
+	levelFilter,
+	sourceFilter,
+}: {
+	page: number;
+	perPage: number;
+	searchQuery: string;
+	levelFilter: string;
+	sourceFilter: string;
+}) {
+	return {
+		page,
+		perPage,
+		search: searchQuery,
+		level: levelFilter !== "all" ? levelFilter : undefined,
+		source: sourceFilter !== "all" ? sourceFilter : undefined,
+	};
+}
+
+export function hasActiveSystemLogFilters({
+	searchQuery,
+	levelFilter,
+	sourceFilter,
+}: {
+	searchQuery: string;
+	levelFilter: string;
+	sourceFilter: string;
+}) {
+	return Boolean(
+		searchQuery || levelFilter !== "all" || sourceFilter !== "all",
+	);
+}
+
+export function applyExpandedLogToggle({
+	id,
+	setExpandedLogs,
+}: {
+	id: string;
+	setExpandedLogs: React.Dispatch<
+		React.SetStateAction<Record<string, boolean>>
+	>;
+}) {
+	setExpandedLogs((prev) => getNextExpandedLogs(prev, id));
+}
+
+export async function loadSystemLogsData({
+	page,
+	perPage,
+	searchQuery,
+	levelFilter,
+	sourceFilter,
+	customFetchFunction,
+	setIsLoading,
+	setLogs,
+	setTotalLogs,
+	setSources,
+	setActiveTab,
+}: {
+	page: number;
+	perPage: number;
+	searchQuery: string;
+	levelFilter: string;
+	sourceFilter: string;
+	customFetchFunction?: (
+		params: SystemLogsFetchParams,
+	) => Promise<SystemLogsFetchResult>;
+	setIsLoading: (value: boolean) => void;
+	setLogs: (logs: SystemLog[]) => void;
+	setTotalLogs: (total: number) => void;
+	setSources: (sources: string[]) => void;
+	setActiveTab: (tab: string) => void;
+}) {
+	setIsLoading(true);
+	try {
+		const fetchParams = buildSystemLogsFetchParams({
+			page,
+			perPage,
+			searchQuery,
+			levelFilter,
+			sourceFilter,
+		});
+
+		const { logs, total, uniqueSources } = customFetchFunction
+			? await customFetchFunction(fetchParams)
+			: await fetchSystemLogs(fetchParams);
+
+		setLogs(logs);
+		setTotalLogs(total);
+		setSources(uniqueSources);
+		setActiveTab(levelFilter !== "all" ? levelFilter : "all");
+	} catch (error) {
+		console.error("Failed to fetch logs:", error);
+	} finally {
+		setIsLoading(false);
+	}
+}
+
+export function runSystemLogsEffect({
+	initialData,
+	page,
+	perPage,
+	searchQuery,
+	levelFilter,
+	sourceFilter,
+	customFetchFunction,
+	setIsLoading,
+	setLogs,
+	setTotalLogs,
+	setSources,
+	setActiveTab,
+	loadLogsData = loadSystemLogsData,
+}: {
+	initialData?: SystemLogsViewerProps["initialData"];
+	page: number;
+	perPage: number;
+	searchQuery: string;
+	levelFilter: string;
+	sourceFilter: string;
+	customFetchFunction?: (
+		params: SystemLogsFetchParams,
+	) => Promise<SystemLogsFetchResult>;
+	setIsLoading: (value: boolean) => void;
+	setLogs: (logs: SystemLog[]) => void;
+	setTotalLogs: (total: number) => void;
+	setSources: (sources: string[]) => void;
+	setActiveTab: (tab: string) => void;
+	loadLogsData?: typeof loadSystemLogsData;
+}) {
+	if (
+		shouldSkipInitialSystemLogsFetch({
+			initialData,
+			page,
+			searchQuery,
+			levelFilter,
+			sourceFilter,
+		})
+	) {
+		return false;
+	}
+
+	void loadLogsData({
+		page,
+		perPage,
+		searchQuery,
+		levelFilter,
+		sourceFilter,
+		customFetchFunction,
+		setIsLoading,
+		setLogs,
+		setTotalLogs,
+		setSources,
+		setActiveTab,
+	});
+
+	return true;
+}
+
 // Define the type for the fetch function parameters
 export type SystemLogsFetchParams = {
 	page: number;
@@ -101,73 +308,45 @@ export default function SystemLogsViewer({
 
 	// Handle level filter change
 	const handleLevelChange = (value: string) => {
-		const queryString = createQueryString({
-			level: value === "all" ? null : value,
-			page: 1, // Reset to page 1 on filter change
+		const queryString = buildSystemLogsFilterQuery({
+			createQueryString,
+			filterKey: "level",
+			value,
 		});
 		router.push(`${pathname}?${queryString}`, { scroll: false });
 	};
 
 	// Handle source filter change
 	const handleSourceChange = (value: string) => {
-		const queryString = createQueryString({
-			source: value === "all" ? null : value,
-			page: 1, // Reset to page 1 on filter change
+		const queryString = buildSystemLogsFilterQuery({
+			createQueryString,
+			filterKey: "source",
+			value,
 		});
 		router.push(`${pathname}?${queryString}`, { scroll: false });
 	};
 
 	// Toggle expanded state for a log
 	const toggleExpanded = (id: string) => {
-		setExpandedLogs((prev) => ({
-			...prev,
-			[id]: !prev[id],
-		}));
+		applyExpandedLogToggle({ id, setExpandedLogs });
 	};
 
 	// Fetch logs data
 	useEffect(() => {
-		// Skip initial fetch if we have initialData and no filters are applied
-		if (
-			initialData &&
-			page === 1 &&
-			!searchQuery &&
-			levelFilter === "all" &&
-			sourceFilter === "all"
-		) {
-			return;
-		}
-
-		const loadLogs = async () => {
-			setIsLoading(true);
-			try {
-				const fetchParams = {
-					page,
-					perPage: perPage,
-					search: searchQuery,
-					level: levelFilter !== "all" ? levelFilter : undefined,
-					source: sourceFilter !== "all" ? sourceFilter : undefined,
-				};
-
-				// Use the custom fetch function if provided, otherwise use the default
-				const { logs, total, uniqueSources } = customFetchFunction
-					? await customFetchFunction(fetchParams)
-					: await fetchSystemLogs(fetchParams);
-
-				setLogs(logs);
-				setTotalLogs(total);
-				setSources(uniqueSources);
-
-				// Set active tab based on level filter
-				setActiveTab(levelFilter !== "all" ? levelFilter : "all");
-			} catch (error) {
-				console.error("Failed to fetch logs:", error);
-			} finally {
-				setIsLoading(false);
-			}
-		};
-
-		loadLogs();
+		runSystemLogsEffect({
+			initialData,
+			page,
+			perPage,
+			searchQuery,
+			levelFilter,
+			sourceFilter,
+			customFetchFunction,
+			setIsLoading,
+			setLogs,
+			setTotalLogs,
+			setSources,
+			setActiveTab,
+		});
 	}, [
 		page,
 		searchQuery,
@@ -181,8 +360,11 @@ export default function SystemLogsViewer({
 	useScrollIntoViewAfterLoad(scrollRef, isLoading);
 
 	// Check if any filters are active
-	const hasActiveFilters =
-		searchQuery || levelFilter !== "all" || sourceFilter !== "all";
+	const hasActiveFilters = hasActiveSystemLogFilters({
+		searchQuery,
+		levelFilter,
+		sourceFilter,
+	});
 
 	return (
 		<div ref={scrollRef} className="space-y-4">
@@ -248,7 +430,7 @@ type SystemLogsFiltersProps = {
 	onClearFilters: () => void;
 };
 
-function SystemLogsFilters({
+export function SystemLogsFilters({
 	searchInputRef,
 	searchQuery,
 	sourceFilter,
@@ -309,7 +491,7 @@ type ActiveSystemLogFiltersProps = {
 	hasActiveFilters: boolean;
 };
 
-function ActiveSystemLogFilters({
+export function ActiveSystemLogFilters({
 	searchQuery,
 	levelFilter,
 	sourceFilter,
@@ -351,7 +533,7 @@ type SystemLogsTableBodyProps = {
 	onToggleExpanded: (id: string) => void;
 };
 
-function SystemLogsTableBody({
+export function SystemLogsTableBody({
 	isLoading,
 	logs,
 	expandedLogs,
@@ -397,7 +579,7 @@ type SystemLogRowProps = {
 	onToggleExpanded: (id: string) => void;
 };
 
-function SystemLogRow({
+export function SystemLogRow({
 	log,
 	previousLog,
 	index,
@@ -443,7 +625,7 @@ function SystemLogRow({
 	);
 }
 
-function SystemLogLevelBadge({ level }: { level: string }) {
+export function SystemLogLevelBadge({ level }: { level: string }) {
 	return (
 		<Badge variant="outline" className={LOG_LEVEL_BADGE_CLASSES[level] || ""}>
 			{level}
@@ -457,7 +639,7 @@ type SystemLogMetadataCellProps = {
 	onToggleExpanded: (id: string) => void;
 };
 
-function SystemLogMetadataCell({
+export function SystemLogMetadataCell({
 	log,
 	isExpanded,
 	onToggleExpanded,
@@ -494,7 +676,7 @@ function SystemLogMetadataCell({
 	);
 }
 
-function SystemLogMetadata({
+export function SystemLogMetadata({
 	metadata,
 	isExpanded,
 }: {

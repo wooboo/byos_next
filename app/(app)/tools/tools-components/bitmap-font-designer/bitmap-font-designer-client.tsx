@@ -22,13 +22,17 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import AddGridSize from "./add-grid-size";
-import BitmapFontEditor from "./bitmap-font-editor";
 import {
-	base64ToBinary,
-	binaryToBase64,
-	binaryToSvgPath,
-	parseGridSize,
-} from "./bitmap-font-utils";
+	type BitmapFont,
+	buildFontExportData,
+	buildInitialFontData,
+	buildPreviewSvgData,
+	countDefinedCharacters,
+	insertGridSize,
+	parseUploadedFontData,
+} from "./bitmap-font-designer-helpers";
+import BitmapFontEditor from "./bitmap-font-editor";
+import { binaryToSvgPath, parseGridSize } from "./bitmap-font-utils";
 
 // Custom debounce hook
 function useDebounce<T>(value: T, delay: number): T {
@@ -48,18 +52,6 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 const bitmapFont = bitmapFontFile.fonts;
-
-export interface BitmapFontCharacter {
-	charCode: number;
-	char: string;
-	data: string;
-}
-
-export interface BitmapFont {
-	width: number;
-	height: number;
-	characters: BitmapFontCharacter[];
-}
 
 // Basic ASCII (32-126)
 export const basicAsciiSet = Array.from({ length: 95 }, (_, i) => ({
@@ -417,7 +409,6 @@ const SentencePreview = memo(
 		onPreviewScaleChange: (newScale: number) => void;
 		onPreviewGapChange: (newGap: number) => void;
 	}) => {
-		const [width, height] = parseGridSize(selectedGridSize);
 		const charMap = characterBitmaps;
 		const uniqueChars = new Set(Array.from(previewText)).size;
 
@@ -452,88 +443,32 @@ const SentencePreview = memo(
 		};
 
 		// Count how many characters have bitmap data defined
-		const definedChars = useMemo(() => {
-			if (!charMap) return 0;
-			return Array.from(previewText).filter(
-				(char) => char !== " " && charMap.has(char.charCodeAt(0)),
-			).length;
-		}, [previewText, charMap]);
+		const definedChars = useMemo(
+			() => countDefinedCharacters(previewText, charMap),
+			[previewText, charMap],
+		);
 
-		// Calculate SVG dimensions
-		const svgData = useMemo(() => {
-			const charWidth = width * previewScale;
-			const charHeight = height * previewScale;
-			const spaceWidth = width * previewScale * 0.5; // Space width is half a character
-			const gapWidth = previewGap;
-
-			// Calculate total width by summing all character widths + gaps
-			let totalWidth = 0;
-			const paths: {
-				path: string;
-				x: number;
-				charCode: number;
-				isSelected: boolean;
-			}[] = [];
-
-			// Process each character
-			Array.from(previewText).forEach((char) => {
-				const charCode = char.charCodeAt(0);
-
-				// Handle spaces
-				if (char === " ") {
-					totalWidth += spaceWidth;
-					return;
-				}
-
-				// Check if this is the selected character
-				const isSelected = charCode === selectedCharCode;
-
-				// Get the correct bitmap data
-				// Use currentCharacterBitmap for selected char, or from the main map for others
-				const binaryString =
-					isSelected && currentCharacterBitmap
-						? currentCharacterBitmap
-						: charMap?.get(charCode);
-
-				if (!binaryString) {
-					// If no data, just add the width
-					totalWidth += charWidth;
-					return;
-				}
-
-				// Generate path for this character
-				const pathData = binaryToSvgPath(binaryString, width, height);
-
-				// Add path with position
-				paths.push({
-					path: pathData,
-					x: totalWidth,
-					charCode,
-					isSelected,
-				});
-
-				// Increase total width
-				totalWidth += charWidth;
-				totalWidth += gapWidth; // Add gap after each character
-			});
-
-			return {
-				width: totalWidth,
-				height: charHeight,
-				paths,
-				charWidth,
-				charHeight,
-			};
-		}, [
-			previewText,
-			charMap,
-			width,
-			height,
-			previewScale,
-			previewGap,
-			selectedCharCode,
-			currentCharacterBitmap,
-		]);
+		const svgData = useMemo(
+			() =>
+				buildPreviewSvgData({
+					characterBitmaps: charMap,
+					selectedGridSize,
+					previewText,
+					previewScale,
+					previewGap,
+					selectedCharCode,
+					currentCharacterBitmap,
+				}),
+			[
+				charMap,
+				selectedGridSize,
+				previewText,
+				previewScale,
+				previewGap,
+				selectedCharCode,
+				currentCharacterBitmap,
+			],
+		);
 
 		return (
 			<div className="w-full overflow-hidden rounded-2xl border bg-card">
@@ -725,19 +660,10 @@ FontFileLoader.displayName = "FontFileLoader";
 export default function BitmapFontDesignerClient() {
 	// Process and organize font data into a structured map for efficient access
 	// Format: { "8x8": Map(65 => "10101010..."), "16x16": Map(65 => "10101010..."), ... }
-	const initialFontDataObj = useMemo(() => {
-		const fontDataObj: { [fontSize: string]: Map<number, string> } = {};
-		bitmapFont.forEach((font) => {
-			const fontSizeKey = `${font.width}x${font.height}`;
-			const characterBitmapMap = new Map<number, string>();
-			font.characters.forEach((char) => {
-				// Convert base64 encoded data to binary string representation (1s and 0s)
-				characterBitmapMap.set(char.charCode, base64ToBinary(char.data));
-			});
-			fontDataObj[fontSizeKey] = characterBitmapMap;
-		});
-		return fontDataObj;
-	}, []);
+	const initialFontDataObj = useMemo(
+		() => buildInitialFontData(bitmapFont),
+		[],
+	);
 
 	// Create a ref to store the font data to avoid dependency issues in callbacks
 	const fontDataRef = useRef(initialFontDataObj);
@@ -785,10 +711,7 @@ export default function BitmapFontDesignerClient() {
 
 		// Update the availableGridSizes list
 		setAvailableGridSizes((prev) => {
-			const newSizes = [...prev, newSize].sort(
-				(a, b) => parseGridSize(a)[0] - parseGridSize(b)[0],
-			);
-			return newSizes;
+			return insertGridSize(prev, newSize);
 		});
 
 		// Switch to the new grid size
@@ -875,49 +798,8 @@ export default function BitmapFontDesignerClient() {
 	const loadFontData = useCallback(
 		(fontData: { fonts: BitmapFont[] }) => {
 			try {
-				// Validate that the file has the expected structure
-				if (!fontData.fonts || !Array.isArray(fontData.fonts)) {
-					throw new Error("Invalid font data format: missing 'fonts' array");
-				}
-
-				// Create a new object to replace initialFontDataObj
-				const newFontDataObj: { [fontSize: string]: Map<number, string> } = {};
-
-				// Create a new set of font sizes
-				const newGridSizes: string[] = [];
-
-				// Process each font in the uploaded file
-				fontData.fonts.forEach((font: BitmapFont) => {
-					if (
-						typeof font.width !== "number" ||
-						typeof font.height !== "number" ||
-						!Array.isArray(font.characters)
-					) {
-						throw new Error("Invalid font data structure");
-					}
-
-					const fontSizeKey = `${font.width}x${font.height}`;
-					newGridSizes.push(fontSizeKey);
-
-					// Create a new map for this font size
-					const characterBitmapMap = new Map<number, string>();
-
-					// Process each character in the font
-					font.characters.forEach((char: BitmapFontCharacter) => {
-						if (
-							typeof char.charCode !== "number" ||
-							typeof char.data !== "string"
-						) {
-							throw new Error("Invalid character data structure");
-						}
-
-						// Convert base64 to binary representation
-						characterBitmapMap.set(char.charCode, base64ToBinary(char.data));
-					});
-
-					// Add this font size to the new font data object
-					newFontDataObj[fontSizeKey] = characterBitmapMap;
-				});
+				const { fontDataObj: newFontDataObj, gridSizes: newGridSizes } =
+					parseUploadedFontData(fontData);
 
 				// Replace the initialFontDataObj with the new data
 				Object.keys(fontDataRef.current).forEach((key) => {
@@ -962,61 +844,15 @@ export default function BitmapFontDesignerClient() {
 
 	// Function to save the font data to JSON
 	const saveFontData = useCallback(() => {
-		// Get the latest character maps from the local state object
-		const fontDataToSave = availableGridSizes
-			.map((size) => {
-				const [width, height] = parseGridSize(size);
-				const charMap = fontDataRef.current[size] || new Map();
-
-				// Make sure to use the latest data for the current grid size
-				const currentMap =
-					size === selectedGridSize ? characterBitmaps : charMap;
-
-				// Special handling for current character being edited
-				if (
-					size === selectedGridSize &&
-					currentCharacterBitmap &&
-					selectedCharCode
-				) {
-					currentMap.set(selectedCharCode, currentCharacterBitmap);
-				}
-
-				return {
-					width,
-					height,
-					characters: Array.from(currentMap.entries())
-						.filter(([, binaryString]) => binaryString?.includes("1")) // Only include non-empty characters
-						.map(([charCode, binaryString]) => ({
-							charCode,
-							char: String.fromCharCode(charCode),
-							// Convert binary string to base64 for storage
-							data: binaryToBase64(binaryString),
-						}))
-						.sort((a, b) => a.charCode - b.charCode), // Sort by charCode in ascending order
-				};
-			})
-			.filter((font) => font.characters.length > 0); // Only include fonts with characters
-
-		// Add metadata to the exported font
-		const exportData = {
-			metadata: {
-				name: "Bitmap Font",
-				creator: "Bitmap Font Designer",
-				createdAt: new Date().toISOString(),
-				version: "1.0",
-				description: "Custom bitmap font created with Bitmap Font Designer",
-			},
-			fonts: fontDataToSave,
-		};
-
-		// Create a JSON string with the font data
+		const { exportData, filename } = buildFontExportData({
+			availableGridSizes,
+			selectedGridSize,
+			fontData: fontDataRef.current,
+			characterBitmaps,
+			currentCharacterBitmap,
+			selectedCharCode,
+		});
 		const jsonData = JSON.stringify(exportData, null, 2);
-
-		// Create a meaningful filename with date
-		const date = new Date();
-		const dateStr = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, "0")}-${date.getDate().toString().padStart(2, "0")}`;
-		const timeStr = `${date.getHours().toString().padStart(2, "0")}${date.getMinutes().toString().padStart(2, "0")}`;
-		const filename = `bitmap-font-${dateStr}-${timeStr}.json`;
 
 		// Create a download link for the data
 		const blob = new Blob([jsonData], { type: "application/json" });

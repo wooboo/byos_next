@@ -18,6 +18,64 @@ type UseLogsUrlStateOptions = {
 	preserveActiveTab?: boolean;
 };
 
+export function buildLogsQueryString({
+	searchParams,
+	params,
+	paramPrefix,
+	preserveActiveTab = false,
+}: {
+	searchParams?: URLSearchParams | null;
+	params: Record<string, string | number | null>;
+	paramPrefix: string;
+	preserveActiveTab?: boolean;
+}) {
+	const newSearchParams = new URLSearchParams(searchParams?.toString());
+	const activeTab = preserveActiveTab ? newSearchParams.get("activeTab") : null;
+
+	for (const [key, value] of Object.entries(params)) {
+		const prefixedKey = key === "activeTab" ? key : `${paramPrefix}${key}`;
+
+		if (value === null) {
+			newSearchParams.delete(prefixedKey);
+		} else {
+			newSearchParams.set(prefixedKey, String(value));
+		}
+	}
+
+	if (activeTab) {
+		newSearchParams.set("activeTab", activeTab);
+	}
+
+	return newSearchParams.toString();
+}
+
+export function clearLogsFilters({
+	router,
+	pathname,
+	searchInputRef,
+}: {
+	router: { push: (href: string, options?: { scroll: boolean }) => void };
+	pathname: string;
+	searchInputRef: React.RefObject<HTMLInputElement | null>;
+}) {
+	router.push(pathname, { scroll: false });
+	if (searchInputRef.current) {
+		searchInputRef.current.value = "";
+	}
+}
+
+export function scrollLogsIntoView(
+	scrollRef: React.RefObject<HTMLDivElement | null>,
+	isLoading: boolean,
+) {
+	if (scrollRef.current && !isLoading) {
+		scrollRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+		return true;
+	}
+
+	return false;
+}
+
 export function useLogsUrlState({
 	paramPrefix,
 	preserveActiveTab = false,
@@ -31,28 +89,13 @@ export function useLogsUrlState({
 	const searchQuery = searchParams?.get(`${paramPrefix}search`) || "";
 
 	const createQueryString = useCallback(
-		(params: Record<string, string | number | null>) => {
-			const newSearchParams = new URLSearchParams(searchParams?.toString());
-			const activeTab = preserveActiveTab
-				? newSearchParams.get("activeTab")
-				: null;
-
-			for (const [key, value] of Object.entries(params)) {
-				const prefixedKey = key === "activeTab" ? key : `${paramPrefix}${key}`;
-
-				if (value === null) {
-					newSearchParams.delete(prefixedKey);
-				} else {
-					newSearchParams.set(prefixedKey, String(value));
-				}
-			}
-
-			if (activeTab) {
-				newSearchParams.set("activeTab", activeTab);
-			}
-
-			return newSearchParams.toString();
-		},
+		(params: Record<string, string | number | null>) =>
+			buildLogsQueryString({
+				searchParams,
+				params,
+				paramPrefix,
+				preserveActiveTab,
+			}),
 		[searchParams, paramPrefix, preserveActiveTab],
 	);
 
@@ -74,10 +117,7 @@ export function useLogsUrlState({
 	};
 
 	const clearFilters = () => {
-		router.push(pathname, { scroll: false });
-		if (searchInputRef.current) {
-			searchInputRef.current.value = "";
-		}
+		clearLogsFilters({ router, pathname, searchInputRef });
 	};
 
 	return {
@@ -100,9 +140,7 @@ export function useScrollIntoViewAfterLoad(
 	isLoading: boolean,
 ) {
 	useEffect(() => {
-		if (scrollRef.current && !isLoading) {
-			scrollRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-		}
+		scrollLogsIntoView(scrollRef, isLoading);
 	}, [scrollRef, isLoading]);
 }
 

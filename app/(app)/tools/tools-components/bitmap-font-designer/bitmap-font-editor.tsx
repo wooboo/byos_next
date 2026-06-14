@@ -21,14 +21,21 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import {
+	canvasToGrid,
+	clampBaseline,
+	clampXHeight,
+	interpolatePoints,
+	isInsideGrid,
+	rotateGridToDimensions,
+	shiftGrid,
+} from "./bitmap-font-editor-helpers";
+import {
 	cloneGrid,
-	copyGridIntoDimensions,
 	createEmptyGrid,
 	createGridFromBinary,
 	getGridDimensions,
 	gridToBinary,
 	parseGridSize,
-	rotateGrid,
 } from "./bitmap-font-utils";
 
 interface BitmapFontEditorProps {
@@ -38,44 +45,6 @@ interface BitmapFontEditorProps {
 	setCurrentCharacterBitmap?: (bitmap: string) => void;
 	onDataChange?: (newData: string, charCode: number) => void;
 }
-
-// Line interpolation for fast dragging (Bresenham's line algorithm)
-const interpolatePoints = (
-	x0: number,
-	y0: number,
-	x1: number,
-	y1: number,
-): [number, number][] => {
-	const points: [number, number][] = [];
-	const dx = Math.abs(x1 - x0);
-	const dy = Math.abs(y1 - y0);
-	const sx = x0 < x1 ? 1 : -1;
-	const sy = y0 < y1 ? 1 : -1;
-	let err = dx - dy;
-
-	while (true) {
-		points.push([x0, y0]);
-		if (x0 === x1 && y0 === y1) break;
-		const e2 = 2 * err;
-		if (e2 > -dy) {
-			err -= dy;
-			x0 += sx;
-		}
-		if (e2 < dx) {
-			err += dx;
-			y0 += sy;
-		}
-	}
-
-	return points;
-};
-
-const isInsideGrid = (
-	gridX: number,
-	gridY: number,
-	width: number,
-	height: number,
-) => gridX >= 0 && gridX < width && gridY >= 0 && gridY < height;
 
 export default function BitmapFontEditor({
 	selectedGridSize,
@@ -404,14 +373,6 @@ export default function BitmapFontEditor({
 	]);
 
 	// Convert canvas coordinates to grid coordinates
-	const canvasToGrid = useCallback((x: number, y: number): [number, number] => {
-		const borderWidth = 1;
-		const cellSizeWithBorder = cellSize + borderWidth;
-		const gridX = Math.floor(x / cellSizeWithBorder);
-		const gridY = Math.floor(y / cellSizeWithBorder);
-		return [gridX, gridY];
-	}, []);
-
 	const getPointerGridPosition = useCallback(
 		(e: React.MouseEvent<HTMLCanvasElement>) => {
 			const canvas = canvasRef.current;
@@ -420,13 +381,13 @@ export default function BitmapFontEditor({
 			const rect = canvas.getBoundingClientRect();
 			const x = e.clientX - rect.left;
 			const y = e.clientY - rect.top;
-			const [gridX, gridY] = canvasToGrid(x, y);
+			const [gridX, gridY] = canvasToGrid(x, y, cellSize);
 
 			if (!isInsideGrid(gridX, gridY, width, height)) return null;
 
 			return [gridX, gridY] as const;
 		},
-		[width, height, canvasToGrid],
+		[width, height],
 	);
 
 	// Handle mouse down
@@ -527,45 +488,21 @@ export default function BitmapFontEditor({
 		updateCharData();
 	}, [drawGrid, addToHistory, updateCharData]);
 
-	// Helper function to reset grid to component dimensions
-	const resetToComponentDimensions = useCallback(() => {
-		return copyGridIntoDimensions(gridRef.current, width, height);
-	}, [width, height]);
-
 	const rotate = useCallback(
 		(direction: "clockwise" | "counter-clockwise") => {
-			const { width: currentWidth, height: currentHeight } = getGridDimensions(
+			gridRef.current = rotateGridToDimensions(
 				gridRef.current,
+				direction,
+				width,
+				height,
 			);
-			const newGrid = rotateGrid(gridRef.current, direction);
-
-			// Check if resulting dimensions would be compatible with the component
-			if (currentWidth === height && currentHeight === width) {
-				gridRef.current = newGrid;
-			} else {
-				// Rotations would result in incompatible dimensions - reset to component dimensions
-				// and copy over what will fit
-				gridRef.current = copyGridIntoDimensions(
-					newGrid,
-					width,
-					height,
-					resetToComponentDimensions(),
-				);
-			}
 
 			gridChangedRef.current = true;
 			drawGrid();
 			addToHistory();
 			updateCharData();
 		},
-		[
-			drawGrid,
-			addToHistory,
-			updateCharData,
-			resetToComponentDimensions,
-			width,
-			height,
-		],
+		[drawGrid, addToHistory, updateCharData, width, height],
 	);
 
 	const rotateClockwise = useCallback(() => {
@@ -578,28 +515,7 @@ export default function BitmapFontEditor({
 
 	const shift = useCallback(
 		(direction: "up" | "down" | "left" | "right") => {
-			const newGrid = createEmptyGrid(width, height);
-
-			for (let y = 0; y < height; y++) {
-				for (let x = 0; x < width; x++) {
-					let newX = x;
-					let newY = y;
-
-					if (direction === "up") {
-						newY = (y + height - 1) % height;
-					} else if (direction === "down") {
-						newY = (y + 1) % height;
-					} else if (direction === "left") {
-						newX = (x + width - 1) % width;
-					} else if (direction === "right") {
-						newX = (x + 1) % width;
-					}
-
-					newGrid[newY][newX] = gridRef.current[y][x];
-				}
-			}
-
-			gridRef.current = newGrid;
+			gridRef.current = shiftGrid(gridRef.current, width, height, direction);
 			gridChangedRef.current = true;
 			drawGrid();
 			addToHistory();
@@ -733,9 +649,7 @@ export default function BitmapFontEditor({
 	// Handle x-height change
 	const handleXHeightChange = useCallback(
 		(value: number[]) => {
-			// Ensure x-height is within bounds and below baseline
-			const newXHeight = Math.min(Math.max(0, value[0]), height - 1);
-			setXHeight(newXHeight > baseline ? baseline - 1 : newXHeight);
+			setXHeight(clampXHeight(value[0], height, baseline));
 			drawGrid();
 		},
 		[height, baseline, drawGrid],
@@ -744,9 +658,7 @@ export default function BitmapFontEditor({
 	// Handle baseline change
 	const handleBaselineChange = useCallback(
 		(value: number[]) => {
-			// Ensure baseline is within bounds and above x-height
-			const newBaseline = Math.min(Math.max(0, value[0]), height - 1);
-			setBaseline(newBaseline < xHeight ? xHeight + 1 : newBaseline);
+			setBaseline(clampBaseline(value[0], height, xHeight));
 			drawGrid();
 		},
 		[height, xHeight, drawGrid],

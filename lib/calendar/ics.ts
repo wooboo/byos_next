@@ -66,14 +66,11 @@ function dateRangesOverlap(
 	return start <= rangeEnd && end >= rangeStart;
 }
 
-function createRecurExpansion(
-	comp: ICAL.Component,
-	rangeStart: Date,
-): ICAL.RecurExpansion | null {
+function createRecurExpansion(event: ICAL.Event): ICAL.RecurExpansion | null {
 	try {
 		return new ICAL.RecurExpansion({
-			component: comp,
-			dtstart: ICAL.Time.fromJSDate(rangeStart),
+			component: event.component,
+			dtstart: event.startDate,
 		});
 	} catch {
 		// RecurExpansion might fail for non-standard RRULEs.
@@ -95,12 +92,11 @@ function recurringOccurrenceEvent(
 
 function recurringEventsInRange(
 	event: ICAL.Event,
-	comp: ICAL.Component,
 	rangeStart: Date,
 	rangeEnd: Date,
 	sourceCalendarName: string | undefined,
 ): CalendarEvent[] {
-	const expand = createRecurExpansion(comp, rangeStart);
+	const expand = createRecurExpansion(event);
 	if (expand === null) return [];
 
 	const events: CalendarEvent[] = [];
@@ -133,7 +129,6 @@ function singleEventInRange(
 
 function eventOccurrencesInRange(
 	event: ICAL.Event,
-	comp: ICAL.Component,
 	rangeStart: Date,
 	rangeEnd: Date,
 	sourceCalendarName: string | undefined,
@@ -144,7 +139,6 @@ function eventOccurrencesInRange(
 
 	return recurringEventsInRange(
 		event,
-		comp,
 		rangeStart,
 		rangeEnd,
 		sourceCalendarName,
@@ -197,7 +191,6 @@ async function fetchSingleCalendar(
 		events.push(
 			...eventOccurrencesInRange(
 				event,
-				comp,
 				rangeStart,
 				rangeEnd,
 				sourceCalendarName,

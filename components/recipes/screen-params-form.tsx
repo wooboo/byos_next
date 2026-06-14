@@ -24,7 +24,7 @@ type Props = {
 
 type FormStatus = "idle" | "success" | "error";
 
-const buildInitialState = (
+export const buildInitialState = (
 	schema: RecipeParamDefinitions,
 	initialValues: Record<string, unknown>,
 ) => {
@@ -44,7 +44,94 @@ const buildInitialState = (
 	return state;
 };
 
-const renderField = (
+export function coerceFieldValue(
+	definition: Pick<RecipeParamDefinition, "type">,
+	value: string,
+) {
+	if (definition.type !== "number") return value;
+	return Number.isNaN(Number(value)) ? "" : Number(value);
+}
+
+export function hasScreenParams(paramsSchema: RecipeParamDefinitions) {
+	return Object.keys(paramsSchema || {}).length > 0;
+}
+
+export function isScreenParamsDirty(
+	values: Record<string, unknown>,
+	initial: Record<string, unknown>,
+) {
+	return JSON.stringify(values) !== JSON.stringify(initial);
+}
+
+export async function submitScreenParams({
+	slug,
+	values,
+	paramsSchema,
+	updateAction,
+}: Pick<Props, "slug" | "paramsSchema" | "updateAction"> & {
+	values: Record<string, unknown>;
+}) {
+	const result = await updateAction(slug, values, paramsSchema);
+	if (!result.success) {
+		return {
+			formStatus: "error" as const,
+			statusMessage: result.error ?? "Unable to save configuration",
+		};
+	}
+
+	return {
+		formStatus: "success" as const,
+		statusMessage: "Saved",
+	};
+}
+
+export function resetScreenParamsForm(initial: Record<string, unknown>) {
+	return {
+		values: initial,
+		formStatus: "idle" as const,
+		statusMessage: "",
+	};
+}
+
+export function applySubmittedScreenParamsResult({
+	result,
+	setFormStatus,
+	setStatusMessage,
+}: {
+	result: Awaited<ReturnType<typeof submitScreenParams>>;
+	setFormStatus: (status: FormStatus) => void;
+	setStatusMessage: (message: string) => void;
+}) {
+	setFormStatus(result.formStatus);
+	setStatusMessage(result.statusMessage);
+}
+
+export function applyResetScreenParamsForm({
+	initial,
+	setValues,
+	setFormStatus,
+	setStatusMessage,
+}: {
+	initial: Record<string, unknown>;
+	setValues: (values: Record<string, unknown>) => void;
+	setFormStatus: (status: FormStatus) => void;
+	setStatusMessage: (message: string) => void;
+}) {
+	const nextState = resetScreenParamsForm(initial);
+	setValues(nextState.values);
+	setFormStatus(nextState.formStatus);
+	setStatusMessage(nextState.statusMessage);
+}
+
+export function updateScreenParamsValue(
+	previous: Record<string, unknown>,
+	field: string,
+	value: unknown,
+) {
+	return { ...previous, [field]: value };
+}
+
+export const renderField = (
 	key: string,
 	definition: RecipeParamDefinition,
 	value: unknown,
@@ -55,12 +142,7 @@ const renderField = (
 		name: key,
 		value: typeof value === "string" || typeof value === "number" ? value : "",
 		onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-			const nextValue =
-				definition.type === "number"
-					? Number.isNaN(Number(event.target.value))
-						? ""
-						: Number(event.target.value)
-					: event.target.value;
+			const nextValue = coerceFieldValue(definition, event.target.value);
 			onChange(key, nextValue);
 		},
 		placeholder: definition.placeholder,
@@ -91,12 +173,12 @@ export function ScreenParamsForm({
 	);
 
 	const hasParams = useMemo(
-		() => Object.keys(paramsSchema || {}).length > 0,
+		() => hasScreenParams(paramsSchema),
 		[paramsSchema],
 	);
 
 	const isDirty = useMemo(
-		() => JSON.stringify(values) !== JSON.stringify(initial),
+		() => isScreenParamsDirty(values, initial),
 		[values, initial],
 	);
 
@@ -106,21 +188,27 @@ export function ScreenParamsForm({
 		setStatusMessage("");
 
 		startTransition(async () => {
-			const result = await updateAction(slug, values, paramsSchema);
-			if (!result.success) {
-				setFormStatus("error");
-				setStatusMessage(result.error ?? "Unable to save configuration");
-				return;
-			}
-			setFormStatus("success");
-			setStatusMessage("Saved");
+			const result = await submitScreenParams({
+				slug,
+				values,
+				paramsSchema,
+				updateAction,
+			});
+			applySubmittedScreenParamsResult({
+				result,
+				setFormStatus,
+				setStatusMessage,
+			});
 		});
 	};
 
 	const handleReset = () => {
-		setValues(initial);
-		setFormStatus("idle");
-		setStatusMessage("");
+		applyResetScreenParamsForm({
+			initial,
+			setValues,
+			setFormStatus,
+			setStatusMessage,
+		});
 	};
 
 	if (!hasParams) return null;
@@ -193,7 +281,7 @@ export function ScreenParamsForm({
 							)}
 						</div>
 						{renderField(key, definition, values[key], (field, val) =>
-							setValues((prev) => ({ ...prev, [field]: val })),
+							setValues((prev) => updateScreenParamsValue(prev, field, val)),
 						)}
 					</div>
 				))}

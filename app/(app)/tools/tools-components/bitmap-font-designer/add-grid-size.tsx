@@ -10,9 +10,13 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { isGridSizeUnavailable } from "./bitmap-font-utils";
-
-const maxGridSize = 17;
+import {
+	canAddGridSize,
+	GRID_SELECTOR_CELL_SIZE,
+	getGridCellFillStyle,
+	getGridSizeFromPointer,
+	MAX_GRID_SIZE,
+} from "./add-grid-size-helpers";
 
 // make google doc style boxes to add grid size, from 4x4 to 17x17, disable adding if the size is already in the list or too small
 
@@ -26,13 +30,9 @@ export default function AddGridSize({
 	const [hoveredSize, setHoveredSize] = useState<string | null>(null);
 	const [open, setOpen] = useState(false);
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const cellSize = 8; // 2px for cell + gap
-	const canvasSize = maxGridSize * cellSize;
+	const canvasSize = MAX_GRID_SIZE * GRID_SELECTOR_CELL_SIZE;
 	const addHoveredSize = () => {
-		if (
-			!hoveredSize ||
-			isGridSizeUnavailable(hoveredSize, availableGridSizes)
-		) {
+		if (!canAddGridSize(hoveredSize, availableGridSizes)) {
 			return;
 		}
 
@@ -57,20 +57,23 @@ export default function AddGridSize({
 			ctx.clearRect(0, 0, canvasSize, canvasSize);
 
 			// Draw all cells
-			for (let rowIdx = 1; rowIdx <= maxGridSize; rowIdx++) {
-				for (let colIdx = 1; colIdx <= maxGridSize; colIdx++) {
+			for (let rowIdx = 1; rowIdx <= MAX_GRID_SIZE; rowIdx++) {
+				for (let colIdx = 1; colIdx <= MAX_GRID_SIZE; colIdx++) {
 					const size = `${colIdx}x${rowIdx}`;
-					const isDisabled = isGridSizeUnavailable(size, availableGridSizes);
+					const x = (colIdx - 1) * GRID_SELECTOR_CELL_SIZE;
+					const y = (rowIdx - 1) * GRID_SELECTOR_CELL_SIZE;
 
-					const x = (colIdx - 1) * cellSize;
-					const y = (rowIdx - 1) * cellSize;
-
-					// Fill cell background
-					ctx.fillStyle = isDisabled ? "rgba(229, 231, 235, 0.5)" : "#e5e7eb";
-					if (size === hoveredSize && !isDisabled) {
-						ctx.fillStyle = "#3b82f6"; // blue-500
-					}
-					ctx.fillRect(x, y, cellSize - 1, cellSize - 1);
+					ctx.fillStyle = getGridCellFillStyle(
+						size,
+						hoveredSize,
+						availableGridSizes,
+					);
+					ctx.fillRect(
+						x,
+						y,
+						GRID_SELECTOR_CELL_SIZE - 1,
+						GRID_SELECTOR_CELL_SIZE - 1,
+					);
 				}
 			}
 		});
@@ -101,15 +104,7 @@ export default function AddGridSize({
 		if (!canvas) return;
 
 		const rect = canvas.getBoundingClientRect();
-		const x = Math.floor((e.clientX - rect.left) / cellSize) + 1;
-		const y = Math.floor((e.clientY - rect.top) / cellSize) + 1;
-
-		if (x >= 1 && x <= maxGridSize && y >= 1 && y <= maxGridSize) {
-			const size = `${x}x${y}`;
-			setHoveredSize(size);
-		} else {
-			setHoveredSize(null);
-		}
+		setHoveredSize(getGridSizeFromPointer(e.clientX, e.clientY, rect));
 	};
 
 	const handleCanvasClick = () => {
