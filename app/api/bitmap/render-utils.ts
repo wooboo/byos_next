@@ -2,7 +2,9 @@ import type { NextRequest } from "next/server";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
+	renderRecipeToImage,
 } from "@/lib/recipes/recipe-renderer";
+import { resolveRenderableRef } from "@/lib/screens/render-target";
 
 export type RenderSize = {
 	width: number;
@@ -11,6 +13,16 @@ export type RenderSize = {
 
 export type BitmapRenderOptions = RenderSize & {
 	grayscale: number;
+};
+
+type RenderRecipeTargetOptions = RenderSize & {
+	recipeId: string;
+	screenId: string | null;
+	format: "bitmap" | "png";
+	grayscale?: number;
+	userId: string | null;
+	cookies?: string;
+	previewBaseUrl?: string;
 };
 
 function getSearchParams(req: NextRequest) {
@@ -105,4 +117,35 @@ export function binaryImageResponse(
 			"Content-Length": buffer.length.toString(),
 		},
 	});
+}
+
+export async function renderRecipeTargetImage({
+	recipeId,
+	screenId,
+	width,
+	height,
+	format,
+	grayscale,
+	userId,
+	cookies,
+	previewBaseUrl,
+}: RenderRecipeTargetOptions) {
+	const target = await resolveRenderableRef({
+		type: screenId ? "screen" : "recipe",
+		id: screenId ?? recipeId,
+		userId,
+	});
+	const renders = await renderRecipeToImage({
+		slug: target?.recipeSlug ?? recipeId,
+		imageWidth: width,
+		imageHeight: height,
+		formats: [format],
+		...(format === "bitmap" && grayscale !== undefined ? { grayscale } : {}),
+		userId,
+		cookies,
+		paramsOverride: target?.params,
+		previewPath: screenId ? `/preview/screen/${screenId}?raw=1` : undefined,
+		previewBaseUrl,
+	});
+	return renders[format] ?? Buffer.from([]);
 }

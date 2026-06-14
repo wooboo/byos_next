@@ -335,6 +335,7 @@ type RenderOptions = {
 	html?: string; // When set, uses Puppeteer screenshot instead of Takumi/Satori
 	cookies?: string; // Cookie header to forward to browser renderer
 	previewPath?: string; // Browser renderer route to capture
+	previewBaseUrl?: string; // Same-origin base URL for authenticated browser previews
 };
 
 type RenderResults = {
@@ -360,6 +361,7 @@ export const renderRecipeOutputs = cache(
 		html,
 		cookies,
 		previewPath,
+		previewBaseUrl,
 	}: RenderOptions): Promise<RenderResults> => {
 		const results = getDefaultRenderResults();
 		const needsPng = formats.includes("png");
@@ -391,6 +393,7 @@ export const renderRecipeOutputs = cache(
 						imageHeight,
 						cookies,
 						previewPath,
+						previewBaseUrl,
 					);
 				} else {
 					const element = createElement(Component, props);
@@ -569,6 +572,7 @@ export async function renderRecipeToImage({
 	cookies,
 	paramsOverride,
 	previewPath,
+	previewBaseUrl,
 }: {
 	slug: string;
 	imageWidth: number;
@@ -579,6 +583,7 @@ export async function renderRecipeToImage({
 	cookies?: string;
 	paramsOverride?: Record<string, unknown>;
 	previewPath?: string;
+	previewBaseUrl?: string;
 }): Promise<RenderResults> {
 	const result = await buildRecipeElement({ slug, userId, paramsOverride });
 
@@ -592,6 +597,7 @@ export async function renderRecipeToImage({
 			formats,
 			grayscale,
 			cookies,
+			previewBaseUrl,
 		});
 	}
 
@@ -613,5 +619,6 @@ export async function renderRecipeToImage({
 		grayscale,
 		cookies,
 		previewPath,
+		previewBaseUrl,
 	});
 }

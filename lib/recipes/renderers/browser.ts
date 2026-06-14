@@ -26,14 +26,24 @@ const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
 function buildForwardedCookies(cookieHeader: string, url: URL): CookieParam[] {
 	const secure = url.protocol === "https:";
+	const isLocalhost = url.hostname === "localhost";
 	return parseCookies(cookieHeader)
 		.filter((cookie) => COOKIE_NAME_PATTERN.test(cookie.name))
-		.filter((cookie) => secure || !cookie.name.startsWith("__Secure-"))
-		.filter((cookie) => secure || !cookie.name.startsWith("__Host-"))
+		.filter(
+			(cookie) => secure || isLocalhost || !cookie.name.startsWith("__Secure-"),
+		)
+		.filter(
+			(cookie) => secure || isLocalhost || !cookie.name.startsWith("__Host-"),
+		)
 		.map((cookie) => ({
 			name: cookie.name,
 			value: cookie.value,
 			url: url.origin,
+			...(cookie.name.startsWith("__Secure-") ||
+			cookie.name.startsWith("__Host-")
+				? { secure: true }
+				: {}),
+			...(cookie.name.startsWith("__Host-") ? { path: "/" } : {}),
 		}));
 }
 
@@ -74,10 +84,13 @@ export async function renderWithBrowser(
 	height: number,
 	cookies?: string,
 	previewPath?: string,
+	baseUrlOverride?: string,
 ): Promise<Buffer> {
 	const port = process.env.PORT || 3001;
 	const baseUrl =
-		process.env.NEXT_PUBLIC_BASE_URL ?? `http://127.0.0.1:${port}`;
+		baseUrlOverride ??
+		process.env.NEXT_PUBLIC_BASE_URL ??
+		`http://127.0.0.1:${port}`;
 	const path = previewPath ?? `/preview/recipe/${slug}`;
 	const url = new URL(path, baseUrl);
 	url.searchParams.set("width", width.toString());
