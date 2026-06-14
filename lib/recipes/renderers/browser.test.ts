@@ -6,13 +6,13 @@ async function loadModule() {
 	const page = {
 		emulateMediaFeatures: vi.fn(),
 		setViewport: vi.fn(),
+		setCookie: vi.fn(),
 		goto: vi.fn(),
 		screenshot: vi.fn().mockResolvedValue(Buffer.from("browser-shot")),
 		close: vi.fn(),
 	};
 	const browser = {
 		newPage: vi.fn().mockResolvedValue(page),
-		setCookie: vi.fn(),
 	};
 	const getBrowserMock = vi.fn().mockResolvedValue(browser);
 
@@ -35,8 +35,7 @@ describe("renderWithBrowser", () => {
 
 	it("captures a trusted preview screenshot with light mode and forwarded cookies", async () => {
 		process.env.NEXT_PUBLIC_BASE_URL = "https://preview.example";
-		const { renderWithBrowser, browser, page, getBrowserMock } =
-			await loadModule();
+		const { renderWithBrowser, page, getBrowserMock } = await loadModule();
 
 		const result = await renderWithBrowser(
 			"calendar",
@@ -46,13 +45,12 @@ describe("renderWithBrowser", () => {
 		);
 
 		expect(getBrowserMock).toHaveBeenCalledWith("trusted");
-		expect(browser.setCookie).toHaveBeenCalledWith(
-			{ name: "foo", value: "bar", domain: "preview.example", path: "/" },
+		expect(page.setCookie).toHaveBeenCalledWith(
+			{ name: "foo", value: "bar", url: "https://preview.example" },
 			{
 				name: "session",
 				value: "abc=123",
-				domain: "preview.example",
-				path: "/",
+				url: "https://preview.example",
 			},
 		);
 		expect(page.emulateMediaFeatures).toHaveBeenCalledWith([
@@ -68,6 +66,33 @@ describe("renderWithBrowser", () => {
 			{ waitUntil: "networkidle0" },
 		);
 		expect(page.close).toHaveBeenCalledTimes(1);
+		expect(result).toEqual(Buffer.from("browser-shot"));
+	});
+
+	it("keeps rendering when Chrome rejects forwarded proxy cookies", async () => {
+		process.env.NEXT_PUBLIC_BASE_URL = "http://internal:3000";
+		const { renderWithBrowser, page } = await loadModule();
+		page.setCookie
+			.mockRejectedValueOnce(new Error("Protocol error: Invalid cookie fields"))
+			.mockResolvedValue(undefined);
+
+		const result = await renderWithBrowser(
+			"immich-favorites",
+			800,
+			480,
+			"__Secure-auth=value; valid=ok; invalid name=bad",
+		);
+
+		expect(page.setCookie).toHaveBeenCalledTimes(2);
+		expect(page.setCookie).toHaveBeenLastCalledWith({
+			name: "valid",
+			value: "ok",
+			url: "http://internal:3000",
+		});
+		expect(page.goto).toHaveBeenCalledWith(
+			"http://internal:3000/preview/recipe/immich-favorites?width=800&height=480",
+			{ waitUntil: "networkidle0" },
+		);
 		expect(result).toEqual(Buffer.from("browser-shot"));
 	});
 
