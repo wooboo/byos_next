@@ -578,7 +578,13 @@ export default function DeviceView({
 	const preview = useScreenPreviewControls({
 		defaultPortrait: device.screen_orientation === "portrait",
 		defaultPaletteIndex:
-			device.grayscale === 2 ? 0 : device.grayscale === 4 ? 1 : 2,
+			device.grayscale === 2
+				? 0
+				: device.grayscale === 4
+					? 1
+					: device.grayscale === 256
+						? 3
+						: 2,
 	});
 
 	useEffect(() => {

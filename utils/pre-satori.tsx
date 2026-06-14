@@ -14,8 +14,9 @@ interface PreSatoriProps {
 	height?: number;
 	children: React.ReactNode;
 }
-export const getRendererType = (): "takumi" | "satori" => {
+export const getRendererType = (): "takumi" | "satori" | "browser" => {
 	const renderer = process.env.REACT_RENDERER?.toLowerCase();
+	if (renderer === "browser") return "browser";
 	return renderer === "satori" ? "satori" : "takumi";
 };
 
@@ -25,6 +26,9 @@ export const PreSatori: React.FC<PreSatoriProps> = ({
 	height = 480,
 	children,
 }) => {
+	const rendererType = getRendererType();
+	const effectiveUseDoubling = useDoubling && rendererType !== "browser";
+
 	// Define a helper to recursively transform children.
 	const transform = (child: React.ReactNode): React.ReactNode => {
 		if (React.isValidElement(child)) {
@@ -50,7 +54,7 @@ export const PreSatori: React.FC<PreSatoriProps> = ({
 			};
 
 			// Special handling for display properties
-			if (getRendererType() === "satori") {
+			if (rendererType === "satori") {
 				if (
 					style?.display !== "flex" &&
 					style?.display !== "contents" &&
@@ -63,15 +67,12 @@ export const PreSatori: React.FC<PreSatoriProps> = ({
 			// Process className for dither patterns, gap classes, and responsive breakpoints
 			const responsiveClass = processResponsive(className, width);
 			// Check if element should be hidden - don't render it at all
-			if (
-				responsiveClass.includes("hidden") &&
-				getRendererType() === "satori"
-			) {
+			if (responsiveClass.includes("hidden") && rendererType === "satori") {
 				return null;
 			}
 			let afterGapClass = responsiveClass;
 			let gapStyle = {};
-			if (getRendererType() === "satori") {
+			if (rendererType === "satori") {
 				({ style: gapStyle, className: afterGapClass } =
 					processGap(responsiveClass));
 			}
@@ -112,7 +113,7 @@ export const PreSatori: React.FC<PreSatoriProps> = ({
 				width: `${width}px`,
 				height: `${height}px`,
 				transformOrigin: "top left",
-				...(useDoubling ? { transform: "scale(2)" } : {}),
+				...(effectiveUseDoubling ? { transform: "scale(2)" } : {}),
 			}}
 		>
 			{React.Children.map(children, (child) => transform(child))}

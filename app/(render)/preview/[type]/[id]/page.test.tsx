@@ -94,7 +94,7 @@ describe("render preview page", () => {
 		assert.match(html, /overflow:\s*auto/);
 	});
 
-	it("disables doubling for school schedule previews", async () => {
+	it("passes exact dimensions to school schedule previews", async () => {
 		state.resolvedTarget = {
 			recipeSlug: "school-schedule",
 			params: {},
@@ -108,7 +108,27 @@ describe("render preview page", () => {
 			}),
 		);
 
-		assert.match(html, /&quot;disableDoubling&quot;:true/);
+		assert.match(html, /&quot;width&quot;:800/);
+		assert.match(html, /&quot;height&quot;:480/);
+		assert.doesNotMatch(html, /disableDoubling/);
+	});
+
+	it("renders raw screenshots without the scaling preview wrapper", async () => {
+		const RenderPreviewPage = await loadPage();
+
+		const html = renderToStaticMarkup(
+			await RenderPreviewPage({
+				params: Promise.resolve({ type: "screen", id: "screen-1" }),
+				searchParams: Promise.resolve({
+					width: "800",
+					height: "480",
+					raw: "1",
+				}),
+			}),
+		);
+
+		assert.match(html, /margin:\s*0/);
+		assert.doesNotMatch(html, /scale\(calc/);
 	});
 
 	it("throws notFound for unsupported target types", async () => {

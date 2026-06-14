@@ -186,7 +186,7 @@ vi.mock("@/lib/recipes/recipe-renderer", () => ({
 	fetchRecipeComponent: vi.fn(() => () => <div>react-recipe-component</div>),
 	fetchRecipeConfig: vi.fn(async () => recipePageState.config),
 	fetchRecipeProps: vi.fn(async () => ({ city: "Warsaw" })),
-	getRendererType: vi.fn(() => "react"),
+	getRendererType: vi.fn(() => "browser"),
 	isBuildPhase: vi.fn(() => false),
 	logger: { info: vi.fn(), error: vi.fn() },
 	renderRecipeOutputs: vi.fn(async () => ({
@@ -278,9 +278,12 @@ describe("Recipe detail page", () => {
 		});
 		assert.equal(typeof reactParamsFormProps.updateAction, "function");
 		assert.match(html, /preview-stage:weather/);
-		assert.match(html, /render:bitmap/);
-		assert.match(html, /render:png/);
+		assert.doesNotMatch(html, /render:bitmap/);
+		assert.doesNotMatch(html, /render:png/);
 		assert.match(html, /react-preview:\/preview\/recipe\/weather/);
+		assert.match(html, /JSX → browser PNG → render-bmp/);
+		assert.match(html, /JSX → browser PNG →/);
+		assert.doesNotMatch(html, /pre-satori/);
 		assert.match(html, /screen-params-form:weather/);
 		assert.match(html, /recipe-props:weather/);
 		assert.match(subtitleHtml, /Rendering at double size for sharper text/);
@@ -321,33 +324,11 @@ describe("Recipe detail page", () => {
 		});
 		assert.equal(typeof liquidParamsFormProps.updateAction, "function");
 		assert.match(html, /preview-stage:liquid-weather/);
-		assert.match(html, /render:bitmap/);
-		assert.match(html, /render:png/);
+		assert.doesNotMatch(html, /render:bitmap/);
+		assert.doesNotMatch(html, /render:png/);
 		assert.match(html, /liquid html/);
-		assert.match(html, /\/api\/bitmap\/liquid-weather\.bmp/);
-	});
-
-	it("shows empty pipeline states when react render config is missing inside preview nodes", async () => {
-		recipePageState.config = {
-			title: "Weather",
-			params: { city: { type: "string", label: "City" } },
-		};
-		const { fetchRecipeConfig } = await import("@/lib/recipes/recipe-renderer");
-		vi.mocked(fetchRecipeConfig)
-			.mockResolvedValueOnce(recipePageState.config)
-			.mockResolvedValueOnce(null)
-			.mockResolvedValueOnce(recipePageState.config);
-
-		const module = await getModule();
-		const html = await renderAsync(
-			await module.default({
-				params: Promise.resolve({ slug: "weather" }),
-				searchParams: Promise.resolve({}),
-			}),
-		);
-
-		assert.match(html, /Configuration not found/);
-		assert.match(html, /render:png/);
+		assert.match(html, /\/api\/bitmap\/liquid-weather\/default\.bmp/);
+		assert.match(html, /\/api\/png\/liquid-weather\/default\.png/);
 	});
 
 	it("renders the react recipe branch without params or data sections", async () => {
@@ -385,8 +366,8 @@ describe("Recipe detail page", () => {
 			}),
 		);
 
-		assert.match(html, /render:bitmap/);
-		assert.match(html, /render:png/);
+		assert.doesNotMatch(html, /render:bitmap/);
+		assert.doesNotMatch(html, /render:png/);
 		assert.equal(vi.mocked(renderRecipeOutputs).mock.calls.length, 0);
 	});
 
@@ -419,15 +400,12 @@ describe("Recipe detail page", () => {
 		assert.doesNotMatch(html, /screen-params-form:/);
 	});
 
-	it("handles missing react components and unavailable liquid metadata", async () => {
+	it("handles unavailable liquid metadata", async () => {
 		recipePageState.config = {
 			title: "Weather",
 		};
-		const { fetchRecipeComponent, fetchRecipeConfig } = await import(
-			"@/lib/recipes/recipe-renderer"
-		);
+		const { fetchRecipeConfig } = await import("@/lib/recipes/recipe-renderer");
 		const { checkDbConnection } = await import("@/lib/database/utils");
-		vi.mocked(fetchRecipeComponent).mockResolvedValueOnce(null);
 
 		const module = await getModule();
 		const reactHtml = await renderAsync(
@@ -436,7 +414,7 @@ describe("Recipe detail page", () => {
 				searchParams: Promise.resolve({ format: "react" }),
 			}),
 		);
-		assert.match(reactHtml, /Component not found/);
+		assert.match(reactHtml, /preview-stage:weather/);
 
 		vi.mocked(fetchRecipeConfig).mockResolvedValueOnce(null);
 		vi.mocked(checkDbConnection).mockResolvedValueOnce({ ready: false });

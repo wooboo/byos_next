@@ -28,7 +28,10 @@ export function parsePositiveBitmapOptions(
 	const width = parseIntParam(searchParams.get("width")) ?? DEFAULT_IMAGE_WIDTH;
 	const height =
 		parseIntParam(searchParams.get("height")) ?? DEFAULT_IMAGE_HEIGHT;
-	const grayscale = parseIntParam(searchParams.get("grayscale")) ?? 16;
+	const grayscale =
+		parseIntParam(searchParams.get("bpp")) ??
+		parseIntParam(searchParams.get("grayscale")) ??
+		16;
 
 	return {
 		width: width > 0 ? width : DEFAULT_IMAGE_WIDTH,
@@ -60,7 +63,36 @@ export function parsePreviewSize(req: NextRequest): RenderSize {
 
 export function parsePreviewGrayscale(req: NextRequest) {
 	const searchParams = getSearchParams(req);
-	return Number.parseInt(searchParams.get("grayscale") || "", 10) || 16;
+	return (
+		parseIntParam(searchParams.get("bpp")) ??
+		parseIntParam(searchParams.get("grayscale")) ??
+		16
+	);
+}
+
+export function parseRenderPath(
+	segments: string[] | undefined,
+	extension: "bmp" | "png",
+) {
+	const parts = segments?.length ? segments : ["not-found"];
+	const rawId = parts.at(-1) ?? "default";
+	const id = rawId.endsWith(`.${extension}`)
+		? rawId.slice(0, -1 * `.${extension}`.length)
+		: rawId;
+
+	if (parts.length >= 2) {
+		return {
+			recipeSlug: parts.slice(0, -1).join("/"),
+			screenId: id === "default" ? null : id,
+			sourcePath: parts.join("/"),
+		};
+	}
+
+	return {
+		recipeSlug: id,
+		screenId: null,
+		sourcePath: parts.join("/"),
+	};
 }
 
 export function binaryImageResponse(

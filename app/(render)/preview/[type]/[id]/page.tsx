@@ -15,14 +15,25 @@ export default async function RenderPreviewPage({
 	searchParams,
 }: {
 	params: Promise<{ type: string; id: string }>;
-	searchParams: Promise<{ width?: string; height?: string; mode?: string }>;
+	searchParams: Promise<{
+		width?: string;
+		height?: string;
+		mode?: string;
+		raw?: string;
+	}>;
 }) {
 	const { type, id } = await params;
 	if (type !== "recipe" && type !== "screen") notFound();
-	const { width: widthParam, height: heightParam, mode } = await searchParams;
+	const {
+		width: widthParam,
+		height: heightParam,
+		mode,
+		raw,
+	} = await searchParams;
 	const width = Number.parseInt(widthParam || "", 10) || DEFAULT_IMAGE_WIDTH;
 	const height = Number.parseInt(heightParam || "", 10) || DEFAULT_IMAGE_HEIGHT;
 	const isScrollMode = mode === "scroll";
+	const isRawRender = raw === "1";
 	const userId = await getCurrentUserId();
 	const target = await resolveRenderableRef({ type, id, userId });
 	if (!target) notFound();
@@ -41,11 +52,20 @@ export default async function RenderPreviewPage({
 		userId ?? undefined,
 		target.params,
 	);
-	const propsWithDimensions = addDimensionsToProps(props, width, height);
-	const previewProps =
-		target.recipeSlug === "school-schedule"
-			? { ...propsWithDimensions, disableDoubling: true }
-			: propsWithDimensions;
+	const previewProps = addDimensionsToProps(props, width, height);
+
+	if (isRawRender) {
+		return (
+			<>
+				<style>{`
+					html, body { margin: 0; overflow: hidden; }
+					::-webkit-scrollbar { display: none !important; }
+					* { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+				`}</style>
+				<Component {...previewProps} />
+			</>
+		);
+	}
 
 	if (isScrollMode) {
 		return (

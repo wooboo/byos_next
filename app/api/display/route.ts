@@ -24,10 +24,15 @@ import {
 
 /**
  * Map grayscale value from database to number of gray levels
- * Valid values: 2, 4, or 16. Defaults to 2 if invalid.
+ * Valid values: 2, 4, 16, or 256. Defaults to 2 if invalid.
  */
 function getGrayscaleLevels(grayscale: number | null | undefined): number {
-	if (grayscale === 2 || grayscale === 4 || grayscale === 16) {
+	if (
+		grayscale === 2 ||
+		grayscale === 4 ||
+		grayscale === 16 ||
+		grayscale === 256
+	) {
 		return grayscale;
 	}
 	return 2; // Default to 2 levels (black/white)

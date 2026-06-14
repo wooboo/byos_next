@@ -48,7 +48,10 @@ describe("recipe screen components", () => {
 		);
 
 		assert.match(html, /Hello World/);
-		assert.match(html, /https:\/\/example.com\/album.png/);
+		assert.match(
+			html,
+			/\/api\/image-proxy\?url=https%3A%2F%2Fexample.com%2Falbum.png/,
+		);
 	});
 
 	it("server-renders bitcoin and weather screens with data-dependent branches", () => {

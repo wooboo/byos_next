@@ -34,13 +34,16 @@ export async function renderWithBrowser(
 	slug: string,
 	width: number,
 	height: number,
-	scale = 1,
 	cookies?: string,
+	previewPath?: string,
 ): Promise<Buffer> {
 	const port = process.env.PORT || 3001;
 	const baseUrl =
 		process.env.NEXT_PUBLIC_BASE_URL ?? `http://127.0.0.1:${port}`;
-	const url = `${baseUrl}/recipes/${slug}/preview?width=${width}&height=${height}`;
+	const path = previewPath ?? `/preview/recipe/${slug}`;
+	const url = new URL(path, baseUrl);
+	url.searchParams.set("width", width.toString());
+	url.searchParams.set("height", height.toString());
 
 	const browser = await getBrowser("trusted");
 	const page = await browser.newPage();
@@ -48,7 +51,7 @@ export async function renderWithBrowser(
 	try {
 		if (cookies) {
 			const parsed = parseCookies(cookies);
-			const domain = new URL(url).hostname;
+			const domain = url.hostname;
 			const cookiesToSet: CookieData[] = parsed.map((c) => ({
 				name: c.name,
 				value: c.value,
@@ -64,11 +67,11 @@ export async function renderWithBrowser(
 			{ name: "prefers-color-scheme", value: "light" },
 		]);
 		await page.setViewport({
-			width: width * scale,
-			height: height * scale,
+			width,
+			height,
 			deviceScaleFactor: 1,
 		});
-		await page.goto(url, { waitUntil: "networkidle0" });
+		await page.goto(url.toString(), { waitUntil: "networkidle0" });
 		const screenshot = await page.screenshot({ type: "png" });
 		return Buffer.from(screenshot);
 	} finally {

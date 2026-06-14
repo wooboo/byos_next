@@ -21,13 +21,18 @@ describe("ScreenPreviewControls", () => {
 			/>,
 		);
 
-		assert.match(html, />BMP</);
-		assert.match(html, />PNG</);
-		assert.match(html, />React</);
+		assert.ok(html.indexOf(">React<") < html.indexOf(">PNG<"));
+		assert.ok(html.indexOf(">PNG<") < html.indexOf(">BMP<"));
+		assert.match(html, /<summary/);
+		assert.match(html, />Size</);
 		assert.match(html, />800×480</);
+		assert.match(html, />600×400</);
 		assert.match(html, />1872×1404</);
-		assert.match(html, />Landscape</);
-		assert.match(html, />Portrait</);
+		assert.match(html, />2048×1536</);
+		assert.match(html, /aria-label="Landscape"/);
+		assert.match(html, /aria-label="Portrait"/);
+		assert.match(html, /title="Landscape"/);
+		assert.match(html, /title="Portrait"/);
 		assert.match(html, />BW</);
 		assert.match(html, />4 gray</);
 		assert.match(html, />16 gray</);
@@ -55,6 +60,25 @@ describe("ScreenPreviewControls", () => {
 		assert.match(html, />Scroll</);
 		assert.doesNotMatch(html, />16 gray</);
 		assert.doesNotMatch(html, />BW</);
+	});
+
+	it("can relabel the react preview format", () => {
+		const html = renderToStaticMarkup(
+			<ScreenPreviewControls
+				format="react"
+				onFormatChange={() => {}}
+				sizeIndex={0}
+				onSizeIndexChange={() => {}}
+				paletteIndex={2}
+				onPaletteIndexChange={() => {}}
+				isPortrait={false}
+				onPortraitChange={() => {}}
+				reactLabel="LIQUID"
+			/>,
+		);
+
+		assert.match(html, />LIQUID</);
+		assert.doesNotMatch(html, />React</);
 	});
 });
 

@@ -1,7 +1,6 @@
 "use client";
 
-import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 interface BmpPreviewProps {
 	slug: string;
@@ -11,6 +10,14 @@ interface BmpPreviewProps {
 	bitmapUrl?: string;
 }
 
+interface ImageEndpointPreviewProps {
+	alt: string;
+	height: number;
+	imageRendering?: React.CSSProperties["imageRendering"];
+	requestUrl: string;
+	width: number;
+}
+
 export function getBmpPreviewRequestUrl({
 	slug,
 	width,
@@ -18,50 +25,33 @@ export function getBmpPreviewRequestUrl({
 	bpp,
 	bitmapUrl,
 }: BmpPreviewProps) {
-	const url = bitmapUrl ?? `/api/bitmap/${slug}.bmp`;
+	const url = bitmapUrl ?? `/api/bitmap/${slug}/default.bmp`;
 	const separator = url.includes("?") ? "&" : "?";
 
-	return `${url}${separator}width=${width}&height=${height}&grayscale=${bpp}`;
+	return `${url}${separator}width=${width}&height=${height}&bpp=${bpp}`;
 }
 
-export async function fetchBmpPreviewObjectUrl({
-	requestUrl,
-	fetcher = fetch,
-	createObjectUrl = URL.createObjectURL,
-}: {
-	requestUrl: string;
-	fetcher?: typeof fetch;
-	createObjectUrl?: typeof URL.createObjectURL;
-}) {
-	const response = await fetcher(requestUrl);
-	if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-	const blob = await response.blob();
-	return createObjectUrl(blob);
-}
-
-export function BmpPreviewContent({
-	loading,
+export function ImageEndpointPreviewContent({
+	alt,
 	error,
+	loading,
 	src,
 	width,
 	height,
+	imageRendering,
+	onError,
+	onLoad,
 }: {
-	loading: boolean;
+	alt: string;
 	error: boolean;
+	loading: boolean;
 	src: string;
 	width: number;
 	height: number;
+	imageRendering?: React.CSSProperties["imageRendering"];
+	onError?: () => void;
+	onLoad?: () => void;
 }) {
-	if (loading) {
-		return (
-			<div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-neutral-500">
-				<span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" />
-				Rendering…
-			</div>
-		);
-	}
-
 	if (error || !src) {
 		return (
 			<div className="absolute inset-0 flex items-center justify-center text-sm text-neutral-500">
@@ -71,57 +61,86 @@ export function BmpPreviewContent({
 	}
 
 	return (
-		<Image
-			src={src}
-			alt="BMP preview"
-			width={width}
+		<>
+			{loading && (
+				<div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/70 text-sm text-muted-foreground backdrop-blur-[1px]">
+					<span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+					Rendering…
+				</div>
+			)}
+			{/* biome-ignore lint/performance/noImgElement: Render previews must use the exact API URL and support BMP responses. */}
+			<img
+				src={src}
+				alt={alt}
+				width={width}
+				height={height}
+				className="absolute inset-0 h-full w-full object-contain"
+				style={imageRendering ? { imageRendering } : undefined}
+				onError={onError}
+				onLoad={onLoad}
+			/>
+		</>
+	);
+}
+
+export const BmpPreviewContent = (
+	props: Omit<
+		React.ComponentProps<typeof ImageEndpointPreviewContent>,
+		"alt" | "imageRendering"
+	>,
+) => (
+	<ImageEndpointPreviewContent
+		{...props}
+		alt="BMP preview"
+		imageRendering="pixelated"
+	/>
+);
+
+export function ImageEndpointPreview({
+	alt,
+	height,
+	imageRendering,
+	requestUrl,
+	width,
+}: ImageEndpointPreviewProps) {
+	return (
+		<ImageEndpointPreviewWithState
+			key={requestUrl}
+			alt={alt}
 			height={height}
-			className="absolute inset-0 h-full w-full object-cover"
-			style={{ imageRendering: "pixelated" }}
-			unoptimized
+			imageRendering={imageRendering}
+			requestUrl={requestUrl}
+			width={width}
 		/>
 	);
 }
 
-export function startBmpPreviewRequest({
+function ImageEndpointPreviewWithState({
+	alt,
+	height,
+	imageRendering,
 	requestUrl,
-	setSrc,
-	setLoading,
-	setError,
-	fetchPreview = fetchBmpPreviewObjectUrl,
-	revokeObjectUrl = URL.revokeObjectURL,
-}: {
-	requestUrl: string;
-	setSrc: (value: string) => void;
-	setLoading: (value: boolean) => void;
-	setError: (value: boolean) => void;
-	fetchPreview?: typeof fetchBmpPreviewObjectUrl;
-	revokeObjectUrl?: typeof URL.revokeObjectURL;
-}) {
-	let cancelled = false;
-	let objectUrl = "";
+	width,
+}: ImageEndpointPreviewProps) {
+	const [error, setError] = useState(false);
+	const [loading, setLoading] = useState(true);
 
-	setLoading(true);
-	setError(false);
-
-	void fetchPreview({ requestUrl })
-		.then((nextObjectUrl) => {
-			if (cancelled) return;
-			objectUrl = nextObjectUrl;
-			setSrc(objectUrl);
-			setLoading(false);
-		})
-		.catch(() => {
-			if (!cancelled) {
+	return (
+		<ImageEndpointPreviewContent
+			alt={alt}
+			error={error}
+			loading={loading}
+			src={requestUrl}
+			width={width}
+			height={height}
+			imageRendering={imageRendering}
+			onError={() => {
 				setError(true);
 				setLoading(false);
-			}
-		});
-
-	return () => {
-		cancelled = true;
-		if (objectUrl) revokeObjectUrl(objectUrl);
-	};
+			}}
+			onLoad={() => setLoading(false)}
+		/>
+	);
 }
 
 /**
@@ -135,34 +154,19 @@ export function BmpPreview({
 	bpp,
 	bitmapUrl,
 }: BmpPreviewProps) {
-	const [src, setSrc] = useState("");
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState(false);
-
-	useEffect(() => {
-		const requestUrl = getBmpPreviewRequestUrl({
-			slug,
-			width,
-			height,
-			bpp,
-			bitmapUrl,
-		});
-
-		return startBmpPreviewRequest({
-			requestUrl,
-			setSrc,
-			setLoading,
-			setError,
-		});
-	}, [slug, width, height, bpp, bitmapUrl]);
-
 	return (
-		<BmpPreviewContent
-			loading={loading}
-			error={error}
-			src={src}
+		<ImageEndpointPreview
+			alt="BMP preview"
+			requestUrl={getBmpPreviewRequestUrl({
+				slug,
+				width,
+				height,
+				bpp,
+				bitmapUrl,
+			})}
 			width={width}
 			height={height}
+			imageRendering="pixelated"
 		/>
 	);
 }

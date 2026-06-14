@@ -29,6 +29,7 @@ import {
 // Device size presets
 const DEVICE_SIZE_PRESETS = {
 	"800x480": { width: 800, height: 480 },
+	"600x400": { width: 600, height: 400 },
 	"1872x1404": { width: 1872, height: 1404 },
 	"2048x1536": { width: 2048, height: 1536 },
 	custom: null,
@@ -77,6 +78,7 @@ export default function DeviceClientPage({
 
 			// Check if current dimensions match a preset
 			if (width === 800 && height === 480) return "800x480";
+			if (width === 600 && height === 400) return "600x400";
 			if (width === 1872 && height === 1404) return "1872x1404";
 			if (width === 2048 && height === 1536) return "2048x1536";
 			return "custom";

@@ -113,7 +113,55 @@ describe("app/api/png/[type]/[id] GET", () => {
 			imageHeight: 240,
 			formats: ["png"],
 			userId: "user-1",
+			cookies: undefined,
 			paramsOverride: { city: "Warsaw" },
+			previewPath: undefined,
 		});
+	});
+
+	it("renders default recipe PNGs from the recipe/default URL shape", async () => {
+		const { GET } = await loadRoute();
+
+		const response = await GET(
+			new Request("https://example.test/api/png/weather/default.png", {
+				headers: { cookie: "session=abc" },
+			}) as never,
+			{ params: Promise.resolve({ type: "weather", id: "default.png" }) },
+		);
+
+		expect(response.status).toBe(200);
+		expect(state.resolveRenderableRef).toHaveBeenCalledWith({
+			type: "recipe",
+			id: "weather",
+			userId: "user-1",
+		});
+		expect(state.renderRecipeToImage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				cookies: "session=abc",
+				paramsOverride: { city: "Warsaw" },
+				previewPath: undefined,
+			}),
+		);
+	});
+
+	it("renders concrete screen PNGs from the recipe/screen URL shape", async () => {
+		const { GET } = await loadRoute();
+
+		const response = await GET(
+			new Request("https://example.test/api/png/weather/screen-1.png") as never,
+			{ params: Promise.resolve({ type: "weather", id: "screen-1.png" }) },
+		);
+
+		expect(response.status).toBe(200);
+		expect(state.resolveRenderableRef).toHaveBeenCalledWith({
+			type: "screen",
+			id: "screen-1",
+			userId: "user-1",
+		});
+		expect(state.renderRecipeToImage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				previewPath: "/preview/screen/screen-1?raw=1",
+			}),
+		);
 	});
 });
