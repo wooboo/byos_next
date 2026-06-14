@@ -42,6 +42,7 @@ export async function GET(
 			grayscale,
 			userId,
 			cookieHeader,
+			headers.hostUrl,
 		);
 		if (!bitmap?.length) return await renderFallbackBitmap(screenId);
 		return binaryImageResponse(bitmap, "image/bmp");
@@ -59,6 +60,7 @@ const renderScreenBitmap = cache(
 		grayscale: number,
 		userId: string | null,
 		cookies?: string,
+		previewBaseUrl?: string,
 	) => {
 		const target = await resolveRenderableRef({
 			type: "screen",
@@ -76,6 +78,7 @@ const renderScreenBitmap = cache(
 			cookies,
 			paramsOverride: target.params,
 			previewPath: `/preview/screen/${screenId}?raw=1`,
+			previewBaseUrl,
 		});
 		return renders.bitmap ?? Buffer.from([]);
 	},

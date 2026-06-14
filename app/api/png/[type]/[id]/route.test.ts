@@ -85,7 +85,9 @@ describe("app/api/png/[type]/[id] GET", () => {
 		const { GET } = await loadRoute();
 
 		const response = await GET(
-			new Request("https://example.test/api/png/recipe/weather") as never,
+			new Request("https://example.test/api/png/recipe/weather", {
+				headers: { host: "example.test", "x-forwarded-proto": "https" },
+			}) as never,
 			{ params: Promise.resolve({ type: "recipe", id: "weather" }) },
 		);
 
@@ -97,7 +99,9 @@ describe("app/api/png/[type]/[id] GET", () => {
 		const { GET } = await loadRoute();
 
 		const response = await GET(
-			new Request("https://example.test/api/png/recipe/weather") as never,
+			new Request("https://example.test/api/png/recipe/weather", {
+				headers: { host: "example.test", "x-forwarded-proto": "https" },
+			}) as never,
 			{ params: Promise.resolve({ type: "recipe", id: "weather" }) },
 		);
 
@@ -116,6 +120,7 @@ describe("app/api/png/[type]/[id] GET", () => {
 			cookies: undefined,
 			paramsOverride: { city: "Warsaw" },
 			previewPath: undefined,
+			previewBaseUrl: "https://example.test",
 		});
 	});
 
@@ -124,7 +129,11 @@ describe("app/api/png/[type]/[id] GET", () => {
 
 		const response = await GET(
 			new Request("https://example.test/api/png/weather/default.png", {
-				headers: { cookie: "session=abc" },
+				headers: {
+					cookie: "session=abc",
+					host: "example.test",
+					"x-forwarded-proto": "https",
+				},
 			}) as never,
 			{ params: Promise.resolve({ type: "weather", id: "default.png" }) },
 		);
@@ -140,6 +149,7 @@ describe("app/api/png/[type]/[id] GET", () => {
 				cookies: "session=abc",
 				paramsOverride: { city: "Warsaw" },
 				previewPath: undefined,
+				previewBaseUrl: "https://example.test",
 			}),
 		);
 	});
@@ -148,7 +158,9 @@ describe("app/api/png/[type]/[id] GET", () => {
 		const { GET } = await loadRoute();
 
 		const response = await GET(
-			new Request("https://example.test/api/png/weather/screen-1.png") as never,
+			new Request("https://example.test/api/png/weather/screen-1.png", {
+				headers: { host: "example.test", "x-forwarded-proto": "https" },
+			}) as never,
 			{ params: Promise.resolve({ type: "weather", id: "screen-1.png" }) },
 		);
 
@@ -161,6 +173,7 @@ describe("app/api/png/[type]/[id] GET", () => {
 		expect(state.renderRecipeToImage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				previewPath: "/preview/screen/screen-1?raw=1",
+				previewBaseUrl: "https://example.test",
 			}),
 		);
 	});

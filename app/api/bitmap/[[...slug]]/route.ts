@@ -7,9 +7,7 @@ import {
 	DEFAULT_IMAGE_WIDTH,
 	logger,
 	renderRecipeOutputs,
-	renderRecipeToImage,
 } from "@/lib/recipes/recipe-renderer";
-import { resolveRenderableRef } from "@/lib/screens/render-target";
 import {
 	parseRequestHeaders,
 	resolveUserIdFromApiKey,
@@ -18,6 +16,7 @@ import {
 	binaryImageResponse,
 	parsePositiveBitmapOptions,
 	parseRenderPath,
+	renderRecipeTargetImage,
 } from "../render-utils";
 
 export async function GET(
@@ -52,6 +51,7 @@ export async function GET(
 			grayscale,
 			userId,
 			cookieHeader || undefined,
+			headers.hostUrl,
 		);
 
 		if (
@@ -76,33 +76,27 @@ export async function GET(
 }
 
 const renderRecipeBitmap = cache(
-	async (
+	(
 		recipeId: string,
 		screenId: string | null,
 		width: number,
 		height: number,
-		grayscaleLevels: number = 16,
+		grayscale: number = 16,
 		userId: string | null = null,
 		cookies?: string,
-	) => {
-		const target = await resolveRenderableRef({
-			type: screenId ? "screen" : "recipe",
-			id: screenId ?? recipeId,
-			userId,
-		});
-		const renders = await renderRecipeToImage({
-			slug: target?.recipeSlug ?? recipeId,
-			imageWidth: width,
-			imageHeight: height,
-			formats: ["bitmap"],
-			grayscale: grayscaleLevels,
+		previewBaseUrl?: string,
+	) =>
+		renderRecipeTargetImage({
+			recipeId,
+			screenId,
+			width,
+			height,
+			format: "bitmap",
+			grayscale,
 			userId,
 			cookies,
-			paramsOverride: target?.params,
-			previewPath: screenId ? `/preview/screen/${screenId}?raw=1` : undefined,
-		});
-		return renders.bitmap ?? Buffer.from([]);
-	},
+			previewBaseUrl,
+		}),
 );
 
 const renderFallbackBitmap = cache(async (slug: string = "not-found") => {

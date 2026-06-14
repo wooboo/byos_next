@@ -664,6 +664,7 @@ describe("renderRecipeOutputs and renderRecipeToImage", () => {
 			imageHeight: 200,
 			formats: ["png"],
 			cookies: "session=abc",
+			previewBaseUrl: "http://localhost:3001",
 		});
 
 		expect(renderWithBrowserMock).toHaveBeenCalledWith(
@@ -672,6 +673,7 @@ describe("renderRecipeOutputs and renderRecipeToImage", () => {
 			200,
 			"session=abc",
 			undefined,
+			"http://localhost:3001",
 		);
 		expect(result).toEqual({
 			png: Buffer.from("browser-png"),

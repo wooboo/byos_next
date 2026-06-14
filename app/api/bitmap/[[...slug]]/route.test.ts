@@ -64,6 +64,8 @@ describe("app/api/bitmap/[[...slug]] GET", () => {
 				{
 					headers: {
 						cookie: "session=abc",
+						host: "example.test",
+						"x-forwarded-proto": "https",
 					},
 				},
 			) as never,
@@ -89,6 +91,7 @@ describe("app/api/bitmap/[[...slug]] GET", () => {
 			cookies: "session=abc",
 			paramsOverride: { mode: "compact" },
 			previewPath: undefined,
+			previewBaseUrl: "https://example.test",
 		});
 	});
 
@@ -104,6 +107,12 @@ describe("app/api/bitmap/[[...slug]] GET", () => {
 		const response = await GET(
 			new Request(
 				"https://example.test/api/bitmap/sample/screen-1.bmp?width=320&height=240",
+				{
+					headers: {
+						host: "example.test",
+						"x-forwarded-proto": "https",
+					},
+				},
 			) as never,
 			{ params: Promise.resolve({ slug: ["sample", "screen-1.bmp"] }) },
 		);
@@ -119,6 +128,7 @@ describe("app/api/bitmap/[[...slug]] GET", () => {
 				slug: "resolved-recipe",
 				paramsOverride: { mode: "screen" },
 				previewPath: "/preview/screen/screen-1?raw=1",
+				previewBaseUrl: "https://example.test",
 			}),
 		);
 	});
