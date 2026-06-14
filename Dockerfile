@@ -17,7 +17,7 @@ RUN corepack enable pnpm
 # Install dependencies only when needed
 FROM base AS deps
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 RUN pnpm install --frozen-lockfile --prod=false \
     && rm -rf ~/.npm ~/.pnpm-store /root/.cache
@@ -43,11 +43,13 @@ ENV CHROME_EXECUTABLE_PATH=/headless-shell/headless-shell
 
 # Copy Node.js binary from build stage
 COPY --from=base /usr/local/bin/node /usr/local/bin/node
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # Install fonts for HTML rendering
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create non-privileged user
 RUN groupadd -g 1001 nodejs \
@@ -68,5 +70,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-ENTRYPOINT []
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "server.js"]

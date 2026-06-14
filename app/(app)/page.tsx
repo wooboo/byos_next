@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { PageTemplate } from "@/components/common/page-template";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
@@ -9,6 +10,7 @@ import DashboardClientPage from "./client-page";
 
 // Dashboard data component that uses the cached data
 const DashboardData = async () => {
+	await connection();
 	// Get data from the centralized getInitData
 	// Since this is cached, it won't cause duplicate requests
 	const { devices, systemLogs, dbStatus } = await getInitData();
