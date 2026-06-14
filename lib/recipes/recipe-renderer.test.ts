@@ -670,11 +670,11 @@ describe("renderRecipeOutputs and renderRecipeToImage", () => {
 			"not-found",
 			300,
 			200,
-			2,
 			"session=abc",
+			undefined,
 		);
 		expect(result).toEqual({
-			png: Buffer.from("resized-png"),
+			png: Buffer.from("browser-png"),
 			bitmap: null,
 		});
 	});

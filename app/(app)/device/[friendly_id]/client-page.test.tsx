@@ -22,7 +22,7 @@ type CapturedEditFormProps = {
 	) => Promise<void>;
 	onCustomSizeChange: (field: "width" | "height", value: number) => void;
 	onDeviceSizePresetChange: (
-		preset: "800x480" | "1872x1404" | "2048x1536" | "custom",
+		preset: "800x480" | "600x400" | "1872x1404" | "2048x1536" | "custom",
 	) => void;
 	onNestedInputChange: (path: string, value: string) => void;
 	onRegenerateApiKey: () => void;

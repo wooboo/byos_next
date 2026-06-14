@@ -67,7 +67,8 @@ const getGrayscaleLevels = (device: Device) => {
 	if (
 		device.grayscale === 2 ||
 		device.grayscale === 4 ||
-		device.grayscale === 16
+		device.grayscale === 16 ||
+		device.grayscale === 256
 	) {
 		return device.grayscale;
 	}

@@ -334,6 +334,7 @@ type RenderOptions = {
 	grayscale?: number; // Number of gray levels: 2, 4, or 16
 	html?: string; // When set, uses Puppeteer screenshot instead of Takumi/Satori
 	cookies?: string; // Cookie header to forward to browser renderer
+	previewPath?: string; // Browser renderer route to capture
 };
 
 type RenderResults = {
@@ -358,6 +359,7 @@ export const renderRecipeOutputs = cache(
 		grayscale,
 		html,
 		cookies,
+		previewPath,
 	}: RenderOptions): Promise<RenderResults> => {
 		const results = getDefaultRenderResults();
 		const needsPng = formats.includes("png");
@@ -365,8 +367,11 @@ export const renderRecipeOutputs = cache(
 
 		if (!needsPng && !needsBitmap) return results;
 
-		const imageOptions = getRecipeImageOptions(config, imageWidth, imageHeight);
 		const rendererType = getRendererType();
+		const imageOptions =
+			rendererType === "browser"
+				? { width: imageWidth, height: imageHeight }
+				: getRecipeImageOptions(config, imageWidth, imageHeight);
 
 		// Render PNG once and reuse it for png/bitmap outputs.
 		let pngBuffer: Buffer;
@@ -380,13 +385,12 @@ export const renderRecipeOutputs = cache(
 			} else if (Component && props) {
 				if (rendererType === "browser") {
 					const { renderWithBrowser } = await import("./renderers/browser");
-					const scaleFactor = imageOptions.width / imageWidth;
 					pngBuffer = await renderWithBrowser(
 						slug,
 						imageWidth,
 						imageHeight,
-						scaleFactor,
 						cookies,
+						previewPath,
 					);
 				} else {
 					const element = createElement(Component, props);
@@ -564,6 +568,7 @@ export async function renderRecipeToImage({
 	userId,
 	cookies,
 	paramsOverride,
+	previewPath,
 }: {
 	slug: string;
 	imageWidth: number;
@@ -573,6 +578,7 @@ export async function renderRecipeToImage({
 	userId?: string | null;
 	cookies?: string;
 	paramsOverride?: Record<string, unknown>;
+	previewPath?: string;
 }): Promise<RenderResults> {
 	const result = await buildRecipeElement({ slug, userId, paramsOverride });
 
@@ -606,5 +612,6 @@ export async function renderRecipeToImage({
 		formats,
 		grayscale,
 		cookies,
+		previewPath,
 	});
 }

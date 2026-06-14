@@ -42,7 +42,6 @@ describe("renderWithBrowser", () => {
 			"calendar",
 			800,
 			480,
-			2,
 			"foo=bar; session = abc=123 ; invalid",
 		);
 
@@ -60,12 +59,12 @@ describe("renderWithBrowser", () => {
 			{ name: "prefers-color-scheme", value: "light" },
 		]);
 		expect(page.setViewport).toHaveBeenCalledWith({
-			width: 1600,
-			height: 960,
+			width: 800,
+			height: 480,
 			deviceScaleFactor: 1,
 		});
 		expect(page.goto).toHaveBeenCalledWith(
-			"https://preview.example/recipes/calendar/preview?width=800&height=480",
+			"https://preview.example/preview/recipe/calendar?width=800&height=480",
 			{ waitUntil: "networkidle0" },
 		);
 		expect(page.close).toHaveBeenCalledTimes(1);
@@ -79,7 +78,25 @@ describe("renderWithBrowser", () => {
 		await renderWithBrowser("clock", 400, 300);
 
 		expect(page.goto).toHaveBeenCalledWith(
-			"http://127.0.0.1:4321/recipes/clock/preview?width=400&height=300",
+			"http://127.0.0.1:4321/preview/recipe/clock?width=400&height=300",
+			{ waitUntil: "networkidle0" },
+		);
+	});
+
+	it("captures an explicit preview path when provided", async () => {
+		process.env.PORT = "4321";
+		const { renderWithBrowser, page } = await loadModule();
+
+		await renderWithBrowser(
+			"school-schedule",
+			800,
+			480,
+			undefined,
+			"/preview/screen/screen-1",
+		);
+
+		expect(page.goto).toHaveBeenCalledWith(
+			"http://127.0.0.1:4321/preview/screen/screen-1?width=800&height=480",
 			{ waitUntil: "networkidle0" },
 		);
 	});

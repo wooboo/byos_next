@@ -49,6 +49,7 @@ import { formatTimezone, timezones } from "@/utils/helpers";
 
 export const DEVICE_SIZE_PRESETS = {
 	"800x480": { width: 800, height: 480 },
+	"600x400": { width: 600, height: 400 },
 	"1872x1404": { width: 1872, height: 1404 },
 	"2048x1536": { width: 2048, height: 1536 },
 	custom: null,
@@ -98,7 +99,8 @@ interface DeviceEditFormProps {
 export function getDeviceGrayscale(editedDevice: DeviceEditData) {
 	return editedDevice.grayscale === 2 ||
 		editedDevice.grayscale === 4 ||
-		editedDevice.grayscale === 16
+		editedDevice.grayscale === 16 ||
+		editedDevice.grayscale === 256
 		? editedDevice.grayscale
 		: 16;
 }
@@ -578,6 +580,7 @@ function DisplayTab({
 					</SelectTrigger>
 					<SelectContent>
 						<SelectItem value="800x480">800 × 480</SelectItem>
+						<SelectItem value="600x400">600 × 400</SelectItem>
 						<SelectItem value="1872x1404">1872 × 1404</SelectItem>
 						<SelectItem value="2048x1536">2048 × 1536</SelectItem>
 						<SelectItem value="custom">Custom</SelectItem>
@@ -646,11 +649,12 @@ function DisplayTab({
 						if (value) onSelectChange("grayscale", value);
 					}}
 					variant="outline"
-					className="grid w-fit grid-cols-3"
+					className="grid w-fit grid-cols-4"
 				>
 					<ToggleGroupItem value="2">2</ToggleGroupItem>
 					<ToggleGroupItem value="4">4</ToggleGroupItem>
 					<ToggleGroupItem value="16">16</ToggleGroupItem>
+					<ToggleGroupItem value="256">256 colors</ToggleGroupItem>
 				</ToggleGroup>
 			</Field>
 		</>

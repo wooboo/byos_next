@@ -8,7 +8,7 @@ export interface RenderBmpOptions {
 	inverted?: boolean;
 	width?: number;
 	height?: number;
-	grayscale?: number; // Number of gray levels: 2 (black/white), 4, or 16
+	grayscale?: number; // 2, 4, 16 gray levels, or 256 indexed colors
 	applyEdgeSnap?: boolean;
 }
 
@@ -19,6 +19,26 @@ const createGrayscalePaletteEntries = (grayscale: number): number[] => {
 		const grayValue = Math.round(index * paletteStep);
 		return (grayValue << 16) | (grayValue << 8) | grayValue;
 	});
+};
+
+const createIndexedColorPaletteEntries = (): number[] => {
+	const entries: number[] = [];
+	const steps = [0, 51, 102, 153, 204, 255];
+
+	for (const red of steps) {
+		for (const green of steps) {
+			for (const blue of steps) {
+				entries.push((red << 16) | (green << 8) | blue);
+			}
+		}
+	}
+
+	for (let index = 0; entries.length < 256; index++) {
+		const grayValue = Math.round((index / 39) * 255);
+		entries.push((grayValue << 16) | (grayValue << 8) | grayValue);
+	}
+
+	return entries;
 };
 
 const mapGrayscaleValueToPaletteIndex = (
@@ -41,6 +61,17 @@ function getPaletteIndex(
 ): number {
 	const paletteIndex = mapGrayscaleValueToPaletteIndex(value, grayscale);
 	return inverted ? grayscale - 1 - paletteIndex : paletteIndex;
+}
+
+function nearestIndexedColorPaletteIndex(
+	red: number,
+	green: number,
+	blue: number,
+): number {
+	const redIndex = Math.round(red / 51);
+	const greenIndex = Math.round(green / 51);
+	const blueIndex = Math.round(blue / 51);
+	return redIndex * 36 + greenIndex * 6 + blueIndex;
 }
 
 function writePackedBitmapRows({
@@ -96,6 +127,38 @@ function writePackedBitmapRows({
 	}
 }
 
+function writeIndexed8BitmapRows({
+	buffer,
+	data,
+	dataOffset,
+	rowSize,
+	targetHeight,
+	targetWidth,
+}: {
+	buffer: Buffer;
+	data: Buffer;
+	dataOffset: number;
+	rowSize: number;
+	targetHeight: number;
+	targetWidth: number;
+}) {
+	for (let y = 0; y < targetHeight; y++) {
+		// BMP is stored bottom-up
+		const targetY = targetHeight - 1 - y;
+		const yOffset = targetY * targetWidth;
+		const destRowOffset = dataOffset + y * rowSize;
+
+		for (let x = 0; x < targetWidth; x++) {
+			const sourceOffset = (yOffset + x) * 3;
+			buffer[destRowOffset + x] = nearestIndexedColorPaletteIndex(
+				data[sourceOffset] ?? 0,
+				data[sourceOffset + 1] ?? 0,
+				data[sourceOffset + 2] ?? 0,
+			);
+		}
+	}
+}
+
 export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 	const {
 		ditheringMethod = DitheringMethod.FLOYD_STEINBERG,
@@ -104,8 +167,8 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 		applyEdgeSnap = true,
 	} = options;
 
-	// Validate grayscale levels
-	const validLevels = [2, 4, 16];
+	// Validate grayscale levels / color modes
+	const validLevels = [2, 4, 16, 256];
 	if (!validLevels.includes(grayscale)) {
 		throw new Error(
 			`Invalid grayscale value: ${grayscale}. Must be one of: ${validLevels.join(", ")}`,
@@ -128,6 +191,55 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 		image = image.resize(targetWidth, targetHeight, {
 			kernel: sharp.kernel.nearest,
 		});
+	}
+
+	if (grayscale === 256) {
+		const { data } = await image
+			.removeAlpha()
+			.raw()
+			.toBuffer({ resolveWithObject: true });
+		const bitsPerPixel = 8;
+		const numColors = 256;
+		const paletteSize = numColors * 4;
+		const fileHeaderSize = 14;
+		const infoHeaderSize = 40;
+		const rowSize = Math.floor((targetWidth * bitsPerPixel + 31) / 32) * 4;
+		const headerSize = fileHeaderSize + infoHeaderSize + paletteSize;
+		const fileSize = headerSize + rowSize * targetHeight;
+		const buffer = Buffer.alloc(fileSize);
+
+		buffer.write("BM", 0);
+		buffer.writeUInt32LE(fileSize, 2);
+		buffer.writeUInt32LE(0, 6);
+		buffer.writeUInt32LE(headerSize, 10);
+		buffer.writeUInt32LE(infoHeaderSize, 14);
+		buffer.writeInt32LE(targetWidth, 18);
+		buffer.writeInt32LE(targetHeight, 22);
+		buffer.writeUInt16LE(1, 26);
+		buffer.writeUInt16LE(bitsPerPixel, 28);
+		buffer.writeUInt32LE(0, 30);
+		buffer.writeUInt32LE(rowSize * targetHeight, 34);
+		buffer.writeInt32LE(0, 38);
+		buffer.writeInt32LE(0, 42);
+		buffer.writeUInt32LE(numColors, 46);
+		buffer.writeUInt32LE(numColors, 50);
+
+		const paletteOffset = fileHeaderSize + infoHeaderSize;
+		const paletteEntries = createIndexedColorPaletteEntries();
+		for (const [index, paletteEntry] of paletteEntries.entries()) {
+			buffer.writeUInt32LE(paletteEntry, paletteOffset + index * 4);
+		}
+
+		writeIndexed8BitmapRows({
+			buffer,
+			data,
+			dataOffset: headerSize,
+			rowSize,
+			targetHeight,
+			targetWidth,
+		});
+
+		return buffer;
 	}
 
 	const grayscaleImage = await image

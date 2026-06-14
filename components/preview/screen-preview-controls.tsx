@@ -1,5 +1,6 @@
 "use client";
 
+import { RectangleHorizontal, RectangleVertical } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -10,13 +11,14 @@ export const SCREEN_PREVIEW_FORMATS: {
 	value: ScreenPreviewFormat;
 	label: string;
 }[] = [
-	{ value: "bmp", label: "BMP" },
-	{ value: "png", label: "PNG" },
 	{ value: "react", label: "React" },
+	{ value: "png", label: "PNG" },
+	{ value: "bmp", label: "BMP" },
 ];
 
 export const SCREEN_PREVIEW_SIZE_PRESETS = [
 	{ label: "800×480", width: 800, height: 480 },
+	{ label: "600×400", width: 600, height: 400 },
 	{ label: "1872×1404", width: 1872, height: 1404 },
 	{ label: "2048×1536", width: 2048, height: 1536 },
 ] as const;
@@ -33,10 +35,15 @@ export const SCREEN_PREVIEW_PALETTES = [
 		grayscale: 16,
 		swatches: ["#020617", "#475569", "#94a3b8", "#f8fafc"],
 	},
+	{
+		label: "256 colors",
+		grayscale: 256,
+		swatches: ["#ef4444", "#22c55e", "#3b82f6", "#f8fafc"],
+	},
 ] as const;
 
 export function useScreenPreviewControls({
-	defaultFormat = "bmp",
+	defaultFormat = "react",
 	defaultPortrait = false,
 	defaultSizeIndex = 0,
 	defaultPaletteIndex = 2,
@@ -111,6 +118,7 @@ export function ScreenPreviewControls({
 	showOrientation = true,
 	showPalette = true,
 	className,
+	reactLabel = "React",
 }: {
 	format: ScreenPreviewFormat;
 	onFormatChange: (format: ScreenPreviewFormat) => void;
@@ -128,9 +136,12 @@ export function ScreenPreviewControls({
 	showOrientation?: boolean;
 	showPalette?: boolean;
 	className?: string;
+	reactLabel?: string;
 }) {
 	const allowedFormats = SCREEN_PREVIEW_FORMATS.filter((item) =>
 		formats.includes(item.value),
+	).map((item) =>
+		item.value === "react" ? { ...item, label: reactLabel } : item,
 	);
 	const canConfigureSize =
 		format === "bmp" || format === "png" || format === "react";
@@ -165,23 +176,36 @@ export function ScreenPreviewControls({
 			)}
 
 			{showSizes && canConfigureSize && (
-				<div className="inline-flex rounded-lg border bg-background p-0.5">
-					{SCREEN_PREVIEW_SIZE_PRESETS.map((preset, index) => (
-						<button
-							key={preset.label}
-							type="button"
-							onClick={() => onSizeIndexChange(index)}
-							className={cn(
-								"rounded-md px-2 py-1 text-xs font-medium",
-								sizeIndex === index
-									? "bg-foreground text-background"
-									: "text-muted-foreground hover:text-foreground",
-							)}
-						>
-							{preset.label}
-						</button>
-					))}
-				</div>
+				<details className="group relative">
+					<summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg border bg-background px-2.5 py-1 text-xs font-medium outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+						<span className="text-muted-foreground group-hover:text-accent-foreground">
+							Size
+						</span>
+						<span>{SCREEN_PREVIEW_SIZE_PRESETS[sizeIndex]?.label}</span>
+					</summary>
+					<div className="absolute top-full left-0 z-20 mt-1 min-w-full rounded-lg border bg-popover p-1 text-popover-foreground shadow-md">
+						{SCREEN_PREVIEW_SIZE_PRESETS.map((preset, index) => (
+							<button
+								key={preset.label}
+								type="button"
+								onClick={(event) => {
+									onSizeIndexChange(index);
+									event.currentTarget
+										.closest("details")
+										?.removeAttribute("open");
+								}}
+								className={cn(
+									"block w-full rounded-md px-2 py-1 text-left text-xs font-medium whitespace-nowrap",
+									sizeIndex === index
+										? "bg-foreground text-background"
+										: "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+								)}
+							>
+								{preset.label}
+							</button>
+						))}
+					</div>
+				</details>
 			)}
 
 			{showOrientation && (
@@ -189,26 +213,30 @@ export function ScreenPreviewControls({
 					<button
 						type="button"
 						onClick={() => onPortraitChange(false)}
+						aria-label="Landscape"
+						title="Landscape"
 						className={cn(
-							"rounded-md px-2 py-1 text-xs font-medium",
+							"inline-flex size-6 items-center justify-center rounded-md",
 							!isPortrait
 								? "bg-foreground text-background"
 								: "text-muted-foreground hover:text-foreground",
 						)}
 					>
-						Landscape
+						<RectangleHorizontal className="size-4" aria-hidden="true" />
 					</button>
 					<button
 						type="button"
 						onClick={() => onPortraitChange(true)}
+						aria-label="Portrait"
+						title="Portrait"
 						className={cn(
-							"rounded-md px-2 py-1 text-xs font-medium",
+							"inline-flex size-6 items-center justify-center rounded-md",
 							isPortrait
 								? "bg-foreground text-background"
 								: "text-muted-foreground hover:text-foreground",
 						)}
 					>
-						Portrait
+						<RectangleVertical className="size-4" aria-hidden="true" />
 					</button>
 				</div>
 			)}
@@ -290,5 +318,6 @@ export function screenPreviewSummary({
 	if (format === "react")
 		return `${width}×${height}px · React ${reactMode ?? "fit"}`;
 	if (format === "png") return `${width}×${height}px · PNG`;
+	if (grayscale === 256) return `${width}×${height}px · 256 colors · BMP`;
 	return `${width}×${height}px · ${grayscale} gray levels · BMP`;
 }

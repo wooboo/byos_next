@@ -75,6 +75,7 @@ const renderScreenBitmap = cache(
 			userId,
 			cookies,
 			paramsOverride: target.params,
+			previewPath: `/preview/screen/${screenId}?raw=1`,
 		});
 		return renders.bitmap ?? Buffer.from([]);
 	},

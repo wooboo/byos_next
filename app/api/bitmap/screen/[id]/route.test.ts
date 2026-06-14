@@ -80,6 +80,7 @@ describe("app/api/bitmap/screen/[id] GET", () => {
 				grayscale: 4,
 				userId: "user-1",
 				paramsOverride: { tz: "UTC" },
+				previewPath: "/preview/screen/screen-1?raw=1",
 			}),
 		);
 		expect(response.headers.get("Content-Type")).toBe("image/bmp");

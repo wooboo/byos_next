@@ -37,6 +37,7 @@ async function loadModule(options?: {
 	const withExplicitUserScopeMock = vi.fn(async (_userId, runQuery) =>
 		runQuery(mockDb),
 	);
+	const withUserScopeMock = vi.fn(async (runQuery) => runQuery(mockDb));
 	const logger = {
 		warn: vi.fn(),
 		error: vi.fn(),
@@ -45,6 +46,7 @@ async function loadModule(options?: {
 	vi.doMock("@/lib/database/db", () => ({ db: mockDb }));
 	vi.doMock("@/lib/database/scoped-db", () => ({
 		withExplicitUserScope: withExplicitUserScopeMock,
+		withUserScope: withUserScopeMock,
 	}));
 	vi.doMock("@/lib/database/utils", () => ({
 		checkDbConnection: checkDbConnectionMock,
@@ -57,6 +59,7 @@ async function loadModule(options?: {
 		mockDb,
 		checkDbConnectionMock,
 		withExplicitUserScopeMock,
+		withUserScopeMock,
 		logger,
 	};
 }
@@ -199,7 +202,7 @@ describe("renderLiquidRecipe", () => {
 				{
 					filename: "recipe-main/src/full.liquid",
 					content:
-						"{% render 'greeting' %}<p>{{ IDX_0.temp }}</p><script>const x = {...window.state};</script>",
+						"{% render 'greeting', trmnl: trmnl %}<p>{{ IDX_0.temp }}</p><script>const x = {...window.state};</script>",
 				},
 			],
 		});
@@ -214,12 +217,59 @@ describe("renderLiquidRecipe", () => {
 		});
 		expect(result?.settings.custom_fields?.[0]?.default).toBe("Paris");
 		expect(result?.html).toContain("<h1>Warsaw</h1>");
+		expect(result?.html.match(/<h1>Warsaw<\/h1>/g)).toHaveLength(1);
 		expect(result?.html).toContain("<p>21</p>");
 		expect(result?.html).toContain(
 			"<script>const x = {...window.state};</script>",
 		);
 		expect(result?.html).toContain(
 			'<link rel="stylesheet" href="https://trmnl.com/css/latest/plugins.css">',
+		);
+	});
+
+	it("executes transform.js with polling data and custom field values", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					quotes: {
+						english: ["Look behind you, a three-headed monkey!"],
+						german: ["Deutsch quote"],
+					},
+				}),
+				{ status: 200 },
+			),
+		);
+		const { renderLiquidRecipe } = await loadModule({
+			recipeFiles: [
+				{
+					filename: "recipe-main/src/settings.yml",
+					content: [
+						"polling_url: https://api.example/quotes.json",
+						"custom_fields:",
+						"  - keyname: language",
+						"    default: english",
+					].join("\n"),
+				},
+				{
+					filename: "recipe-main/src/full.liquid",
+					content: "<p>{{ quote }}</p>",
+				},
+				{
+					filename: "recipe-main/src/transform.js",
+					content: [
+						"function transform(input) {",
+						"  const language = input.trmnl.plugin_settings.custom_fields_values.language;",
+						"  return { quote: input.quotes[language][0] };",
+						"}",
+					].join("\n"),
+				},
+			],
+		});
+
+		const result = await renderLiquidRecipe("monkey", { language: "english" });
+
+		expect(result?.html).toContain(
+			"<p>Look behind you, a three-headed monkey!</p>",
 		);
 	});
 
