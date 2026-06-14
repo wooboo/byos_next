@@ -32,6 +32,7 @@ services:
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/byos_db?sslmode=disable
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
       - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3001}
+      - ENABLE_EXTERNAL_CATALOG=${ENABLE_EXTERNAL_CATALOG:-false}
     depends_on:
       postgres:
         condition: service_healthy
