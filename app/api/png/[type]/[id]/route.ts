@@ -5,8 +5,12 @@ import { resolveRenderableRef } from "@/lib/screens/render-target";
 import {
 	binaryImageResponse,
 	parsePreviewSize,
+	screenPreviewPath,
 } from "../../../bitmap/render-utils";
-import { parseRequestHeaders } from "../../../display/utils";
+import {
+	parseRequestHeaders,
+	resolveUserIdFromApiKey,
+} from "../../../display/utils";
 
 type RenderableRef = {
 	type: "recipe" | "screen";
@@ -37,7 +41,9 @@ export async function GET(
 
 	const { width, height } = parsePreviewSize(req);
 	const headers = parseRequestHeaders(req);
-	const userId = await getCurrentUserId();
+	const userId = headers.apiKey
+		? await resolveUserIdFromApiKey(headers.apiKey)
+		: await getCurrentUserId();
 	const target = await resolveRenderableRef({
 		type: targetRef.type,
 		id: targetRef.id,
@@ -56,7 +62,7 @@ export async function GET(
 		previewBaseUrl: headers.hostUrl,
 		previewPath:
 			targetRef.type === "screen"
-				? `/preview/screen/${targetRef.id}?raw=1`
+				? screenPreviewPath(targetRef.id, headers.apiKey)
 				: undefined,
 	});
 

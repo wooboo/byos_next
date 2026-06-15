@@ -23,6 +23,7 @@ type RenderRecipeTargetOptions = RenderSize & {
 	userId: string | null;
 	cookies?: string;
 	previewBaseUrl?: string;
+	previewAccessToken?: string | null;
 };
 
 function getSearchParams(req: NextRequest) {
@@ -120,6 +121,16 @@ export function binaryImageResponse(
 	});
 }
 
+export function screenPreviewPath(
+	screenId: string,
+	accessToken?: string | null,
+) {
+	const path = `/preview/screen/${screenId}`;
+	const params = new URLSearchParams({ raw: "1" });
+	if (accessToken) params.set("access_token", accessToken);
+	return `${path}?${params}`;
+}
+
 export async function renderRecipeTargetImage({
 	recipeId,
 	screenId,
@@ -130,6 +141,7 @@ export async function renderRecipeTargetImage({
 	userId,
 	cookies,
 	previewBaseUrl,
+	previewAccessToken,
 }: RenderRecipeTargetOptions) {
 	const target = await resolveRenderableRef({
 		type: screenId ? "screen" : "recipe",
@@ -145,7 +157,9 @@ export async function renderRecipeTargetImage({
 		userId,
 		cookies,
 		paramsOverride: target?.params,
-		previewPath: screenId ? `/preview/screen/${screenId}?raw=1` : undefined,
+		previewPath: screenId
+			? screenPreviewPath(screenId, previewAccessToken)
+			: undefined,
 		previewBaseUrl,
 	});
 	return renders[format] ?? Buffer.from([]);

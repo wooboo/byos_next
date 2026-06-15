@@ -81,7 +81,7 @@ describe("app/api/bitmap/screen/[id] GET", () => {
 				grayscale: 4,
 				userId: "user-1",
 				paramsOverride: { tz: "UTC" },
-				previewPath: "/preview/screen/screen-1?raw=1",
+				previewPath: "/preview/screen/screen-1?raw=1&access_token=token-1",
 				previewBaseUrl: "https://example.test",
 			}),
 		);

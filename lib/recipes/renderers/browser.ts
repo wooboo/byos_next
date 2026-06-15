@@ -87,7 +87,11 @@ export async function renderWithBrowser(
 	baseUrlOverride?: string,
 ): Promise<Buffer> {
 	const port = process.env.PORT || 3001;
+	const internalBaseUrl =
+		process.env.BROWSER_RENDER_BASE_URL ??
+		(process.env.NODE_ENV === "production" ? `http://127.0.0.1:${port}` : null);
 	const baseUrl =
+		internalBaseUrl ??
 		baseUrlOverride ??
 		process.env.NEXT_PUBLIC_BASE_URL ??
 		`http://127.0.0.1:${port}`;
