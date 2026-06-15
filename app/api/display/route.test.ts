@@ -345,7 +345,7 @@ describe("app/api/display GET", () => {
 		await expect(response.json()).resolves.toEqual(
 			expect.objectContaining({
 				image_url:
-					"http://example.test/api/bitmap/screen/screen-5.bmp?width=800&height=480&grayscale=2&base64=true",
+					"http://example.test/api/bitmap/screen/screen-5.bmp?width=800&height=480&grayscale=2&base64=true&access_token=token-5",
 				refresh_rate: 180,
 				image_rotate: 1,
 			}),
@@ -357,6 +357,46 @@ describe("app/api/display GET", () => {
 					screen: "screen-5",
 					displayMode: "single",
 				}),
+			}),
+		);
+	});
+
+	it("includes the access token when mixup mode falls back to a named screen", async () => {
+		state.checkDbConnection.mockResolvedValue({ ready: true });
+		state.findOrCreateDevice.mockResolvedValue({
+			id: "8",
+			friendly_id: "x-8",
+			screen: null,
+			screen_id: "screen-x",
+			screen_type: "screen",
+			screen_orientation: "landscape",
+			screen_width: 1872,
+			screen_height: 1404,
+			grayscale: 2,
+			display_mode: "mixup",
+			mixup_id: null,
+			refresh_schedule: null,
+			timezone: "UTC",
+			firmware_version: "1.0.0",
+		});
+		state.getLatestFirmware.mockResolvedValue(null);
+		const { GET } = await loadRoute();
+
+		const response = await GET(
+			new Request("https://example.test/api/display", {
+				headers: {
+					"Access-Token": "token-x",
+					Width: "1872",
+					Height: "1404",
+					host: "example.test",
+				},
+			}),
+		);
+
+		await expect(response.json()).resolves.toEqual(
+			expect.objectContaining({
+				image_url:
+					"http://example.test/api/bitmap/screen/screen-x.bmp?width=1872&height=1404&grayscale=2&access_token=token-x",
 			}),
 		);
 	});

@@ -99,7 +99,7 @@ describe("app/api/bitmap/screen/[id] GET", () => {
 
 		const response = await GET(
 			new Request(
-				"https://example.test/api/bitmap/screen/missing.bmp",
+				"https://example.test/api/bitmap/screen/missing.bmp?width=1872&height=1404&grayscale=2",
 			) as never,
 			{ params: Promise.resolve({ id: "missing.bmp" }) },
 		);
@@ -108,7 +108,10 @@ describe("app/api/bitmap/screen/[id] GET", () => {
 			expect.objectContaining({
 				slug: "missing",
 				props: { slug: "missing" },
+				imageWidth: 1872,
+				imageHeight: 1404,
 				formats: ["bitmap"],
+				grayscale: 2,
 			}),
 		);
 		expect(response.headers.get("Content-Type")).toBe("image/bmp");

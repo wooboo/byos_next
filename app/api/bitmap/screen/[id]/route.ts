@@ -44,7 +44,8 @@ export async function GET(
 			cookieHeader,
 			headers.hostUrl,
 		);
-		if (!bitmap?.length) return await renderFallbackBitmap(screenId);
+		if (!bitmap?.length)
+			return await renderFallbackBitmap(screenId, width, height, grayscale);
 		return binaryImageResponse(bitmap, "image/bmp");
 	} catch (error) {
 		logger.error("Error generating screen bitmap:", error);
@@ -84,18 +85,25 @@ const renderScreenBitmap = cache(
 	},
 );
 
-const renderFallbackBitmap = cache(async (slug: string = "not-found") => {
-	const renders = await renderRecipeOutputs({
-		slug,
-		Component: NotFoundScreen,
-		props: { slug },
-		config: null,
-		imageWidth: DEFAULT_IMAGE_WIDTH,
-		imageHeight: DEFAULT_IMAGE_HEIGHT,
-		formats: ["bitmap"],
-		grayscale: 2,
-	});
-	if (!renders.bitmap)
-		return new Response("Error generating image", { status: 500 });
-	return binaryImageResponse(renders.bitmap, "image/bmp");
-});
+const renderFallbackBitmap = cache(
+	async (
+		slug: string = "not-found",
+		width: number = DEFAULT_IMAGE_WIDTH,
+		height: number = DEFAULT_IMAGE_HEIGHT,
+		grayscale: number = 2,
+	) => {
+		const renders = await renderRecipeOutputs({
+			slug,
+			Component: NotFoundScreen,
+			props: { slug },
+			config: null,
+			imageWidth: width,
+			imageHeight: height,
+			formats: ["bitmap"],
+			grayscale,
+		});
+		if (!renders.bitmap)
+			return new Response("Error generating image", { status: 500 });
+		return binaryImageResponse(renders.bitmap, "image/bmp");
+	},
+);
