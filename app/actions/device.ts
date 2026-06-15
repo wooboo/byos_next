@@ -1,6 +1,8 @@
 "use server";
 
 import crypto from "crypto";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/auth/get-user";
 import { db } from "@/lib/database/db";
 import { withUserScope } from "@/lib/database/scoped-db";
@@ -276,6 +278,28 @@ export async function updateDevice(
 			error: error instanceof Error ? error.message : String(error),
 		};
 	}
+}
+
+/**
+ * Delete a device owned by the current user.
+ */
+export async function deleteDevice(friendlyId: string): Promise<void> {
+	const { ready } = await checkDbConnection();
+
+	if (!ready) {
+		throw new Error("Database client not initialized");
+	}
+
+	await withUserScope((scopedDb) =>
+		scopedDb
+			.deleteFrom("devices")
+			.where("friendly_id", "=", friendlyId)
+			.execute(),
+	);
+
+	revalidatePath("/");
+	revalidatePath(`/device/${friendlyId}`);
+	redirect("/");
 }
 
 /**
