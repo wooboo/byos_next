@@ -38,7 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { resolveRenderableContentType } from "@/lib/content-ref";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
-import { playlistFrameBmpUrl } from "@/lib/playlist-url";
+import { playlistFrameBmpUrl, playlistFramePngUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
@@ -210,7 +210,12 @@ export function getPreviewSources({
 		playlistPreviewFrame,
 		previewType,
 		heroSrc,
-		pngSrc: `/api/png/${previewType}/${previewId}?width=${previewWidth}&height=${previewHeight}`,
+		pngSrc: playlistFramePngUrl(
+			previewId,
+			previewType,
+			previewWidth,
+			previewHeight,
+		),
 		reactSrc: `/preview/${previewType}/${previewId}?width=${previewWidth}&height=${previewHeight}`,
 	};
 }

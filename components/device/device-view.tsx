@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { resolveRenderableContentType } from "@/lib/content-ref";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
-import { playlistFrameBmpUrl } from "@/lib/playlist-url";
+import { playlistFrameBmpUrl, playlistFramePngUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
@@ -146,7 +146,12 @@ export function getDevicePreviewModel({
 						deviceHeight,
 						grayscaleLevels,
 					),
-		pngSrc: `/api/png/${heroContentType}/${heroFrameId}?width=${deviceWidth}&height=${deviceHeight}`,
+		pngSrc: playlistFramePngUrl(
+			heroFrameId,
+			heroContentType,
+			deviceWidth,
+			deviceHeight,
+		),
 		reactSrc: `/preview/${heroContentType}/${heroFrameId}?width=${deviceWidth}&height=${deviceHeight}`,
 	};
 }
