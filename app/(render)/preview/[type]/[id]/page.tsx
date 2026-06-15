@@ -41,49 +41,16 @@ export default async function RenderPreviewPage({
 	const userId =
 		sessionUserId ??
 		(accessToken ? await resolveUserIdFromApiKey(accessToken) : null);
-	console.info("[preview-render] preview auth", {
-		type,
-		id,
-		width,
-		height,
-		raw: isRawRender,
-		mode: mode ?? null,
-		hasSessionUser: Boolean(sessionUserId),
-		hasAccessToken: Boolean(accessToken),
-		hasResolvedUser: Boolean(userId),
-	});
 	const target = await resolveRenderableRef({ type, id, userId });
-	if (!target) {
-		console.warn("[preview-render] preview target missing", {
-			type,
-			id,
-			hasResolvedUser: Boolean(userId),
-		});
-		notFound();
-	}
+	if (!target) notFound();
 
 	const config = await fetchRecipeConfig(
 		target.recipeSlug,
 		userId ?? undefined,
 	);
-	if (!config) {
-		console.warn("[preview-render] preview config missing", {
-			type,
-			id,
-			recipeSlug: target.recipeSlug,
-			hasResolvedUser: Boolean(userId),
-		});
-		notFound();
-	}
+	if (!config) notFound();
 	const Component = await fetchRecipeComponent(target.recipeSlug);
-	if (!Component) {
-		console.warn("[preview-render] preview component missing", {
-			type,
-			id,
-			recipeSlug: target.recipeSlug,
-		});
-		notFound();
-	}
+	if (!Component) notFound();
 	const props = await fetchRecipeProps(
 		target.recipeSlug,
 		config,
@@ -91,14 +58,6 @@ export default async function RenderPreviewPage({
 		userId ?? undefined,
 		target.params,
 	);
-	console.info("[preview-render] preview resolved", {
-		type,
-		id,
-		recipeSlug: target.recipeSlug,
-		targetType: target.type,
-		raw: isRawRender,
-		hasResolvedUser: Boolean(userId),
-	});
 	const previewProps = addDimensionsToProps(props, width, height);
 
 	if (isRawRender) {
