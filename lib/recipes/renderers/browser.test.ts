@@ -130,6 +130,39 @@ describe("renderWithBrowser", () => {
 		);
 	});
 
+	it("keeps secure loopback session cookies for authenticated internal previews", async () => {
+		const { renderWithBrowser, page } = await loadModule();
+
+		await renderWithBrowser(
+			"immich-favorites",
+			800,
+			480,
+			"__Secure-better-auth.session_token=secure-token; __Host-auth=host-token",
+			undefined,
+			"http://127.0.0.1:3000",
+		);
+
+		expect(page.setCookie).toHaveBeenCalledWith(
+			{
+				name: "__Secure-better-auth.session_token",
+				value: "secure-token",
+				url: "http://127.0.0.1:3000",
+				secure: true,
+			},
+			{
+				name: "__Host-auth",
+				value: "host-token",
+				url: "http://127.0.0.1:3000",
+				secure: true,
+				path: "/",
+			},
+		);
+		expect(page.goto).toHaveBeenCalledWith(
+			"http://127.0.0.1:3000/preview/recipe/immich-favorites?width=800&height=480",
+			{ waitUntil: "networkidle0" },
+		);
+	});
+
 	it("falls back to the default local preview URL when NEXT_PUBLIC_BASE_URL is absent", async () => {
 		process.env.PORT = "4321";
 		const { renderWithBrowser, page } = await loadModule();

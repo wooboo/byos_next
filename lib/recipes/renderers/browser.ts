@@ -24,17 +24,21 @@ function parseCookies(
 
 const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
+function isLoopbackHost(hostname: string) {
+	return (
+		hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+	);
+}
+
 function buildForwardedCookies(cookieHeader: string, url: URL): CookieParam[] {
 	const secure = url.protocol === "https:";
-	const isLocalhost = url.hostname === "localhost";
+	const isLocal = isLoopbackHost(url.hostname);
 	return parseCookies(cookieHeader)
 		.filter((cookie) => COOKIE_NAME_PATTERN.test(cookie.name))
 		.filter(
-			(cookie) => secure || isLocalhost || !cookie.name.startsWith("__Secure-"),
+			(cookie) => secure || isLocal || !cookie.name.startsWith("__Secure-"),
 		)
-		.filter(
-			(cookie) => secure || isLocalhost || !cookie.name.startsWith("__Host-"),
-		)
+		.filter((cookie) => secure || isLocal || !cookie.name.startsWith("__Host-"))
 		.map((cookie) => ({
 			name: cookie.name,
 			value: cookie.value,
@@ -104,7 +108,7 @@ export async function renderWithBrowser(
 	const port = process.env.PORT || 3001;
 	const internalBaseUrl =
 		process.env.BROWSER_RENDER_BASE_URL ??
-		(process.env.NODE_ENV === "production" ? `http://127.0.0.1:${port}` : null);
+		(process.env.NODE_ENV === "production" ? `http://localhost:${port}` : null);
 	const baseUrl =
 		internalBaseUrl ??
 		baseUrlOverride ??
