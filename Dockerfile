@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 ARG NODE_VERSION=22
 ARG PNPM_VERSION=10
 
@@ -20,11 +22,14 @@ RUN corepack enable \
 
 # Install dependencies only when needed
 FROM base AS deps
+ARG TARGETPLATFORM
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-RUN pnpm install --frozen-lockfile --prod=false \
-    && rm -rf ~/.npm ~/.pnpm-store /root/.cache
+RUN --mount=type=cache,id=pnpm-${TARGETPLATFORM},target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store \
+    && pnpm install --frozen-lockfile --prod=false \
+    && rm -rf ~/.npm /root/.cache
 
 # Build the application
 FROM base AS builder
