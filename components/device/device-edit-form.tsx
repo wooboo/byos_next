@@ -500,6 +500,8 @@ function TimezoneField({
 	timezone?: string | null;
 	onSelectChange: DeviceEditFormProps["onSelectChange"];
 }) {
+	const timezoneRegions = Array.from(new Set(timezones.map((tz) => tz.region)));
+
 	return (
 		<Field label="Timezone" htmlFor="timezone">
 			<Popover>
@@ -518,33 +520,29 @@ function TimezoneField({
 						<CommandEmpty>No timezone found.</CommandEmpty>
 						<CommandList>
 							<ScrollArea className="h-[300px]">
-								{["Europe", "North America", "Asia", "Australia & Pacific"].map(
-									(region) => (
-										<CommandGroup key={region} heading={region}>
-											{timezones
-												.filter((tz) => tz.region === region)
-												.map((tz) => (
-													<CommandItem
-														key={tz.value}
-														value={tz.value}
-														onSelect={() =>
-															onSelectChange("timezone", tz.value)
-														}
-														className="cursor-pointer"
+								{timezoneRegions.map((region) => (
+									<CommandGroup key={region} heading={region}>
+										{timezones
+											.filter((tz) => tz.region === region)
+											.map((tz) => (
+												<CommandItem
+													key={tz.value}
+													value={`${tz.value} ${tz.label} ${tz.region}`}
+													onSelect={() => onSelectChange("timezone", tz.value)}
+													className="cursor-pointer"
+												>
+													<span
+														className={cn(
+															"mr-2",
+															timezone === tz.value && "font-medium",
+														)}
 													>
-														<span
-															className={cn(
-																"mr-2",
-																timezone === tz.value && "font-medium",
-															)}
-														>
-															{tz.label}
-														</span>
-													</CommandItem>
-												))}
-										</CommandGroup>
-									),
-								)}
+														{tz.label}
+													</span>
+												</CommandItem>
+											))}
+									</CommandGroup>
+								))}
 							</ScrollArea>
 						</CommandList>
 					</Command>

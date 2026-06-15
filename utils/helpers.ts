@@ -137,83 +137,95 @@ export function generateFriendlyId(macAddress: string, salt?: string): string {
 	);
 }
 
-// Common IANA timezones grouped by region
-export const timezones = [
-	// Europe
-	{ value: "Europe/London", label: "London (GMT/BST)", region: "Europe" },
-	{ value: "Europe/Paris", label: "Paris (CET/CEST)", region: "Europe" },
-	{ value: "Europe/Berlin", label: "Berlin (CET/CEST)", region: "Europe" },
-	{ value: "Europe/Madrid", label: "Madrid (CET/CEST)", region: "Europe" },
-	{ value: "Europe/Rome", label: "Rome (CET/CEST)", region: "Europe" },
-	{
-		value: "Europe/Amsterdam",
-		label: "Amsterdam (CET/CEST)",
-		region: "Europe",
-	},
-	{ value: "Europe/Athens", label: "Athens (EET/EEST)", region: "Europe" },
-	{ value: "Europe/Moscow", label: "Moscow (MSK)", region: "Europe" },
+const timezoneLabelOverrides = new Map<string, string>([
+	["UTC", "UTC"],
+	["Europe/London", "London (GMT/BST)"],
+	["Europe/Paris", "Paris (CET/CEST)"],
+	["Europe/Berlin", "Berlin (CET/CEST)"],
+	["Europe/Madrid", "Madrid (CET/CEST)"],
+	["Europe/Rome", "Rome (CET/CEST)"],
+	["Europe/Amsterdam", "Amsterdam (CET/CEST)"],
+	["Europe/Athens", "Athens (EET/EEST)"],
+	["Europe/Moscow", "Moscow (MSK)"],
+	["America/New_York", "New York (EST/EDT)"],
+	["America/Chicago", "Chicago (CST/CDT)"],
+	["America/Denver", "Denver (MST/MDT)"],
+	["America/Los_Angeles", "Los Angeles (PST/PDT)"],
+	["America/Toronto", "Toronto (EST/EDT)"],
+	["America/Vancouver", "Vancouver (PST)"],
+	["Asia/Tokyo", "Tokyo (JST)"],
+	["Asia/Shanghai", "Shanghai (CST)"],
+	["Asia/Singapore", "Singapore (SGT)"],
+	["Asia/Dubai", "Dubai (GST)"],
+	["Asia/Hong_Kong", "Hong Kong (HKT)"],
+	["Australia/Sydney", "Sydney (AEST/AEDT)"],
+	["Australia/Melbourne", "Melbourne (AEST/AEDT)"],
+	["Australia/Perth", "Perth (AWST)"],
+	["Pacific/Auckland", "Auckland (NZST/NZDT)"],
+]);
 
-	// North America
-	{
-		value: "America/New_York",
-		label: "New York (EST/EDT)",
-		region: "North America",
-	},
-	{
-		value: "America/Chicago",
-		label: "Chicago (CST/CDT)",
-		region: "North America",
-	},
-	{
-		value: "America/Denver",
-		label: "Denver (MST/MDT)",
-		region: "North America",
-	},
-	{
-		value: "America/Los_Angeles",
-		label: "Los Angeles (PST/PDT)",
-		region: "North America",
-	},
-	{
-		value: "America/Toronto",
-		label: "Toronto (EST/EDT)",
-		region: "North America",
-	},
-	{
-		value: "America/Vancouver",
-		label: "Vancouver (PST/PDT)",
-		region: "North America",
-	},
+const timezoneRegionOrder = [
+	"UTC",
+	"Africa",
+	"America",
+	"Antarctica",
+	"Arctic",
+	"Asia",
+	"Atlantic",
+	"Australia",
+	"Europe",
+	"Indian",
+	"Pacific",
+] as const;
 
-	// Asia
-	{ value: "Asia/Tokyo", label: "Tokyo (JST)", region: "Asia" },
-	{ value: "Asia/Shanghai", label: "Shanghai (CST)", region: "Asia" },
-	{ value: "Asia/Singapore", label: "Singapore (SGT)", region: "Asia" },
-	{ value: "Asia/Dubai", label: "Dubai (GST)", region: "Asia" },
-	{ value: "Asia/Hong_Kong", label: "Hong Kong (HKT)", region: "Asia" },
+const getSupportedTimeZones = () => {
+	const intlWithSupportedValues = Intl as typeof Intl & {
+		supportedValuesOf?: (key: "timeZone") => string[];
+	};
+	return intlWithSupportedValues.supportedValuesOf?.("timeZone") ?? [];
+};
 
-	// Australia & Pacific
-	{
-		value: "Australia/Sydney",
-		label: "Sydney (AEST/AEDT)",
-		region: "Australia & Pacific",
-	},
-	{
-		value: "Australia/Melbourne",
-		label: "Melbourne (AEST/AEDT)",
-		region: "Australia & Pacific",
-	},
-	{
-		value: "Australia/Perth",
-		label: "Perth (AWST)",
-		region: "Australia & Pacific",
-	},
-	{
-		value: "Pacific/Auckland",
-		label: "Auckland (NZST/NZDT)",
-		region: "Australia & Pacific",
-	},
-];
+const getTimezoneRegion = (timezone: string) =>
+	timezone.split("/")[0] || "Other";
+
+const getTimezoneLabel = (timezone: string) => {
+	const override = timezoneLabelOverrides.get(timezone);
+	if (override) return override;
+	const parts = timezone.split("/");
+	const city = (parts[parts.length - 1] || timezone).replace(/_/g, " ");
+	return `${city} (${timezone})`;
+};
+
+const compareTimezones = (
+	a: { label: string; region: string },
+	b: { label: string; region: string },
+) => {
+	const regionA = timezoneRegionOrder.indexOf(
+		a.region as (typeof timezoneRegionOrder)[number],
+	);
+	const regionB = timezoneRegionOrder.indexOf(
+		b.region as (typeof timezoneRegionOrder)[number],
+	);
+	const safeRegionA = regionA === -1 ? timezoneRegionOrder.length : regionA;
+	const safeRegionB = regionB === -1 ? timezoneRegionOrder.length : regionB;
+	if (safeRegionA !== safeRegionB) return safeRegionA - safeRegionB;
+	return a.label.localeCompare(b.label);
+};
+
+// Full IANA timezone list grouped by region.
+export const timezones = Array.from(
+	new Set([
+		"UTC",
+		...getSupportedTimeZones(),
+		...timezoneLabelOverrides.keys(),
+	]),
+)
+	.map((value) => ({
+		value,
+		label: getTimezoneLabel(value),
+		region: getTimezoneRegion(value),
+	}))
+	.sort(compareTimezones);
 
 // Format timezone for display
 export const formatTimezone = (timezone: string): string => {

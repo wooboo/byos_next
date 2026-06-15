@@ -13,6 +13,7 @@ import {
 	hashString,
 	isValidApiKey,
 	isValidFriendlyId,
+	timezones,
 } from "./helpers.ts";
 
 describe("version and date helpers", () => {
@@ -102,6 +103,13 @@ describe("timezone and battery helpers", () => {
 	it("formats known timezones and passes unknown values through", () => {
 		assert.equal(formatTimezone("Europe/London"), "London (GMT/BST)");
 		assert.equal(formatTimezone("Mars/Base"), "Mars/Base");
+	});
+
+	it("exposes the full IANA timezone list with UTC included", () => {
+		assert.ok(timezones.length > 100);
+		assert.ok(timezones.some((tz) => tz.value === "UTC"));
+		assert.ok(timezones.some((tz) => tz.value === "Pacific/Chatham"));
+		assert.ok(timezones.some((tz) => tz.value === "America/Argentina/Ushuaia"));
 	});
 
 	it("estimates battery percentage, charging state, and remaining days", () => {
