@@ -90,7 +90,7 @@ describe("app/api/bitmap/[[...slug]] GET", () => {
 			userId: "user-1",
 			cookies: "session=abc",
 			paramsOverride: { mode: "compact" },
-			previewPath: undefined,
+			previewPath: "/preview/recipe/resolved-recipe?raw=1",
 			previewBaseUrl: "https://example.test",
 		});
 	});
