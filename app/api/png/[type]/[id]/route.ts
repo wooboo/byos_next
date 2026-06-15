@@ -5,6 +5,7 @@ import { resolveRenderableRef } from "@/lib/screens/render-target";
 import {
 	binaryImageResponse,
 	parsePreviewSize,
+	recipePreviewPath,
 	screenPreviewPath,
 } from "../../../bitmap/render-utils";
 import {
@@ -63,7 +64,7 @@ export async function GET(
 		previewPath:
 			targetRef.type === "screen"
 				? screenPreviewPath(targetRef.id, headers.apiKey)
-				: undefined,
+				: recipePreviewPath(target.recipeSlug),
 	});
 
 	if (!renders.png) return new Response("Failed to render", { status: 500 });

@@ -131,6 +131,12 @@ export function screenPreviewPath(
 	return `${path}?${params}`;
 }
 
+export function recipePreviewPath(recipeSlug: string) {
+	const path = `/preview/recipe/${recipeSlug}`;
+	const params = new URLSearchParams({ raw: "1" });
+	return `${path}?${params}`;
+}
+
 export async function renderRecipeTargetImage({
 	recipeId,
 	screenId,
@@ -159,7 +165,7 @@ export async function renderRecipeTargetImage({
 		paramsOverride: target?.params,
 		previewPath: screenId
 			? screenPreviewPath(screenId, previewAccessToken)
-			: undefined,
+			: recipePreviewPath(target?.recipeSlug ?? recipeId),
 		previewBaseUrl,
 	});
 	return renders[format] ?? Buffer.from([]);

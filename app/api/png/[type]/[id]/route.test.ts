@@ -119,9 +119,37 @@ describe("app/api/png/[type]/[id] GET", () => {
 			userId: "user-1",
 			cookies: undefined,
 			paramsOverride: { city: "Warsaw" },
-			previewPath: undefined,
+			previewPath: "/preview/recipe/weather?raw=1",
 			previewBaseUrl: "https://example.test",
 		});
+	});
+
+	it("uses the resolved recipe slug for recipe preview paths", async () => {
+		state.resolveRenderableRef.mockResolvedValue({
+			recipeSlug: "weather",
+			params: { city: "Warsaw" },
+		});
+		const { GET } = await loadRoute();
+
+		const response = await GET(
+			new Request("https://example.test/api/png/recipe/recipe-id-1", {
+				headers: { host: "example.test", "x-forwarded-proto": "https" },
+			}) as never,
+			{ params: Promise.resolve({ type: "recipe", id: "recipe-id-1" }) },
+		);
+
+		expect(response.status).toBe(200);
+		expect(state.resolveRenderableRef).toHaveBeenCalledWith({
+			type: "recipe",
+			id: "recipe-id-1",
+			userId: "user-1",
+		});
+		expect(state.renderRecipeToImage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				slug: "weather",
+				previewPath: "/preview/recipe/weather?raw=1",
+			}),
+		);
 	});
 
 	it("renders default recipe PNGs from the recipe/default URL shape", async () => {
@@ -148,7 +176,7 @@ describe("app/api/png/[type]/[id] GET", () => {
 			expect.objectContaining({
 				cookies: "session=abc",
 				paramsOverride: { city: "Warsaw" },
-				previewPath: undefined,
+				previewPath: "/preview/recipe/weather?raw=1",
 				previewBaseUrl: "https://example.test",
 			}),
 		);
