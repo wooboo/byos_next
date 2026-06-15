@@ -365,7 +365,7 @@ function canManageDevice(
 	currentUserId: string | null,
 ) {
 	return (
-		!apiKey ||
+		(apiKey === null && currentUserId === null) ||
 		apiKey === device.api_key ||
 		(Boolean(currentUserId) && device.user_id === currentUserId)
 	);
