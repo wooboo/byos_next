@@ -420,7 +420,7 @@ describe("DeviceEditForm", () => {
 				},
 				previewType: "recipe",
 				heroSrc: "/api/bitmap/calendar.bmp?width=800&height=480&grayscale=16",
-				pngSrc: "/api/png/recipe/calendar?width=800&height=480",
+				pngSrc: "/api/png/calendar/default.png?width=800&height=480",
 				reactSrc: "/preview/recipe/calendar?width=800&height=480",
 			},
 		);
@@ -444,7 +444,7 @@ describe("DeviceEditForm", () => {
 				previewType: "mixup",
 				heroSrc:
 					"/api/bitmap/mixup/mixup-1.bmp?width=1200&height=825&grayscale=2",
-				pngSrc: "/api/png/mixup/mixup-1?width=1200&height=825",
+				pngSrc: "/api/png/mixup/mixup-1.png?width=1200&height=825",
 				reactSrc: "/preview/mixup/mixup-1?width=1200&height=825",
 			},
 		);

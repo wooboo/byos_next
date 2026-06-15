@@ -113,6 +113,7 @@ export function binaryImageResponse(
 ) {
 	return new Response(new Uint8Array(buffer), {
 		headers: {
+			"Cache-Control": "no-store",
 			"Content-Type": contentType,
 			"Content-Length": buffer.length.toString(),
 		},

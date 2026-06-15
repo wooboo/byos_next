@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/table";
 import { resolveRenderableContentType } from "@/lib/content-ref";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
-import { playlistFrameBmpUrl } from "@/lib/playlist-url";
+import { playlistFrameBmpUrl, playlistFramePngUrl } from "@/lib/playlist-url";
 import type { Device, SystemLog } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { formatDate, getDeviceStatus } from "@/utils/helpers";
@@ -120,7 +120,7 @@ function useLatestScreenPreview(device: ProcessedDevice | null) {
 			previewType,
 			width,
 		}),
-		pngSrc: `/api/png/${previewType}/${previewId}?width=${width}&height=${height}`,
+		pngSrc: playlistFramePngUrl(previewId, previewType, width, height),
 		reactSrc: `/preview/${previewType}/${previewId}?width=${width}&height=${height}`,
 	};
 }

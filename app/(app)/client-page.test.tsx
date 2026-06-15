@@ -290,7 +290,7 @@ describe("Dashboard client page", () => {
 		);
 
 		expect(html).toContain(
-			"/api/png/screen/named-screen?width=480&amp;height=800",
+			"/api/png/screen/named-screen.png?width=480&amp;height=800",
 		);
 	});
 });
