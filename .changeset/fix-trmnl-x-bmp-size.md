@@ -2,4 +2,4 @@
 "byos-nextjs": patch
 ---
 
-Return protected screen bitmap URLs with access tokens and preserve requested fallback BMP dimensions.
+Fix server-side Chrome rendering for protected screen previews and preserve requested fallback BMP dimensions.

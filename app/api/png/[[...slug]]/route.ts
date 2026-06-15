@@ -45,6 +45,7 @@ export async function GET(
 			userId,
 			cookieHeader || undefined,
 			headers.hostUrl,
+			headers.apiKey,
 		);
 
 		if (
@@ -74,6 +75,7 @@ const renderRecipePng = cache(
 		userId: string | null = null,
 		cookies?: string,
 		previewBaseUrl?: string,
+		previewAccessToken?: string | null,
 	) =>
 		renderRecipeTargetImage({
 			recipeId,
@@ -84,6 +86,7 @@ const renderRecipePng = cache(
 			userId,
 			cookies,
 			previewBaseUrl,
+			previewAccessToken,
 		}),
 );
 

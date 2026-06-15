@@ -117,6 +117,7 @@ describe("getBrowser", () => {
 		expect(second).toBe(browser);
 		expect(connectMock).toHaveBeenCalledTimes(1);
 		expect(connectMock).toHaveBeenCalledWith({
+			acceptInsecureCerts: true,
 			browserURL: "http://chrome.example:9222",
 		});
 		expect(launchMock).not.toHaveBeenCalled();
@@ -133,11 +134,13 @@ describe("getBrowser", () => {
 		expect(result).toBe(browser);
 		expect(executablePathMock).not.toHaveBeenCalled();
 		expect(launchMock).toHaveBeenCalledWith({
+			acceptInsecureCerts: true,
 			headless: true,
 			executablePath: "/custom/chrome",
 			args: expect.arrayContaining([
 				"--disable-web-security",
 				"--disable-features=IsolateOrigins,site-per-process",
+				"--ignore-certificate-errors",
 			]),
 		});
 	});
@@ -160,6 +163,7 @@ describe("getBrowser", () => {
 			/^https:\/\/github\.com\/Sparticuz\/chromium\/releases\/download\//,
 		);
 		expect(launchMock).toHaveBeenCalledWith({
+			acceptInsecureCerts: true,
 			headless: true,
 			executablePath: "/fallback/chromium",
 			args: expect.not.arrayContaining(["--disable-web-security"]),
@@ -200,9 +204,11 @@ describe("getBrowser", () => {
 		expect(second).toBe(secondBrowser);
 		expect(connectMock).toHaveBeenCalledTimes(2);
 		expect(connectMock).toHaveBeenNthCalledWith(1, {
+			acceptInsecureCerts: true,
 			browserWSEndpoint: "ws://chrome.example/devtools",
 		});
 		expect(connectMock).toHaveBeenNthCalledWith(2, {
+			acceptInsecureCerts: true,
 			browserWSEndpoint: "ws://chrome.example/devtools",
 		});
 	});

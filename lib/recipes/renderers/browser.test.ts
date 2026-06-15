@@ -29,6 +29,7 @@ describe("renderWithBrowser", () => {
 		vi.resetModules();
 		vi.restoreAllMocks();
 		vi.doUnmock("@/lib/recipes/chrome-pool");
+		delete process.env.BROWSER_RENDER_BASE_URL;
 		delete process.env.PORT;
 		delete process.env.NEXT_PUBLIC_BASE_URL;
 	});
@@ -137,6 +138,25 @@ describe("renderWithBrowser", () => {
 
 		expect(page.goto).toHaveBeenCalledWith(
 			"http://127.0.0.1:4321/preview/recipe/clock?width=400&height=300",
+			{ waitUntil: "networkidle0" },
+		);
+	});
+
+	it("prefers an internal browser render base URL over public request origins", async () => {
+		process.env.BROWSER_RENDER_BASE_URL = "http://127.0.0.1:3000";
+		const { renderWithBrowser, page } = await loadModule();
+
+		await renderWithBrowser(
+			"clock",
+			400,
+			300,
+			undefined,
+			undefined,
+			"https://byos.core.zabowka.pl",
+		);
+
+		expect(page.goto).toHaveBeenCalledWith(
+			"http://127.0.0.1:3000/preview/recipe/clock?width=400&height=300",
 			{ waitUntil: "networkidle0" },
 		);
 	});

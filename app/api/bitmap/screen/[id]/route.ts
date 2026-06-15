@@ -18,6 +18,7 @@ import {
 	binaryImageResponse,
 	parsePreviewGrayscale,
 	parsePreviewSize,
+	screenPreviewPath,
 } from "../../render-utils";
 
 export async function GET(
@@ -43,6 +44,7 @@ export async function GET(
 			userId,
 			cookieHeader,
 			headers.hostUrl,
+			headers.apiKey,
 		);
 		if (!bitmap?.length)
 			return await renderFallbackBitmap(screenId, width, height, grayscale);
@@ -62,6 +64,7 @@ const renderScreenBitmap = cache(
 		userId: string | null,
 		cookies?: string,
 		previewBaseUrl?: string,
+		previewAccessToken?: string | null,
 	) => {
 		const target = await resolveRenderableRef({
 			type: "screen",
@@ -78,7 +81,7 @@ const renderScreenBitmap = cache(
 			userId,
 			cookies,
 			paramsOverride: target.params,
-			previewPath: `/preview/screen/${screenId}?raw=1`,
+			previewPath: screenPreviewPath(screenId, previewAccessToken),
 			previewBaseUrl,
 		});
 		return renders.bitmap ?? Buffer.from([]);

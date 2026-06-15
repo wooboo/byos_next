@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
 	config: { slug: "weather" } as unknown,
 	currentUserId: "user-1" as string | null,
 	props: { title: "Preview" },
+	resolveUserIdFromApiKey: vi.fn(),
 	resolvedTarget: {
 		recipeSlug: "weather",
 		params: { city: "Warsaw" },
@@ -24,6 +25,10 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/auth/get-user", () => ({
 	getCurrentUserId: vi.fn(async () => state.currentUserId),
+}));
+
+vi.mock("@/app/api/display/utils", () => ({
+	resolveUserIdFromApiKey: state.resolveUserIdFromApiKey,
 }));
 
 vi.mock("@/lib/screens/render-target", () => ({
@@ -52,9 +57,11 @@ const loadPage = async () => {
 
 describe("render preview page", () => {
 	beforeEach(() => {
+		vi.clearAllMocks();
 		state.config = { slug: "weather" };
 		state.currentUserId = "user-1";
 		state.props = { title: "Preview" };
+		state.resolveUserIdFromApiKey.mockReset();
 		state.resolvedTarget = {
 			recipeSlug: "weather",
 			params: { city: "Warsaw" },
@@ -77,6 +84,35 @@ describe("render preview page", () => {
 		assert.match(html, /&quot;width&quot;:320/);
 		assert.match(html, /&quot;height&quot;:240/);
 		assert.match(html, /overflow:\s*hidden/);
+	});
+
+	it("resolves screen previews from access_token when no session is available", async () => {
+		state.currentUserId = null;
+		state.resolveUserIdFromApiKey.mockResolvedValue("device-owner");
+		const { resolveRenderableRef } = await import(
+			"@/lib/screens/render-target"
+		);
+		const RenderPreviewPage = await loadPage();
+
+		const html = renderToStaticMarkup(
+			await RenderPreviewPage({
+				params: Promise.resolve({ type: "screen", id: "screen-1" }),
+				searchParams: Promise.resolve({
+					access_token: "device-token",
+					raw: "1",
+				}),
+			}),
+		);
+
+		assert.match(html, /Preview/);
+		assert.equal(
+			state.resolveUserIdFromApiKey.mock.calls[0]?.[0],
+			"device-token",
+		);
+		assert.deepEqual(
+			(resolveRenderableRef as ReturnType<typeof vi.fn>).mock.calls[0]?.[0],
+			{ type: "screen", id: "screen-1", userId: "device-owner" },
+		);
 	});
 
 	it("uses default dimensions and scroll mode when requested", async () => {

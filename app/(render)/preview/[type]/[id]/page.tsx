@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { resolveUserIdFromApiKey } from "@/app/api/display/utils";
 import { getCurrentUserId } from "@/lib/auth/get-user";
 import {
 	addDimensionsToProps,
@@ -20,6 +21,7 @@ export default async function RenderPreviewPage({
 		height?: string;
 		mode?: string;
 		raw?: string;
+		access_token?: string;
 	}>;
 }) {
 	const { type, id } = await params;
@@ -29,12 +31,16 @@ export default async function RenderPreviewPage({
 		height: heightParam,
 		mode,
 		raw,
+		access_token: accessToken,
 	} = await searchParams;
 	const width = Number.parseInt(widthParam || "", 10) || DEFAULT_IMAGE_WIDTH;
 	const height = Number.parseInt(heightParam || "", 10) || DEFAULT_IMAGE_HEIGHT;
 	const isScrollMode = mode === "scroll";
 	const isRawRender = raw === "1";
-	const userId = await getCurrentUserId();
+	const sessionUserId = await getCurrentUserId();
+	const userId =
+		sessionUserId ??
+		(accessToken ? await resolveUserIdFromApiKey(accessToken) : null);
 	const target = await resolveRenderableRef({ type, id, userId });
 	if (!target) notFound();
 
