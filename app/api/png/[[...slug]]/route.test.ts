@@ -30,7 +30,7 @@ vi.mock("@/lib/auth/get-user", () => ({
 
 const loadRoute = () => import("./route");
 
-describe("app/api/bitmap/[[...slug]] GET", () => {
+describe("app/api/png/[[...slug]] GET", () => {
 	beforeEach(() => {
 		vi.resetModules();
 		state.logger.error.mockReset();
@@ -47,20 +47,20 @@ describe("app/api/bitmap/[[...slug]] GET", () => {
 		vi.clearAllMocks();
 	});
 
-	it("renders a bitmap response using the resolved recipe target", async () => {
-		const bitmap = Buffer.from([1, 2, 3, 4]);
+	it("renders a PNG response using the resolved recipe target", async () => {
+		const png = Buffer.from([1, 2, 3, 4]);
 		state.resolveRenderableRef.mockResolvedValue({
 			recipeSlug: "resolved-recipe",
 			params: { mode: "compact" },
 		});
 		state.renderRecipeToImage.mockResolvedValue({
-			bitmap,
+			png,
 		});
 		const { GET } = await loadRoute();
 
 		const response = await GET(
 			new Request(
-				"https://example.test/api/bitmap/sample/default.bmp?width=320&height=240&bpp=4",
+				"https://example.test/api/png/sample/default.png?width=320&height=240",
 				{
 					headers: {
 						cookie: "session=abc",
@@ -69,13 +69,13 @@ describe("app/api/bitmap/[[...slug]] GET", () => {
 					},
 				},
 			) as never,
-			{ params: Promise.resolve({ slug: ["sample", "default.bmp"] }) },
+			{ params: Promise.resolve({ slug: ["sample", "default.png"] }) },
 		);
 
 		expect(response.status).toBe(200);
-		expect(response.headers.get("Content-Type")).toBe("image/bmp");
+		expect(response.headers.get("Content-Type")).toBe("image/png");
 		expect(response.headers.get("Content-Length")).toBe("4");
-		expect(Buffer.from(await response.arrayBuffer())).toEqual(bitmap);
+		expect(Buffer.from(await response.arrayBuffer())).toEqual(png);
 		expect(state.resolveRenderableRef).toHaveBeenCalledWith({
 			type: "recipe",
 			id: "sample",
@@ -85,8 +85,7 @@ describe("app/api/bitmap/[[...slug]] GET", () => {
 			slug: "resolved-recipe",
 			imageWidth: 320,
 			imageHeight: 240,
-			formats: ["bitmap"],
-			grayscale: 4,
+			formats: ["png"],
 			userId: "user-1",
 			cookies: "session=abc",
 			paramsOverride: { mode: "compact" },
@@ -95,18 +94,18 @@ describe("app/api/bitmap/[[...slug]] GET", () => {
 		});
 	});
 
-	it("renders a bitmap response using a concrete screen id under the recipe path", async () => {
-		const bitmap = Buffer.from([5, 6]);
+	it("renders a PNG response using a concrete screen id under the recipe path", async () => {
+		const png = Buffer.from([5, 6]);
 		state.resolveRenderableRef.mockResolvedValue({
 			recipeSlug: "resolved-recipe",
 			params: { mode: "screen" },
 		});
-		state.renderRecipeToImage.mockResolvedValue({ bitmap });
+		state.renderRecipeToImage.mockResolvedValue({ png });
 		const { GET } = await loadRoute();
 
 		const response = await GET(
 			new Request(
-				"https://example.test/api/bitmap/sample/screen-1.bmp?width=320&height=240",
+				"https://example.test/api/png/sample/screen-1.png?width=320&height=240",
 				{
 					headers: {
 						host: "example.test",
@@ -114,7 +113,7 @@ describe("app/api/bitmap/[[...slug]] GET", () => {
 					},
 				},
 			) as never,
-			{ params: Promise.resolve({ slug: ["sample", "screen-1.bmp"] }) },
+			{ params: Promise.resolve({ slug: ["sample", "screen-1.png"] }) },
 		);
 
 		expect(response.status).toBe(200);
@@ -133,32 +132,31 @@ describe("app/api/bitmap/[[...slug]] GET", () => {
 		);
 	});
 
-	it("falls back to the not-found bitmap when the recipe render is empty", async () => {
+	it("falls back to the not-found PNG when the recipe render is empty", async () => {
 		const fallback = Buffer.from([9, 9]);
 		state.resolveRenderableRef.mockResolvedValue(null);
 		state.renderRecipeToImage.mockResolvedValue({
-			bitmap: Buffer.from([]),
+			png: Buffer.from([]),
 		});
 		state.renderRecipeOutputs.mockResolvedValue({
-			bitmap: fallback,
+			png: fallback,
 		});
 		const { GET } = await loadRoute();
 
 		const response = await GET(
-			new Request("https://example.test/api/bitmap/missing.bmp") as never,
-			{ params: Promise.resolve({ slug: ["missing.bmp"] }) },
+			new Request("https://example.test/api/png/missing.png") as never,
+			{ params: Promise.resolve({ slug: ["missing.png"] }) },
 		);
 
 		expect(response.status).toBe(200);
 		expect(Buffer.from(await response.arrayBuffer())).toEqual(fallback);
 		expect(state.logger.warn).toHaveBeenCalledWith(
-			"Failed to generate bitmap for missing.bmp, returning fallback",
+			"Failed to generate PNG for missing.png, returning fallback",
 		);
 		expect(state.renderRecipeOutputs).toHaveBeenCalledWith(
 			expect.objectContaining({
 				slug: "not-found",
-				formats: ["bitmap"],
-				grayscale: 2,
+				formats: ["png"],
 			}),
 		);
 	});

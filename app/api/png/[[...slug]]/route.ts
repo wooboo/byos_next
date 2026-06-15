@@ -9,15 +9,15 @@ import {
 	renderRecipeOutputs,
 } from "@/lib/recipes/recipe-renderer";
 import {
+	binaryImageResponse,
+	parsePreviewSize,
+	parseRenderPath,
+	renderRecipeTargetImage,
+} from "../../bitmap/render-utils";
+import {
 	parseRequestHeaders,
 	resolveUserIdFromApiKey,
 } from "../../display/utils";
-import {
-	binaryImageResponse,
-	parsePositiveBitmapOptions,
-	parseRenderPath,
-	renderRecipeTargetImage,
-} from "../render-utils";
 
 export async function GET(
 	req: NextRequest,
@@ -25,30 +25,23 @@ export async function GET(
 ) {
 	const headers = parseRequestHeaders(req);
 	try {
-		// Always await params as required by Next.js 14/15
 		const { slug = ["not-found"] } = await params;
-		const bitmapPath = Array.isArray(slug) ? slug.join("/") : slug;
-		const targetRef = parseRenderPath(slug, "bmp");
-		const { width, height, grayscale } = parsePositiveBitmapOptions(req);
+		const pngPath = Array.isArray(slug) ? slug.join("/") : slug;
+		const targetRef = parseRenderPath(slug, "png");
+		const { width, height } = parsePreviewSize(req);
 
-		logger.info(
-			`Bitmap request for: ${bitmapPath} in ${width}x${height} with ${grayscale} gray levels`,
-		);
+		logger.info(`PNG request for: ${pngPath} in ${width}x${height}`);
 
-		// Resolve the device owner so DB queries are scoped to the right user
 		const userId = headers.apiKey
 			? await resolveUserIdFromApiKey(headers.apiKey)
 			: await getCurrentUserId();
-
-		// Forward cookies so browser rendering can reuse the caller's auth session.
 		const cookieHeader = req.headers.get("cookie");
 
-		const recipeBuffer = await renderRecipeBitmap(
+		const recipeBuffer = await renderRecipePng(
 			targetRef.recipeSlug,
 			targetRef.screenId,
 			width,
 			height,
-			grayscale,
 			userId,
 			cookieHeader || undefined,
 			headers.hostUrl,
@@ -60,28 +53,24 @@ export async function GET(
 			recipeBuffer.length === 0
 		) {
 			logger.warn(
-				`Failed to generate bitmap for ${targetRef.sourcePath}, returning fallback`,
+				`Failed to generate PNG for ${targetRef.sourcePath}, returning fallback`,
 			);
-			const fallback = await renderFallbackBitmap();
-			return fallback;
+			return await renderFallbackPng();
 		}
 
-		return binaryImageResponse(recipeBuffer, "image/bmp");
+		return binaryImageResponse(recipeBuffer, "image/png");
 	} catch (error) {
-		logger.error("Error generating image:", error);
-
-		// Instead of returning an error, return the NotFoundScreen as a fallback
-		return await renderFallbackBitmap("Error occurred");
+		logger.error("Error generating PNG:", error);
+		return await renderFallbackPng("Error occurred");
 	}
 }
 
-const renderRecipeBitmap = cache(
+const renderRecipePng = cache(
 	(
 		recipeId: string,
 		screenId: string | null,
 		width: number,
 		height: number,
-		grayscale: number = 16,
 		userId: string | null = null,
 		cookies?: string,
 		previewBaseUrl?: string,
@@ -91,15 +80,14 @@ const renderRecipeBitmap = cache(
 			screenId,
 			width,
 			height,
-			format: "bitmap",
-			grayscale,
+			format: "png",
 			userId,
 			cookies,
 			previewBaseUrl,
 		}),
 );
 
-const renderFallbackBitmap = cache(async (slug: string = "not-found") => {
+const renderFallbackPng = cache(async (slug: string = "not-found") => {
 	try {
 		const renders = await renderRecipeOutputs({
 			slug,
@@ -108,17 +96,16 @@ const renderFallbackBitmap = cache(async (slug: string = "not-found") => {
 			config: null,
 			imageWidth: DEFAULT_IMAGE_WIDTH,
 			imageHeight: DEFAULT_IMAGE_HEIGHT,
-			formats: ["bitmap"],
-			grayscale: 2, // Default to 2 levels for fallback
+			formats: ["png"],
 		});
 
-		if (!renders.bitmap) {
-			throw new Error("Missing bitmap buffer for fallback");
+		if (!renders.png) {
+			throw new Error("Missing PNG buffer for fallback");
 		}
 
-		return binaryImageResponse(renders.bitmap, "image/bmp");
+		return binaryImageResponse(renders.png, "image/png");
 	} catch (fallbackError) {
-		logger.error("Error generating fallback image:", fallbackError);
+		logger.error("Error generating fallback PNG:", fallbackError);
 		return new Response("Error generating image", {
 			status: 500,
 			headers: {

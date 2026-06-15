@@ -19,6 +19,18 @@ async function pngFromGrayscale(
 		.toBuffer();
 }
 
+async function pngFromRgb(width: number, height: number, pixels: number[]) {
+	return sharp(Buffer.from(pixels), {
+		raw: {
+			width,
+			height,
+			channels: 3,
+		},
+	})
+		.png()
+		.toBuffer();
+}
+
 function bmpInfo(buffer: Buffer) {
 	return {
 		signature: buffer.toString("ascii", 0, 2),
@@ -123,6 +135,29 @@ describe("renderBmp", () => {
 			[0x000000, 0x111111, 0x222222, 0x333333],
 		);
 		assert.equal(bmp[info.dataOffset], 0x0f);
+	});
+
+	it("renders 256-color BMPs as 8-bit indexed color", async () => {
+		const png = await pngFromRgb(3, 1, [255, 0, 0, 0, 128, 255, 12, 220, 40]);
+
+		const bmp = await renderBmp(png, {
+			width: 3,
+			height: 1,
+			grayscale: 256,
+		});
+		const info = bmpInfo(bmp);
+
+		assert.equal(info.bitsPerPixel, 8);
+		assert.equal(info.colorCount, 256);
+		assert.equal(info.importantColors, 256);
+		assert.equal(info.dataOffset, 1078);
+		assert.deepEqual(
+			paletteEntries(bmp, 6),
+			[0x000000, 0x000033, 0x000066, 0x000099, 0x0000cc, 0x0000ff],
+		);
+		expect(Array.from(bmp.slice(info.dataOffset, info.dataOffset + 4))).toEqual(
+			[180, 23, 25, 0],
+		);
 	});
 
 	it("rejects unsupported grayscale levels", async () => {

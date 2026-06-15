@@ -96,7 +96,7 @@ describe("DeviceView", () => {
 				heroContentType: "mixup",
 				bmpSrc:
 					"/api/bitmap/mixup/mixup-9.bmp?width=800&height=480&grayscale=4",
-				pngSrc: "/api/png/mixup/mixup-9?width=800&height=480",
+				pngSrc: "/api/png/mixup/mixup-9.png?width=800&height=480",
 				reactSrc: "/preview/mixup/mixup-9?width=800&height=480",
 			},
 		);

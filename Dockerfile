@@ -11,6 +11,7 @@ LABEL org.opencontainers.image.vendor="rbouteiller"
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV ENABLE_EXTERNAL_CATALOG=false
 
 WORKDIR /app
 
@@ -41,6 +42,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV ENABLE_EXTERNAL_CATALOG=false
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV CHROME_EXECUTABLE_PATH=/headless-shell/headless-shell
 

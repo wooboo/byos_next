@@ -32,6 +32,7 @@ vi.mock("../../../display/utils", async () => {
 		...actual,
 		parseRequestHeaders: vi.fn((request: Request) => ({
 			apiKey: request.headers.get("Access-Token"),
+			hostUrl: "https://example.test",
 		})),
 		resolveUserIdFromApiKey: state.resolveUserIdFromApiKey,
 	};
@@ -80,6 +81,8 @@ describe("app/api/bitmap/screen/[id] GET", () => {
 				grayscale: 4,
 				userId: "user-1",
 				paramsOverride: { tz: "UTC" },
+				previewPath: "/preview/screen/screen-1?raw=1",
+				previewBaseUrl: "https://example.test",
 			}),
 		);
 		expect(response.headers.get("Content-Type")).toBe("image/bmp");

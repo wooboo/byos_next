@@ -1,4 +1,4 @@
-import type { CookieData } from "puppeteer-core";
+import type { CookieParam } from "puppeteer-core";
 import { getBrowser } from "@/lib/recipes/chrome-pool";
 
 /**
@@ -22,6 +22,54 @@ function parseCookies(
 	return cookies;
 }
 
+const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+function buildForwardedCookies(cookieHeader: string, url: URL): CookieParam[] {
+	const secure = url.protocol === "https:";
+	const isLocalhost = url.hostname === "localhost";
+	return parseCookies(cookieHeader)
+		.filter((cookie) => COOKIE_NAME_PATTERN.test(cookie.name))
+		.filter(
+			(cookie) => secure || isLocalhost || !cookie.name.startsWith("__Secure-"),
+		)
+		.filter(
+			(cookie) => secure || isLocalhost || !cookie.name.startsWith("__Host-"),
+		)
+		.map((cookie) => ({
+			name: cookie.name,
+			value: cookie.value,
+			url: url.origin,
+			...(cookie.name.startsWith("__Secure-") ||
+			cookie.name.startsWith("__Host-")
+				? { secure: true }
+				: {}),
+			...(cookie.name.startsWith("__Host-") ? { path: "/" } : {}),
+		}));
+}
+
+async function setForwardedCookies(
+	page: { setCookie?: (...cookies: CookieParam[]) => Promise<void> },
+	cookies: CookieParam[],
+) {
+	if (!page.setCookie || cookies.length === 0) return;
+
+	try {
+		await page.setCookie(...cookies);
+		return;
+	} catch {
+		// Some proxy/auth cookies are invalid for the internal render URL.
+		// Keep rendering by forwarding only the cookies Chrome accepts.
+	}
+
+	for (const cookie of cookies) {
+		try {
+			await page.setCookie(cookie);
+		} catch {
+			// Ignore individual cookies that Chrome refuses.
+		}
+	}
+}
+
 /**
  * Render a React recipe by navigating to its preview URL on this Next.js
  * server and capturing a PNG.
@@ -34,28 +82,26 @@ export async function renderWithBrowser(
 	slug: string,
 	width: number,
 	height: number,
-	scale = 1,
 	cookies?: string,
+	previewPath?: string,
+	baseUrlOverride?: string,
 ): Promise<Buffer> {
 	const port = process.env.PORT || 3001;
 	const baseUrl =
-		process.env.NEXT_PUBLIC_BASE_URL ?? `http://127.0.0.1:${port}`;
-	const url = `${baseUrl}/recipes/${slug}/preview?width=${width}&height=${height}`;
+		baseUrlOverride ??
+		process.env.NEXT_PUBLIC_BASE_URL ??
+		`http://127.0.0.1:${port}`;
+	const path = previewPath ?? `/preview/recipe/${slug}`;
+	const url = new URL(path, baseUrl);
+	url.searchParams.set("width", width.toString());
+	url.searchParams.set("height", height.toString());
 
 	const browser = await getBrowser("trusted");
 	const page = await browser.newPage();
 
 	try {
 		if (cookies) {
-			const parsed = parseCookies(cookies);
-			const domain = new URL(url).hostname;
-			const cookiesToSet: CookieData[] = parsed.map((c) => ({
-				name: c.name,
-				value: c.value,
-				domain,
-				path: "/",
-			}));
-			await browser.setCookie(...cookiesToSet);
+			await setForwardedCookies(page, buildForwardedCookies(cookies, url));
 		}
 
 		// Force light mode — headless Chrome can default to dark, which breaks
@@ -64,11 +110,11 @@ export async function renderWithBrowser(
 			{ name: "prefers-color-scheme", value: "light" },
 		]);
 		await page.setViewport({
-			width: width * scale,
-			height: height * scale,
+			width,
+			height,
 			deviceScaleFactor: 1,
 		});
-		await page.goto(url, { waitUntil: "networkidle0" });
+		await page.goto(url.toString(), { waitUntil: "networkidle0" });
 		const screenshot = await page.screenshot({ type: "png" });
 		return Buffer.from(screenshot);
 	} finally {

@@ -22,3 +22,24 @@ export function playlistFrameBmpUrl(
 	if (grayscale) params.set("grayscale", String(grayscale));
 	return `${base}?${params}`;
 }
+
+/** Build the PNG API URL for a renderable preview. Keep a .png suffix so browser blockers do not flag extensionless image routes. */
+export function playlistFramePngUrl(
+	screenId: string,
+	screenType?: string | null,
+	width = 800,
+	height = 480,
+): string {
+	const contentType = resolveRenderableContentType(screenType, screenId);
+	const base =
+		screenType === "mixup"
+			? `/api/png/mixup/${screenId}.png`
+			: contentType === "screen"
+				? `/api/png/screen/${screenId}.png`
+				: `/api/png/${screenId}/default.png`;
+	const params = new URLSearchParams({
+		width: String(width),
+		height: String(height),
+	});
+	return `${base}?${params}`;
+}

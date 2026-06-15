@@ -664,17 +664,19 @@ describe("renderRecipeOutputs and renderRecipeToImage", () => {
 			imageHeight: 200,
 			formats: ["png"],
 			cookies: "session=abc",
+			previewBaseUrl: "http://localhost:3001",
 		});
 
 		expect(renderWithBrowserMock).toHaveBeenCalledWith(
 			"not-found",
 			300,
 			200,
-			2,
 			"session=abc",
+			undefined,
+			"http://localhost:3001",
 		);
 		expect(result).toEqual({
-			png: Buffer.from("resized-png"),
+			png: Buffer.from("browser-png"),
 			bitmap: null,
 		});
 	});

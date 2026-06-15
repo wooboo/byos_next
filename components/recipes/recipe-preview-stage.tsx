@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
 import { ScaledReactPreview } from "@/components/preview/scaled-react-preview";
 import {
@@ -11,7 +11,10 @@ import {
 	type ScreenPreviewFormat,
 	screenPreviewSummary,
 } from "@/components/preview/screen-preview-controls";
-import { BmpPreview } from "@/components/recipes/bmp-preview";
+import {
+	BmpPreview,
+	ImageEndpointPreview,
+} from "@/components/recipes/bmp-preview";
 import { cn } from "@/lib/utils";
 
 interface RecipePreviewStageProps {
@@ -19,6 +22,7 @@ interface RecipePreviewStageProps {
 	isPortrait: boolean;
 	basePath?: string;
 	bitmapUrl?: string;
+	pngUrl?: string;
 	bmpNode?: ReactNode;
 	pngNode?: ReactNode;
 	reactNode?: ReactNode;
@@ -27,6 +31,7 @@ interface RecipePreviewStageProps {
 	pngPipeline?: ReactNode;
 	reactPipeline?: ReactNode;
 	defaultFormat?: ScreenPreviewFormat;
+	reactLabel?: string;
 }
 
 export function RecipePreviewStage({
@@ -34,6 +39,7 @@ export function RecipePreviewStage({
 	isPortrait,
 	basePath,
 	bitmapUrl,
+	pngUrl,
 	bmpNode,
 	pngNode,
 	reactNode,
@@ -41,7 +47,8 @@ export function RecipePreviewStage({
 	bmpPipeline,
 	pngPipeline,
 	reactPipeline,
-	defaultFormat = "bmp",
+	defaultFormat = "react",
+	reactLabel,
 }: RecipePreviewStageProps) {
 	const router = useRouter();
 	const [format, setFormat] = useState<ScreenPreviewFormat>(defaultFormat);
@@ -86,11 +93,27 @@ export function RecipePreviewStage({
 			),
 			pipeline: bmpPipeline,
 		},
-		{ key: "png", node: pngNode, pipeline: pngPipeline },
+		{
+			key: "png",
+			node: pngNode ?? (
+				<ImageEndpointPreview
+					alt="PNG preview"
+					requestUrl={`${pngUrl ?? `/api/png/${slug}/default.png`}?width=${portraitW}&height=${portraitH}`}
+					width={portraitW}
+					height={portraitH}
+				/>
+			),
+			pipeline: pngPipeline,
+		},
 		{ key: "react", node: resolvedReactNode, pipeline: reactPipeline },
 	].filter((f) => f.node !== undefined) as typeof formats;
 
 	const active = formats.find((f) => f.key === format) || formats[0];
+	const activeFormat = active?.key ?? format;
+
+	useEffect(() => {
+		if (active && active.key !== format) setFormat(active.key);
+	}, [active, format]);
 
 	const handleOrientationChange = (nextPortrait: boolean) => {
 		if (nextPortrait === isPortrait) return;
@@ -105,7 +128,7 @@ export function RecipePreviewStage({
 		<div className="overflow-hidden rounded-2xl border bg-card">
 			{/* Toolbar */}
 			<ScreenPreviewControls
-				format={format}
+				format={activeFormat}
 				onFormatChange={setFormat}
 				sizeIndex={presetIdx}
 				onSizeIndexChange={setPresetIdx}
@@ -116,6 +139,7 @@ export function RecipePreviewStage({
 				reactMode={reactMode}
 				onReactModeChange={setReactMode}
 				formats={formats.map((item) => item.key)}
+				reactLabel={reactLabel}
 				className="bg-muted/30 px-3"
 			/>
 
@@ -142,7 +166,7 @@ export function RecipePreviewStage({
 			<div className="border-t bg-muted/20 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
 				<span className="tabular-nums">
 					{screenPreviewSummary({
-						format,
+						format: activeFormat,
 						width: portraitW,
 						height: portraitH,
 						grayscale: palette.grayscale,

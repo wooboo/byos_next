@@ -29,16 +29,11 @@ import {
 	renderLiquidRecipe,
 } from "@/lib/recipes/liquid-renderer";
 import {
-	addDimensionsToProps,
-	ComponentProps,
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
-	fetchRecipeComponent,
 	fetchRecipeConfig,
 	fetchRecipeProps,
 	getRendererType,
-	isBuildPhase,
-	logger,
 	RecipeConfig,
 	renderRecipeOutputs,
 } from "@/lib/recipes/recipe-renderer";
@@ -124,137 +119,6 @@ const LiquidRenderComponent = ({
 			imageWidth,
 			imageHeight,
 		}),
-	);
-
-	if (format === "bitmap" || format === "png") {
-		return (
-			<RenderOutputForFormat
-				format={format}
-				renders={renders}
-				title={title}
-				imageWidth={imageWidth}
-				imageHeight={imageHeight}
-			/>
-		);
-	}
-
-	return null;
-};
-
-const renderAllFormats = cache(
-	async (
-		slug: string,
-		Component: React.ComponentType<ComponentProps>,
-		props: ComponentProps,
-		config: RecipeConfig,
-		imageWidth: number,
-		imageHeight: number,
-	) => {
-		const propsWithDimensions = addDimensionsToProps(
-			props,
-			imageWidth,
-			imageHeight,
-		);
-
-		if (isBuildPhase()) {
-			logger.info(`Skipping render for ${slug} during build prerender`);
-			return {
-				bitmap: null as Buffer | null,
-				png: null as Buffer | null,
-				svg: null as string | null,
-			};
-		}
-
-		try {
-			logger.info(`🔄 Generating all formats for: ${slug}`);
-			return await renderRecipeOutputs({
-				slug,
-				Component,
-				props: propsWithDimensions,
-				config,
-				imageWidth,
-				imageHeight,
-			});
-		} catch (error) {
-			logger.error(`Error generating formats for ${slug}:`, error);
-			return {
-				bitmap: null as Buffer | null,
-				png: null as Buffer | null,
-				svg: null as string | null,
-			};
-		}
-	},
-);
-
-const RenderComponent = ({
-	slug,
-	format,
-	title,
-	imageWidth,
-	imageHeight,
-}: {
-	slug: string;
-	format: "bitmap" | "png" | "react";
-	title: string;
-	imageWidth: number;
-	imageHeight: number;
-}) => {
-	const configResult = use(fetchRecipeConfig(slug));
-	if (!configResult)
-		return <EmptyRenderState>Configuration not found</EmptyRenderState>;
-
-	const componentResult = use(Promise.resolve(fetchRecipeComponent(slug)));
-	if (!componentResult)
-		return <EmptyRenderState>Component not found</EmptyRenderState>;
-
-	const config = configResult;
-	const Component = componentResult;
-
-	const propsResult = use(Promise.resolve(fetchRecipeProps(slug, config)));
-	const propsWithDimensions = addDimensionsToProps(
-		propsResult,
-		imageWidth,
-		imageHeight,
-	);
-
-	const useDoubling = config.renderSettings?.doubleSizeForSharperText ?? false;
-	const shouldDisableRecipeDoubling = slug === "school-schedule";
-	const reactProps = shouldDisableRecipeDoubling
-		? { ...propsWithDimensions, disableDoubling: true }
-		: propsWithDimensions;
-
-	if (format === "react") {
-		return (
-			<ScaledRenderPreview imageWidth={imageWidth} imageHeight={imageHeight}>
-				{useDoubling && !shouldDisableRecipeDoubling ? (
-					<div
-						style={{
-							transform: "scale(0.5)",
-							transformOrigin: "top left",
-							width: "200%",
-							height: "200%",
-						}}
-					>
-						<Component {...reactProps} />
-					</div>
-				) : (
-					<Component {...reactProps} />
-				)}
-			</ScaledRenderPreview>
-		);
-	}
-
-	const renders = use(
-		Promise.resolve(
-			renderAllFormats(
-				slug,
-				Component,
-				propsResult,
-				config,
-				imageWidth,
-				imageHeight,
-			),
-		),
 	);
 
 	if (format === "bitmap" || format === "png") {
@@ -426,32 +290,6 @@ async function LiquidRecipePage({
 				<RecipePreviewStage
 					slug={slug}
 					isPortrait={isPortrait}
-					bmpNode={
-						<Suspense
-							fallback={<RenderLoadingState label="Rendering bitmap…" />}
-						>
-							<LiquidRenderComponent
-								slug={slug}
-								format="bitmap"
-								title={title}
-								imageWidth={imageWidth}
-								imageHeight={imageHeight}
-								customFieldOverrides={storedValues}
-							/>
-						</Suspense>
-					}
-					pngNode={
-						<Suspense fallback={<RenderLoadingState label="Rendering PNG…" />}>
-							<LiquidRenderComponent
-								slug={slug}
-								format="png"
-								title={title}
-								imageWidth={imageWidth}
-								imageHeight={imageHeight}
-								customFieldOverrides={storedValues}
-							/>
-						</Suspense>
-					}
 					reactNode={
 						<Suspense
 							fallback={<RenderLoadingState label="Rendering recipe…" />}
@@ -469,15 +307,23 @@ async function LiquidRecipePage({
 					bmpPipeline={
 						<span>
 							Liquid → liquidjs → HTML → Puppeteer PNG → render-bmp →{" "}
-							<Link href={`/api/bitmap/${slug}.bmp`}>
-								/api/bitmap/{slug}.bmp
+							<Link href={`/api/bitmap/${slug}/default.bmp`}>
+								/api/bitmap/{slug}/default.bmp
 							</Link>
 						</span>
 					}
-					pngPipeline={<span>Liquid → liquidjs → HTML → Puppeteer PNG</span>}
+					pngPipeline={
+						<span>
+							Liquid → liquidjs → HTML → Puppeteer PNG →{" "}
+							<Link href={`/api/png/${slug}/default.png`}>
+								/api/png/{slug}/default.png
+							</Link>
+						</span>
+					}
 					reactPipeline={
 						<span>Liquid → liquidjs → HTML → browser preview</span>
 					}
+					reactLabel="LIQUID"
 				/>
 
 				{hasParams && (
@@ -497,12 +343,15 @@ async function ReactRecipePage({
 	slug,
 	config,
 	isPortrait,
-	imageWidth,
-	imageHeight,
 }: RecipePageViewProps & { config: RecipeConfig }) {
 	const screenParams = config.params
 		? await getScreenParams(slug, config.params)
 		: {};
+	const rendererType = getRendererType();
+	const renderPipeline =
+		rendererType === "browser"
+			? "JSX → browser PNG"
+			: `JSX → pre-satori → ${rendererType} PNG`;
 
 	return (
 		<div className="@container">
@@ -539,44 +388,20 @@ async function ReactRecipePage({
 				<RecipePreviewStage
 					slug={slug}
 					isPortrait={isPortrait}
-					bmpNode={
-						<Suspense
-							fallback={<RenderLoadingState label="Rendering bitmap…" />}
-						>
-							<RenderComponent
-								slug={slug}
-								format="bitmap"
-								title={config.title}
-								imageWidth={imageWidth}
-								imageHeight={imageHeight}
-							/>
-						</Suspense>
-					}
-					pngNode={
-						<Suspense fallback={<RenderLoadingState label="Rendering PNG…" />}>
-							<RenderComponent
-								slug={slug}
-								format="png"
-								title={config.title}
-								imageWidth={imageWidth}
-								imageHeight={imageHeight}
-							/>
-						</Suspense>
-					}
 					reactPreviewSrc={`/preview/recipe/${slug}`}
 					bmpPipeline={
 						<span>
-							JSX → pre-satori → {getRendererType()} PNG → render-bmp →{" "}
-							<Link href={`/api/bitmap/${slug}.bmp`}>
-								/api/bitmap/{slug}.bmp
+							{renderPipeline} → render-bmp →{" "}
+							<Link href={`/api/bitmap/${slug}/default.bmp`}>
+								/api/bitmap/{slug}/default.bmp
 							</Link>
 						</span>
 					}
 					pngPipeline={
 						<span>
-							JSX → pre-satori → {getRendererType()} PNG →{" "}
-							<Link href={`/api/bitmap/${slug}.bmp`}>
-								/api/bitmap/{slug}.bmp
+							{renderPipeline} →{" "}
+							<Link href={`/api/png/${slug}/default.png`}>
+								/api/png/{slug}/default.png
 							</Link>
 						</span>
 					}

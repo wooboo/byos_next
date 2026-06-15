@@ -103,6 +103,133 @@ export default function Weather({
 	else if (d.includes("fog") || d.includes("mist")) MainIcon = FogIcon;
 	else if (d.includes("thunder")) MainIcon = ThunderIcon;
 
+	const isPortrait = height > width;
+
+	if (isPortrait) {
+		const portraitPadding = Math.max(10, Math.round(width * 0.035));
+		const cardGap = Math.max(5, Math.round(height * 0.01));
+		const iconSize = Math.max(70, Math.round(width * 0.22));
+		const statIconSize = Math.max(22, Math.round(width * 0.065));
+
+		return (
+			<PreSatori useDoubling={true} width={width} height={height}>
+				<div
+					style={{
+						...fc,
+						width: "100%",
+						height: "100%",
+						backgroundColor: "#fff",
+						overflow: "hidden",
+						padding: portraitPadding,
+						fontFamily: "inter",
+						gap: cardGap,
+					}}
+				>
+					<div
+						style={{
+							...fc,
+							alignItems: "center",
+							justifyContent: "center",
+							borderWidth: 2,
+							borderStyle: "solid",
+							borderColor: "#000",
+							borderRadius: 12,
+							padding: portraitPadding,
+							flexShrink: 0,
+							gap: 4,
+						}}
+					>
+						<div style={{ ...fr, alignItems: "baseline", gap: 4 }}>
+							<span
+								style={t(s, Math.round(width * 0.18), 800, { lineHeight: 1 })}
+							>
+								{temperature}
+							</span>
+							<span
+								style={t(s, Math.round(width * 0.055), 500, { lineHeight: 1 })}
+							>
+								°C
+							</span>
+						</div>
+						<MainIcon size={iconSize} />
+						<div style={{ ...fr, gap: Math.max(16, Math.round(width * 0.08)) }}>
+							<span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+								{tempUp({ size: Math.round(width * 0.055) })}
+								<span style={t(s, Math.round(width * 0.045), 700)}>
+									{highTemp}°
+								</span>
+							</span>
+							<span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+								{tempDown({ size: Math.round(width * 0.055) })}
+								<span style={t(s, Math.round(width * 0.045), 700)}>
+									{lowTemp}°
+								</span>
+							</span>
+						</div>
+						<span style={t(s, Math.round(width * 0.055), 700)}>
+							{description}
+						</span>
+					</div>
+
+					<div style={{ ...fc, flex: "1 1 0", minHeight: 0, gap: cardGap }}>
+						{stats.map((stat) => (
+							<div
+								key={stat.label}
+								style={{
+									...fr,
+									alignItems: "center",
+									borderRadius: 9,
+									borderWidth: 2,
+									borderStyle: "solid",
+									borderColor: "#000",
+									padding: `${Math.max(5, Math.round(height * 0.008))}px ${Math.max(8, Math.round(width * 0.025))}px`,
+									gap: Math.max(8, Math.round(width * 0.025)),
+									flex: "1 1 0",
+									minHeight: 0,
+								}}
+							>
+								<stat.Icon size={statIconSize} />
+								<div style={{ ...fc, justifyContent: "center", minWidth: 0 }}>
+									<span
+										style={t(s, Math.round(width * 0.034), 600, {
+											color: "#444",
+										})}
+									>
+										{stat.label}
+									</span>
+									<span style={t(s, Math.round(width * 0.045), 800)}>
+										{stat.value}
+									</span>
+								</div>
+							</div>
+						))}
+					</div>
+
+					<div
+						style={{
+							...fr,
+							justifyContent: "space-between",
+							alignItems: "center",
+							backgroundColor: "#000",
+							color: "#fff",
+							padding: `${Math.max(6, Math.round(height * 0.012))}px ${Math.max(8, Math.round(width * 0.025))}px`,
+							borderRadius: 9,
+							flexShrink: 0,
+							gap: 8,
+						}}
+					>
+						<span style={t(s, Math.round(width * 0.034), 700)}>{location}</span>
+						{lastUpdated && (
+							<span style={t(s, Math.round(width * 0.028), 500)}>
+								Updated: {lastUpdated}
+							</span>
+						)}
+					</div>
+				</div>
+			</PreSatori>
+		);
+	}
+
 	return (
 		<PreSatori useDoubling={true} width={width} height={height}>
 			<div

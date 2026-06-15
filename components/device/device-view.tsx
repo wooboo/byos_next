@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { resolveRenderableContentType } from "@/lib/content-ref";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
-import { playlistFrameBmpUrl } from "@/lib/playlist-url";
+import { playlistFrameBmpUrl, playlistFramePngUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
@@ -147,7 +147,12 @@ export function getDevicePreviewModel({
 						deviceHeight,
 						grayscaleLevels,
 					),
-		pngSrc: `/api/png/${heroContentType}/${heroFrameId}?width=${deviceWidth}&height=${deviceHeight}`,
+		pngSrc: playlistFramePngUrl(
+			heroFrameId,
+			heroContentType,
+			deviceWidth,
+			deviceHeight,
+		),
 		reactSrc: `/preview/${heroContentType}/${heroFrameId}?width=${deviceWidth}&height=${deviceHeight}`,
 	};
 }
@@ -585,7 +590,13 @@ export default function DeviceView({
 	const preview = useScreenPreviewControls({
 		defaultPortrait: device.screen_orientation === "portrait",
 		defaultPaletteIndex:
-			device.grayscale === 2 ? 0 : device.grayscale === 4 ? 1 : 2,
+			device.grayscale === 2
+				? 0
+				: device.grayscale === 4
+					? 1
+					: device.grayscale === 256
+						? 3
+						: 2,
 	});
 
 	useEffect(() => {

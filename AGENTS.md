@@ -15,3 +15,7 @@ This repo uses a single-context domain documentation layout. See `docs/agents/do
 ### Pull requests
 
 Before creating a pull request, run `pnpm fallow` and review the fallow report for new dead code, duplication, or health issues.
+
+### Changesets
+
+For user-facing changes, runtime fixes, features, or behavior changes, add a patch/minor/major changeset for `byos-nextjs` before opening or updating a PR. If a PR intentionally should not bump the package version, mention that explicitly in the PR summary.

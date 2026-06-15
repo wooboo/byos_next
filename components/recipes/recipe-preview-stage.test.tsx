@@ -47,6 +47,21 @@ vi.mock("@/components/recipes/bmp-preview", () => ({
 			bmp-preview
 		</div>
 	),
+	ImageEndpointPreview: ({
+		requestUrl,
+		width,
+		height,
+		alt,
+	}: {
+		requestUrl: string;
+		width: number;
+		height: number;
+		alt: string;
+	}) => (
+		<div data-image-endpoint={`${alt}:${width}x${height}:${requestUrl}`}>
+			image-endpoint-preview
+		</div>
+	),
 }));
 
 vi.mock("@/components/preview/screen-preview-controls", () => ({
@@ -59,11 +74,17 @@ vi.mock("@/components/preview/screen-preview-controls", () => ({
 	ScreenPreviewControls: ({
 		format,
 		className,
+		reactLabel,
 	}: {
 		format: string;
 		className?: string;
+		reactLabel?: string;
 	}) => (
-		<div data-format={format} data-class-name={className ?? ""}>
+		<div
+			data-format={format}
+			data-class-name={className ?? ""}
+			data-react-label={reactLabel ?? ""}
+		>
 			controls
 		</div>
 	),
@@ -116,5 +137,52 @@ describe("RecipePreviewStage", () => {
 		assert.match(html, /data-format="bmp"/);
 		assert.match(html, /data-bmp-preview="calendar:800x480:16"/);
 		assert.match(html, /BMP pipeline/);
+	});
+
+	it("renders the default PNG preview pipeline when selected", () => {
+		const html = renderToStaticMarkup(
+			<RecipePreviewStage
+				slug="calendar"
+				isPortrait={false}
+				defaultFormat="png"
+				pngPipeline={<span>PNG pipeline</span>}
+			/>,
+		);
+
+		assert.match(html, /data-format="png"/);
+		assert.match(
+			html,
+			/data-image-endpoint="PNG preview:800x480:\/api\/png\/calendar\/default\.png\?width=800&amp;height=480"/,
+		);
+		assert.match(html, /PNG pipeline/);
+	});
+
+	it("uses an explicit PNG endpoint URL when provided", () => {
+		const html = renderToStaticMarkup(
+			<RecipePreviewStage
+				slug="weather"
+				isPortrait={false}
+				defaultFormat="png"
+				pngUrl="/api/png/weather/screen-1.png"
+			/>,
+		);
+
+		assert.match(
+			html,
+			/data-image-endpoint="PNG preview:800x480:\/api\/png\/weather\/screen-1\.png\?width=800&amp;height=480"/,
+		);
+	});
+
+	it("passes the source format label to preview controls", () => {
+		const html = renderToStaticMarkup(
+			<RecipePreviewStage
+				slug="liquid-card"
+				isPortrait={false}
+				reactNode={<div>liquid-preview</div>}
+				reactLabel="LIQUID"
+			/>,
+		);
+
+		assert.match(html, /data-react-label="LIQUID"/);
 	});
 });

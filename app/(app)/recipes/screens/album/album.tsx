@@ -1,3 +1,4 @@
+import { proxiedImageUrl } from "@/lib/image-proxy";
 import { PreSatori } from "@/utils/pre-satori";
 
 interface AlbumProps {
@@ -15,14 +16,15 @@ export default async function Album({
 }: AlbumProps) {
 	const imageUrl =
 		params?.imageUrl || "https://byos-nextjs.vercel.app/album/london.png";
+	const previewImageUrl = proxiedImageUrl(imageUrl);
 
 	return (
 		<PreSatori width={width} height={height}>
 			<div className="w-full h-full bg-black flex flex-col items-center justify-center relative">
 				<picture className="w-full h-full absolute inset-0">
-					<source srcSet={imageUrl} type="image/png" />
+					<source srcSet={previewImageUrl} type="image/png" />
 					<img
-						src={imageUrl}
+						src={previewImageUrl}
 						alt="Album"
 						width={width}
 						height={height}
