@@ -428,7 +428,7 @@ describe("app/api/setup GET", () => {
 			},
 			where: vi.fn(() => ({
 				executeTakeFirst: vi.fn().mockResolvedValue({
-					api_key: "api-1",
+					api_key: null,
 					friendly_id: "device-2",
 					mac_address: "AA:BB:CC",
 					user_id: "user-1",
