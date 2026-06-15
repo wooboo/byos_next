@@ -294,9 +294,47 @@ describe("app/api/setup GET", () => {
 		});
 	});
 
-	it("rejects setup for an existing device without owner or matching token", async () => {
+	it("returns an existing device by MAC address without requiring a token", async () => {
 		state.checkDbConnection.mockResolvedValue({ ready: true });
-		state.getCurrentUserId.mockResolvedValue("user-2");
+		state.getCurrentUserId.mockResolvedValue(null);
+		state.db.selectFrom.mockReturnValue({
+			selectAll() {
+				return this;
+			},
+			where: vi.fn(() => ({
+				executeTakeFirst: vi.fn().mockResolvedValue({
+					api_key: "api-1",
+					friendly_id: "device-2",
+					mac_address: "AA:BB:CC",
+					user_id: "user-1",
+				}),
+			})),
+		});
+		const { GET } = await loadRoute();
+
+		const response = await GET(
+			new Request("https://example.test/api/setup", {
+				headers: {
+					ID: "aa:bb:cc",
+					Model: "x",
+				},
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			status: 200,
+			api_key: "api-1",
+			friendly_id: "device-2",
+			image_url: null,
+			filename: null,
+			message: "Device device-2 added to BYOS!",
+		});
+	});
+
+	it("rejects setup for an existing device with the wrong token", async () => {
+		state.checkDbConnection.mockResolvedValue({ ready: true });
+		state.getCurrentUserId.mockResolvedValue(null);
 		state.db.selectFrom.mockReturnValue({
 			selectAll() {
 				return this;
@@ -451,9 +489,10 @@ describe("app/api/setup GET", () => {
 		);
 	});
 
-	it("returns null optional values for an owned device without an API key", async () => {
+	it("generates an API key for an existing device without one", async () => {
 		state.checkDbConnection.mockResolvedValue({ ready: true });
 		state.getCurrentUserId.mockResolvedValue("user-1");
+		state.generateApiKey.mockReturnValue("generated-api");
 		state.db.selectFrom.mockReturnValue({
 			selectAll() {
 				return this;
@@ -466,6 +505,16 @@ describe("app/api/setup GET", () => {
 					user_id: "user-1",
 				}),
 			})),
+		});
+		state.db.updateTable.mockReturnValue({
+			set: vi.fn((values) => {
+				expect(values).toMatchObject({ api_key: "generated-api" });
+				return {
+					where: vi.fn(() => ({
+						execute: vi.fn().mockResolvedValue(undefined),
+					})),
+				};
+			}),
 		});
 		const { GET } = await loadRoute();
 
@@ -481,7 +530,7 @@ describe("app/api/setup GET", () => {
 		expect(response.status).toBe(200);
 		await expect(response.json()).resolves.toEqual({
 			status: 200,
-			api_key: null,
+			api_key: "generated-api",
 			friendly_id: "device-4",
 			image_url: null,
 			filename: null,

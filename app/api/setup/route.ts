@@ -242,6 +242,15 @@ async function updateDeviceApiKey(device: SetupDevice, apiKey: string) {
 	}
 }
 
+async function ensureDeviceApiKey(device: SetupDevice, macAddress: string) {
+	if (device.api_key) {
+		return device.api_key;
+	}
+
+	const suffix = new Date().toISOString().replace(/[-:Z]/g, "");
+	return updateDeviceApiKey(device, generateApiKey(macAddress, suffix));
+}
+
 async function findDeviceByProvidedApiKey(headers: ValidatedSetupHeaders) {
 	if (!headers.apiKey) {
 		return null;
@@ -356,6 +365,7 @@ function canManageDevice(
 	currentUserId: string | null,
 ) {
 	return (
+		!apiKey ||
 		apiKey === device.api_key ||
 		(Boolean(currentUserId) && device.user_id === currentUserId)
 	);
@@ -373,7 +383,7 @@ async function setupExistingDevice(
 	const currentApiKey =
 		headers.apiKey && headers.apiKey !== device.api_key
 			? await updateDeviceApiKey(device, headers.apiKey)
-			: device.api_key;
+			: await ensureDeviceApiKey(device, headers.macAddress);
 
 	logInfo(`Device ${device.friendly_id} added to BYOS!`, {
 		source: SETUP_LOG_SOURCE,
