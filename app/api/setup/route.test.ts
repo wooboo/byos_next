@@ -381,6 +381,81 @@ describe("app/api/setup GET", () => {
 		);
 	});
 
+	it("rejects setup for an existing device with an empty token header", async () => {
+		state.checkDbConnection.mockResolvedValue({ ready: true });
+		state.getCurrentUserId.mockResolvedValue(null);
+		state.db.selectFrom.mockReturnValue({
+			selectAll() {
+				return this;
+			},
+			where: vi.fn(() => ({
+				executeTakeFirst: vi.fn().mockResolvedValue({
+					api_key: "api-1",
+					friendly_id: "device-2",
+					mac_address: "AA:BB:CC",
+					user_id: "user-1",
+				}),
+			})),
+		});
+		const { GET } = await loadRoute();
+
+		const response = await GET(
+			new Request("https://example.test/api/setup", {
+				headers: {
+					"Access-Token": "",
+					ID: "aa:bb:cc",
+					Model: "TRMNL",
+				},
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			status: 403,
+			api_key: null,
+			friendly_id: null,
+			image_url: null,
+			message: "Device setup requires a valid access token or owner session",
+		});
+	});
+
+	it("rejects MAC-only setup for an existing device from a non-owner session", async () => {
+		state.checkDbConnection.mockResolvedValue({ ready: true });
+		state.getCurrentUserId.mockResolvedValue("user-2");
+		state.db.selectFrom.mockReturnValue({
+			selectAll() {
+				return this;
+			},
+			where: vi.fn(() => ({
+				executeTakeFirst: vi.fn().mockResolvedValue({
+					api_key: null,
+					friendly_id: "device-2",
+					mac_address: "AA:BB:CC",
+					user_id: "user-1",
+				}),
+			})),
+		});
+		const { GET } = await loadRoute();
+
+		const response = await GET(
+			new Request("https://example.test/api/setup", {
+				headers: {
+					ID: "aa:bb:cc",
+					Model: "TRMNL",
+				},
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			status: 403,
+			api_key: null,
+			friendly_id: null,
+			image_url: null,
+			message: "Device setup requires a valid access token or owner session",
+		});
+	});
+
 	it("keeps the current API key when updating an existing device key fails", async () => {
 		state.checkDbConnection.mockResolvedValue({ ready: true });
 		state.getCurrentUserId.mockResolvedValue("user-1");
