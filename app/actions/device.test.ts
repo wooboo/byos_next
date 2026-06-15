@@ -6,6 +6,8 @@ const state = vi.hoisted(() => ({
 		selectFrom: vi.fn(),
 	},
 	getCurrentUserId: vi.fn(),
+	redirect: vi.fn(),
+	revalidatePath: vi.fn(),
 	withUserScope: vi.fn(),
 }));
 
@@ -22,6 +24,12 @@ async function loadDevice() {
 	}));
 	vi.doMock("@/lib/database/utils", () => ({
 		checkDbConnection: state.checkDbConnection,
+	}));
+	vi.doMock("next/cache", () => ({
+		revalidatePath: state.revalidatePath,
+	}));
+	vi.doMock("next/navigation", () => ({
+		redirect: state.redirect,
 	}));
 
 	return import("./device");
@@ -40,6 +48,8 @@ describe("device actions", () => {
 		state.checkDbConnection.mockReset();
 		state.db.selectFrom.mockReset();
 		state.getCurrentUserId.mockReset();
+		state.redirect.mockReset();
+		state.revalidatePath.mockReset();
 		state.withUserScope.mockReset();
 	});
 
@@ -350,5 +360,37 @@ describe("device actions", () => {
 			success: false,
 			error: "update failed",
 		});
+	});
+
+	it("deletes a device visible to the current user and redirects home", async () => {
+		const execute = vi.fn().mockResolvedValue(undefined);
+		const where = vi.fn().mockReturnValue({ execute });
+		const deleteFrom = vi.fn().mockReturnValue({ where });
+
+		state.checkDbConnection.mockResolvedValue({ ready: true });
+		state.withUserScope.mockImplementation(async (callback) =>
+			callback({ deleteFrom }),
+		);
+		const { deleteDevice } = await loadDevice();
+
+		await deleteDevice("ABC123");
+
+		expect(deleteFrom).toHaveBeenCalledWith("devices");
+		expect(where).toHaveBeenCalledWith("friendly_id", "=", "ABC123");
+		expect(state.revalidatePath.mock.calls).toEqual([
+			["/"],
+			["/device/ABC123"],
+		]);
+		expect(state.redirect).toHaveBeenCalledWith("/");
+	});
+
+	it("throws when deleteDevice has no database connection", async () => {
+		state.checkDbConnection.mockResolvedValue({ ready: false });
+		const { deleteDevice } = await loadDevice();
+
+		await expect(deleteDevice("ABC123")).rejects.toThrow(
+			"Database client not initialized",
+		);
+		expect(state.withUserScope).not.toHaveBeenCalled();
 	});
 });
