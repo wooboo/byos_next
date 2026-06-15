@@ -70,6 +70,21 @@ async function setForwardedCookies(
 	}
 }
 
+function redactPreviewUrl(url: URL | string) {
+	const redacted = new URL(url.toString());
+	if (redacted.searchParams.has("access_token")) {
+		redacted.searchParams.set("access_token", "[redacted]");
+	}
+	return redacted.toString();
+}
+
+function cookieDiagnostics(cookies: CookieParam[]) {
+	return {
+		count: cookies.length,
+		names: cookies.map((cookie) => cookie.name),
+	};
+}
+
 /**
  * Render a React recipe by navigating to its preview URL on this Next.js
  * server and capturing a PNG.
@@ -99,13 +114,28 @@ export async function renderWithBrowser(
 	const url = new URL(path, baseUrl);
 	url.searchParams.set("width", width.toString());
 	url.searchParams.set("height", height.toString());
+	const renderId = Math.random().toString(36).slice(2, 10);
+	const forwardedCookies = cookies ? buildForwardedCookies(cookies, url) : [];
+
+	console.info("[preview-render] browser request", {
+		renderId,
+		slug,
+		size: `${width}x${height}`,
+		baseUrl,
+		path,
+		url: redactPreviewUrl(url),
+		hasCookieHeader: Boolean(cookies),
+		forwardedCookies: cookieDiagnostics(forwardedCookies),
+		nodeEnv: process.env.NODE_ENV,
+		port,
+	});
 
 	const browser = await getBrowser("trusted");
 	const page = await browser.newPage();
 
 	try {
-		if (cookies) {
-			await setForwardedCookies(page, buildForwardedCookies(cookies, url));
+		if (forwardedCookies.length > 0) {
+			await setForwardedCookies(page, forwardedCookies);
 		}
 
 		// Force light mode — headless Chrome can default to dark, which breaks
@@ -118,9 +148,30 @@ export async function renderWithBrowser(
 			height,
 			deviceScaleFactor: 1,
 		});
-		await page.goto(url.toString(), { waitUntil: "networkidle0" });
+		const response = await page.goto(url.toString(), {
+			waitUntil: "networkidle0",
+		});
+		const finalUrl =
+			typeof page.url === "function" ? page.url() : url.toString();
+		const title =
+			typeof page.title === "function"
+				? await page.title().catch(() => null)
+				: null;
+		console.info("[preview-render] browser response", {
+			renderId,
+			status: response?.status() ?? null,
+			finalUrl: redactPreviewUrl(finalUrl),
+			title,
+		});
 		const screenshot = await page.screenshot({ type: "png" });
 		return Buffer.from(screenshot);
+	} catch (error) {
+		console.error("[preview-render] browser failed", {
+			renderId,
+			url: redactPreviewUrl(url),
+			error,
+		});
+		throw error;
 	} finally {
 		await page.close();
 	}
