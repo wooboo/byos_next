@@ -124,8 +124,17 @@ function getSingleScreenTarget(device: DisplayDevice) {
 	const screenId = device.screen_id || device.screen || "not-found";
 	const screenType = resolveRenderableContentType(device.screen_type, screenId);
 	const screenPath = screenType === "screen" ? `screen/${screenId}` : screenId;
+	const needsAccessToken = screenType === "screen";
 
-	return { screenId, screenPath };
+	return { needsAccessToken, screenId, screenPath };
+}
+
+function appendAccessTokenForProtectedScreen(
+	imageUrl: string,
+	needsAccessToken: boolean,
+	accessTokenParam: string,
+) {
+	return needsAccessToken ? `${imageUrl}&${accessTokenParam}` : imageUrl;
 }
 
 function resolveActivePlaylistItemDisplayContent(
@@ -213,7 +222,8 @@ function resolveMixupDisplayContent(
 	baseQueryParams: string,
 	accessTokenParam: string,
 ): DisplayContent {
-	const { screenId, screenPath } = getSingleScreenTarget(device);
+	const { needsAccessToken, screenId, screenPath } =
+		getSingleScreenTarget(device);
 	const refreshRate = calculateRefreshRate(
 		device.refresh_schedule as unknown as RefreshSchedule,
 		180,
@@ -221,8 +231,13 @@ function resolveMixupDisplayContent(
 	);
 
 	if (!device.mixup_id) {
+		const imageUrl = `${baseUrl}/${screenPath}.bmp?${baseQueryParams}`;
 		return {
-			imageUrl: `${baseUrl}/${screenPath}.bmp?${baseQueryParams}`,
+			imageUrl: appendAccessTokenForProtectedScreen(
+				imageUrl,
+				needsAccessToken,
+				accessTokenParam,
+			),
 			refreshRate,
 			screenToDisplay: screenId,
 		};
@@ -247,16 +262,23 @@ function resolveSingleScreenDisplayContent(
 	device: DisplayDevice,
 	baseUrl: string,
 	baseQueryParams: string,
+	accessTokenParam: string,
 ): DisplayContent {
-	const { screenId, screenPath } = getSingleScreenTarget(device);
+	const { needsAccessToken, screenId, screenPath } =
+		getSingleScreenTarget(device);
 	const refreshRate = calculateRefreshRate(
 		device.refresh_schedule as unknown as RefreshSchedule,
 		180,
 		device.timezone || "UTC",
 	);
+	const imageUrl = `${baseUrl}/${screenPath}.bmp?${baseQueryParams}`;
 
 	return {
-		imageUrl: `${baseUrl}/${screenPath}.bmp?${baseQueryParams}`,
+		imageUrl: appendAccessTokenForProtectedScreen(
+			imageUrl,
+			needsAccessToken,
+			accessTokenParam,
+		),
 		refreshRate,
 		screenToDisplay: screenId,
 	};
@@ -292,6 +314,7 @@ async function resolveDisplayContent(
 				device,
 				baseUrl,
 				baseQueryParams,
+				accessTokenParam,
 			);
 	}
 }
