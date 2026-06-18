@@ -136,6 +136,79 @@ describe("screens actions", () => {
 		});
 	});
 
+	it("clones a screen with the same recipe and params", async () => {
+		state.checkDbConnection.mockResolvedValue({ ready: true });
+		state.getCurrentUserId.mockResolvedValue("user-1");
+		const values = vi.fn().mockReturnThis();
+		const returning = vi.fn().mockReturnThis();
+		const execute = vi
+			.fn()
+			.mockResolvedValue([{ id: "screen-copy", name: "Lobby copy" }]);
+
+		state.withUserScope
+			.mockImplementationOnce(async (callback) =>
+				callback({
+					selectFrom: vi.fn().mockReturnValue({
+						select: vi.fn().mockReturnThis(),
+						where: vi.fn().mockReturnThis(),
+						executeTakeFirst: vi.fn().mockResolvedValue({
+							name: "Lobby",
+							recipe_id: "recipe-1",
+							params: '{"theme":"dark"}',
+						}),
+					}),
+				}),
+			)
+			.mockImplementationOnce(async (callback) =>
+				callback({
+					insertInto: vi.fn().mockReturnValue({
+						values,
+						returning,
+						execute,
+					}),
+				}),
+			);
+		const { cloneScreen } = await loadScreens();
+
+		await expect(cloneScreen("screen-1")).resolves.toEqual({
+			success: true,
+			screen: { id: "screen-copy", name: "Lobby copy" },
+		});
+		expect(values).toHaveBeenCalledWith({
+			user_id: "user-1",
+			name: "Lobby copy",
+			recipe_id: "recipe-1",
+			params: { theme: "dark" },
+		});
+		expect(returning).toHaveBeenCalledWith(["id", "name"]);
+		expect(execute).toHaveBeenCalled();
+		expect(state.revalidatePath).toHaveBeenNthCalledWith(1, "/screens");
+		expect(state.revalidatePath).toHaveBeenNthCalledWith(
+			2,
+			"/screens/screen-copy",
+		);
+	});
+
+	it("rejects cloning when the source screen is missing", async () => {
+		state.checkDbConnection.mockResolvedValue({ ready: true });
+		state.getCurrentUserId.mockResolvedValue("user-1");
+		state.withUserScope.mockImplementationOnce(async (callback) =>
+			callback({
+				selectFrom: vi.fn().mockReturnValue({
+					select: vi.fn().mockReturnThis(),
+					where: vi.fn().mockReturnThis(),
+					executeTakeFirst: vi.fn().mockResolvedValue(null),
+				}),
+			}),
+		);
+		const { cloneScreen } = await loadScreens();
+
+		await expect(cloneScreen("missing")).resolves.toEqual({
+			success: false,
+			error: "Screen not found",
+		});
+	});
+
 	it("renames a screen and revalidates the screen pages", async () => {
 		const set = vi.fn().mockReturnThis();
 		const where = vi.fn().mockReturnThis();
@@ -175,6 +248,33 @@ describe("screens actions", () => {
 			success: false,
 			error: "Screen name is required",
 		});
+	});
+
+	it("deletes a screen and revalidates the screen pages", async () => {
+		const deleteFrom = vi.fn().mockReturnThis();
+		const where = vi.fn().mockReturnThis();
+		const execute = vi.fn().mockResolvedValue(undefined);
+
+		state.withUserScope.mockImplementation(async (callback) =>
+			callback({
+				deleteFrom,
+				where,
+				execute,
+			}),
+		);
+		const { deleteScreen } = await loadScreens();
+
+		await expect(deleteScreen("screen-3")).resolves.toEqual({
+			success: true,
+		});
+		expect(deleteFrom).toHaveBeenCalledWith("screens");
+		expect(where).toHaveBeenCalledWith("id", "=", "screen-3");
+		expect(execute).toHaveBeenCalled();
+		expect(state.revalidatePath).toHaveBeenNthCalledWith(1, "/screens");
+		expect(state.revalidatePath).toHaveBeenNthCalledWith(
+			2,
+			"/screens/screen-3",
+		);
 	});
 
 	it("updates named screen params and refreshes bitmap output", async () => {

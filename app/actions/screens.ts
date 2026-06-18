@@ -58,6 +58,43 @@ export async function createScreenFromRecipe(recipeRef: string, name: string) {
 	return { success: true, screen };
 }
 
+export async function cloneScreen(screenId: string) {
+	const { ready } = await checkDbConnection();
+	if (!ready)
+		return { success: false, error: "Database client not initialized" };
+	const userId = await getCurrentUserId();
+	if (!userId) return { success: false, error: "You must be signed in" };
+
+	const source = await withUserScope((db) =>
+		db
+			.selectFrom("screens")
+			.select(["name", "recipe_id", "params"])
+			.where("id", "=", screenId)
+			.executeTakeFirst(),
+	);
+	if (!source) return { success: false, error: "Screen not found" };
+
+	const params =
+		typeof source.params === "string"
+			? (JSON.parse(source.params) as JsonObject)
+			: ((source.params ?? {}) as JsonObject);
+	const [screen] = await withUserScope((db) =>
+		db
+			.insertInto("screens")
+			.values({
+				user_id: userId,
+				name: `${source.name} copy`,
+				recipe_id: source.recipe_id,
+				params,
+			})
+			.returning(["id", "name"])
+			.execute(),
+	);
+	revalidatePath("/screens");
+	revalidatePath(`/screens/${screen.id}`);
+	return { success: true, screen };
+}
+
 export async function renameScreen(screenId: string, name: string) {
 	const trimmedName = name.trim();
 	if (!trimmedName) return { success: false, error: "Screen name is required" };
@@ -67,6 +104,15 @@ export async function renameScreen(screenId: string, name: string) {
 			.set({ name: trimmedName, updated_at: new Date() })
 			.where("id", "=", screenId)
 			.execute(),
+	);
+	revalidatePath("/screens");
+	revalidatePath(`/screens/${screenId}`);
+	return { success: true };
+}
+
+export async function deleteScreen(screenId: string) {
+	await withUserScope((db) =>
+		db.deleteFrom("screens").where("id", "=", screenId).execute(),
 	);
 	revalidatePath("/screens");
 	revalidatePath(`/screens/${screenId}`);

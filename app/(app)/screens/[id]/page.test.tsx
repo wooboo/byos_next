@@ -51,6 +51,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/app/actions/screens", () => ({
+	deleteScreen: vi.fn(async () => ({ success: true })),
 	updateNamedScreenParams: vi.fn(async () => ({ success: true })),
 }));
 
@@ -82,18 +83,33 @@ vi.mock("@/components/common/page-template", () => ({
 	PageTemplate: ({
 		title,
 		subtitle,
+		left,
 		children,
 	}: {
 		title: string;
 		subtitle: string;
+		left?: React.ReactNode;
 		children: React.ReactNode;
 	}) => {
 		return (
 			<div data-title={title} data-subtitle={subtitle}>
+				{left}
 				{children}
 			</div>
 		);
 	},
+}));
+
+vi.mock("@/components/screens/delete-screen-button", () => ({
+	DeleteScreenButton: ({ id, name }: { id: string; name: string }) => (
+		<div>
+			delete-screen:{id}:{name}
+		</div>
+	),
+}));
+
+vi.mock("@/components/screens/clone-screen-button", () => ({
+	CloneScreenButton: ({ id }: { id: string }) => <div>clone-screen:{id}</div>,
 }));
 
 vi.mock("@/components/screens/screen-render-preview", () => ({
@@ -197,6 +213,10 @@ describe("Screen detail page", () => {
 		assert.deepEqual(paramsProps.initialValues, { theme: "dark" });
 		assert.match(html, /screen-render-preview/);
 		assert.match(html, /screen-name-form/);
+		assert.match(html, /href="\/screens"/);
+		assert.match(html, /Back to list/);
+		assert.match(html, /clone-screen:screen-1/);
+		assert.match(html, /delete-screen:screen-1:Lobby/);
 	});
 
 	it("falls back to empty schema and object params in landscape", async () => {

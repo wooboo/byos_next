@@ -71,9 +71,25 @@ describe("mixup constants", () => {
 			slotsToAssignments([
 				{ slot_id: "a", recipe_id: "recipe-a", recipe_slug: "alpha" },
 				{ slot_id: "b", recipe_id: null, recipe_slug: "beta" },
+				{
+					slot_id: "c",
+					recipe_id: null,
+					recipe_slug: null,
+					ref_type: "screen",
+					ref_id: "screen-c",
+				},
+				{
+					slot_id: "d",
+					recipe_id: null,
+					recipe_slug: null,
+					ref_type: "recipe",
+					ref_id: "recipe-d",
+				},
 			]),
 		).toEqual({
-			a: "recipe-a",
+			a: "recipe:recipe-a",
+			c: "screen:screen-c",
+			d: "recipe:recipe-d",
 		});
 	});
 });

@@ -304,12 +304,18 @@ export const slotsToAssignments = (
 		slot_id: string;
 		recipe_id: string | null;
 		recipe_slug: string | null;
+		ref_type?: string | null;
+		ref_id?: string | null;
 	}>,
 ): Record<string, string> => {
 	const assignments: Record<string, string> = {};
 	for (const slot of slots) {
-		if (slot.recipe_id) {
-			assignments[slot.slot_id] = slot.recipe_id;
+		if (slot.ref_type === "screen" && slot.ref_id) {
+			assignments[slot.slot_id] = `screen:${slot.ref_id}`;
+		} else if (slot.ref_type === "recipe" && slot.ref_id) {
+			assignments[slot.slot_id] = `recipe:${slot.ref_id}`;
+		} else if (slot.recipe_id) {
+			assignments[slot.slot_id] = `recipe:${slot.recipe_id}`;
 		}
 	}
 	return assignments;
