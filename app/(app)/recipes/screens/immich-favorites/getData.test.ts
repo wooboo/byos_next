@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, it, vi } from "vitest";
 
 const originalFetch = global.fetch;
 
+function decodeJpegDataUrl(dataUrl: string) {
+	const [, base64 = ""] = dataUrl.split(",");
+	return Buffer.from(base64, "base64");
+}
+
 describe("immich-favorites/getData", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
@@ -214,5 +219,59 @@ describe("immich-favorites/getData", () => {
 		assert.equal(data.assetId, "asset-portrait");
 		assert.match(data.imageDataUrl, /^data:image\/jpeg;base64,/);
 		assert.equal(rotateSpy.mock.calls.length, 1);
+	});
+
+	it("normalizes upside-down EXIF orientation before returning the image", async () => {
+		const width = 8;
+		const height = 8;
+		const pixels = Buffer.alloc(width * height * 3);
+		for (let y = 0; y < height; y += 1) {
+			const value = y < height / 2 ? 0 : 255;
+			for (let x = 0; x < width; x += 1) {
+				const offset = (y * width + x) * 3;
+				pixels[offset] = value;
+				pixels[offset + 1] = value;
+				pixels[offset + 2] = value;
+			}
+		}
+		const upsideDownJpeg = await sharp(pixels, {
+			raw: { width, height, channels: 3 },
+		})
+			.withMetadata({ orientation: 3 })
+			.jpeg({ quality: 100 })
+			.toBuffer();
+
+		global.fetch = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify([{ id: "asset-upside-down" }]), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(new Uint8Array(upsideDownJpeg), {
+					status: 200,
+					headers: { "Content-Type": "image/jpeg" },
+				}),
+			);
+
+		const { default: getData } = await import("./getData");
+		const data = await getData({
+			serverUrl: "https://photos.example.com",
+			apiKey: "secret",
+		});
+
+		const { data: outputPixels } = await sharp(
+			decodeJpegDataUrl(data.imageDataUrl),
+		)
+			.raw()
+			.toBuffer({ resolveWithObject: true });
+		const topCenterOffset = (1 * width + Math.floor(width / 2)) * 3;
+		const bottomCenterOffset =
+			((height - 2) * width + Math.floor(width / 2)) * 3;
+
+		assert.equal(data.assetId, "asset-upside-down");
+		assert.ok(outputPixels[topCenterOffset] > outputPixels[bottomCenterOffset]);
 	});
 });

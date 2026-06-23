@@ -1,3 +1,5 @@
+import sharp from "sharp";
+
 type ImmichAsset = {
 	id: string;
 	width?: number;
@@ -100,15 +102,11 @@ export default async function getData(
 
 		const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
 
-		// Auto-rotate based on EXIF (only if orientation says so)
-		const sharpImg = require("sharp")(imgBuffer);
-		const meta = await sharpImg.metadata();
-		let pipeline = sharpImg;
-		if (meta.orientation && meta.orientation >= 5 && meta.orientation <= 8) {
-			pipeline = pipeline.rotate();
-		}
-
-		const jpeg = await pipeline.jpeg({ quality: 90 }).toBuffer();
+		// Auto-orient all EXIF rotation/mirroring variants before embedding in the recipe.
+		const jpeg = await sharp(imgBuffer)
+			.rotate()
+			.jpeg({ quality: 90 })
+			.toBuffer();
 		const dataUrl = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
 
 		return { imageDataUrl: dataUrl, assetId };
