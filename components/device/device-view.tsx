@@ -99,12 +99,14 @@ export function getDevicePreviewModel({
 	deviceWidth,
 	deviceHeight,
 	grayscaleLevels,
+	paletteId,
 }: {
 	device: DeviceViewData;
 	playlistScreens: PlaylistScreen[];
 	deviceWidth: number;
 	deviceHeight: number;
 	grayscaleLevels: number;
+	paletteId?: string;
 }): DevicePreviewModel {
 	const isPlaylist =
 		device.display_mode === DeviceDisplayMode.PLAYLIST &&
@@ -138,13 +140,14 @@ export function getDevicePreviewModel({
 		heroContentType,
 		bmpSrc:
 			heroContentType === "mixup"
-				? `/api/bitmap/mixup/${heroFrameId}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`
+				? `/api/bitmap/mixup/${heroFrameId}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}${paletteId ? `&palette=${encodeURIComponent(paletteId)}` : ""}`
 				: playlistFrameBmpUrl(
 						heroFrameId || "simple-text",
 						heroContentType,
 						deviceWidth,
 						deviceHeight,
 						grayscaleLevels,
+						paletteId,
 					),
 		pngSrc: playlistFramePngUrl(
 			heroFrameId,
@@ -300,6 +303,7 @@ function DevicePreviewPanel({
 						width: deviceWidth,
 						height: deviceHeight,
 						grayscale: grayscaleLevels,
+						paletteLabel: preview.paletteLabel,
 						reactMode: preview.reactMode,
 					})}
 				</span>
@@ -583,13 +587,15 @@ export default function DeviceView({
 	const preview = useScreenPreviewControls({
 		defaultPortrait: device.screen_orientation === "portrait",
 		defaultPaletteIndex:
-			device.grayscale === 2
-				? 0
-				: device.grayscale === 4
-					? 1
-					: device.grayscale === 256
-						? 3
-						: 2,
+			device.palette_id === "color-6a"
+				? 4
+				: device.grayscale === 256
+					? 3
+					: device.grayscale === 2
+						? 0
+						: device.grayscale === 4
+							? 1
+							: 2,
 	});
 
 	useEffect(() => {
@@ -619,6 +625,7 @@ export default function DeviceView({
 	const deviceWidth = preview.width || DEFAULT_IMAGE_WIDTH;
 	const deviceHeight = preview.height || DEFAULT_IMAGE_HEIGHT;
 	const grayscaleLevels = preview.grayscale;
+	const paletteId = preview.paletteId;
 
 	const status: "online" | "offline" =
 		device.status === "online" ? "online" : "offline";
@@ -632,6 +639,7 @@ export default function DeviceView({
 		deviceWidth,
 		deviceHeight,
 		grayscaleLevels,
+		paletteId,
 	});
 
 	return (

@@ -52,6 +52,7 @@ export function getPlaylistLivePreviewSrc(
 	width: number,
 	height: number,
 	grayscale: number,
+	paletteId?: string,
 ) {
 	return playlistFrameBmpUrl(
 		frame.screen_id,
@@ -59,6 +60,7 @@ export function getPlaylistLivePreviewSrc(
 		width,
 		height,
 		grayscale,
+		paletteId,
 	);
 }
 
@@ -168,6 +170,7 @@ export function PlaylistLivePreview({
 									preview.width,
 									preview.height,
 									preview.grayscale,
+									preview.paletteId,
 								)}
 								type="image/bmp"
 							/>
@@ -177,6 +180,7 @@ export function PlaylistLivePreview({
 									preview.width,
 									preview.height,
 									preview.grayscale,
+									preview.paletteId,
 								)}
 								alt={active.label}
 								width={preview.width}
@@ -217,6 +221,7 @@ export function PlaylistLivePreview({
 						width: preview.width,
 						height: preview.height,
 						grayscale: preview.grayscale,
+						paletteLabel: preview.paletteLabel,
 					})}
 				</span>
 			</div>

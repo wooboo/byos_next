@@ -89,6 +89,7 @@ export function RecipePreviewStage({
 					height={portraitH}
 					bpp={palette.grayscale}
 					bitmapUrl={bitmapUrl}
+					paletteId={"paletteId" in palette ? palette.paletteId : undefined}
 				/>
 			),
 			pipeline: bmpPipeline,
@@ -170,6 +171,7 @@ export function RecipePreviewStage({
 						width: portraitW,
 						height: portraitH,
 						grayscale: palette.grayscale,
+						paletteLabel: palette.label,
 						reactMode,
 					})}
 				</span>

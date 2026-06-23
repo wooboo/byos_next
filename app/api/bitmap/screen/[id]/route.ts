@@ -10,6 +10,7 @@ import {
 	renderRecipeToImage,
 } from "@/lib/recipes/recipe-renderer";
 import { resolveRenderableRef } from "@/lib/screens/render-target";
+import type { RgbPalette } from "@/utils/image-processing";
 import {
 	parseRequestHeaders,
 	resolveUserIdFromApiKey,
@@ -17,6 +18,7 @@ import {
 import {
 	binaryImageResponse,
 	parsePreviewGrayscale,
+	parsePreviewPalette,
 	parsePreviewSize,
 	screenPreviewPath,
 } from "../../render-utils";
@@ -31,6 +33,7 @@ export async function GET(
 		const screenId = id.replace(".bmp", "");
 		const { width, height } = parsePreviewSize(req);
 		const grayscale = parsePreviewGrayscale(req);
+		const palette = parsePreviewPalette(req);
 		const userId = headers.apiKey
 			? await resolveUserIdFromApiKey(headers.apiKey)
 			: await getCurrentUserId();
@@ -41,6 +44,7 @@ export async function GET(
 			width,
 			height,
 			grayscale,
+			palette,
 			userId,
 			cookieHeader,
 			headers.hostUrl,
@@ -61,6 +65,7 @@ const renderScreenBitmap = cache(
 		width: number,
 		height: number,
 		grayscale: number,
+		palette: RgbPalette | undefined,
 		userId: string | null,
 		cookies?: string,
 		previewBaseUrl?: string,
@@ -78,6 +83,7 @@ const renderScreenBitmap = cache(
 			imageHeight: height,
 			formats: ["bitmap"],
 			grayscale,
+			...(palette && { palette }),
 			userId,
 			cookies,
 			paramsOverride: target.params,

@@ -14,6 +14,7 @@ import {
 } from "@/lib/recipes/liquid-renderer";
 import { logger } from "@/lib/recipes/logger";
 import type { RecipeParamDefinitions } from "@/lib/recipes/params";
+import type { RgbPalette } from "@/utils/image-processing";
 import { DitheringMethod, renderBmp } from "@/utils/render-bmp";
 import { renderWithSatori } from "./renderers/satori";
 import { renderWithTakumi } from "./renderers/takumi";
@@ -332,6 +333,7 @@ type RenderOptions = {
 	imageHeight: number;
 	formats?: RenderFormats;
 	grayscale?: number; // Number of gray levels: 2, 4, or 16
+	palette?: RgbPalette;
 	html?: string; // When set, uses Puppeteer screenshot instead of Takumi/Satori
 	cookies?: string; // Cookie header to forward to browser renderer
 	previewPath?: string; // Browser renderer route to capture
@@ -358,6 +360,7 @@ export const renderRecipeOutputs = cache(
 		imageHeight,
 		formats = ["bitmap", "png"],
 		grayscale,
+		palette,
 		html,
 		cookies,
 		previewPath,
@@ -437,6 +440,7 @@ export const renderRecipeOutputs = cache(
 					height: imageHeight,
 					applyEdgeSnap: config?.renderSettings?.applyEdgeSnap ?? true,
 					...(grayscale !== undefined && { grayscale }),
+					...(palette && { palette }),
 				});
 			} catch (error) {
 				logger.error(`Error generating bitmap for ${slug}:`, error);
@@ -568,6 +572,7 @@ export async function renderRecipeToImage({
 	imageHeight,
 	formats = ["bitmap", "png"],
 	grayscale,
+	palette,
 	userId,
 	cookies,
 	paramsOverride,
@@ -579,6 +584,7 @@ export async function renderRecipeToImage({
 	imageHeight: number;
 	formats?: RenderFormats;
 	grayscale?: number;
+	palette?: RgbPalette;
 	userId?: string | null;
 	cookies?: string;
 	paramsOverride?: Record<string, unknown>;
@@ -596,6 +602,7 @@ export async function renderRecipeToImage({
 			imageHeight,
 			formats,
 			grayscale,
+			palette,
 			cookies,
 			previewBaseUrl,
 		});
@@ -617,6 +624,7 @@ export async function renderRecipeToImage({
 		imageHeight,
 		formats,
 		grayscale,
+		palette,
 		cookies,
 		previewPath,
 		previewBaseUrl,

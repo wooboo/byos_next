@@ -8,6 +8,7 @@ import {
 	logger,
 	renderRecipeOutputs,
 } from "@/lib/recipes/recipe-renderer";
+import type { RgbPalette } from "@/utils/image-processing";
 import {
 	parseRequestHeaders,
 	resolveUserIdFromApiKey,
@@ -29,7 +30,8 @@ export async function GET(
 		const { slug = ["not-found"] } = await params;
 		const bitmapPath = Array.isArray(slug) ? slug.join("/") : slug;
 		const targetRef = parseRenderPath(slug, "bmp");
-		const { width, height, grayscale } = parsePositiveBitmapOptions(req);
+		const { width, height, grayscale, palette } =
+			parsePositiveBitmapOptions(req);
 
 		logger.info(
 			`Bitmap request for: ${bitmapPath} in ${width}x${height} with ${grayscale} gray levels`,
@@ -49,6 +51,7 @@ export async function GET(
 			width,
 			height,
 			grayscale,
+			palette,
 			userId,
 			cookieHeader || undefined,
 			headers.hostUrl,
@@ -83,6 +86,7 @@ const renderRecipeBitmap = cache(
 		width: number,
 		height: number,
 		grayscale: number = 16,
+		palette: RgbPalette | undefined = undefined,
 		userId: string | null = null,
 		cookies?: string,
 		previewBaseUrl?: string,
@@ -95,6 +99,7 @@ const renderRecipeBitmap = cache(
 			height,
 			format: "bitmap",
 			grayscale,
+			...(palette && { palette }),
 			userId,
 			cookies,
 			previewBaseUrl,

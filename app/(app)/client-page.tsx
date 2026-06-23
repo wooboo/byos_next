@@ -92,7 +92,17 @@ function LatestScreenPanel({ device }: { device: ProcessedDevice | null }) {
 
 function useLatestScreenPreview(device: ProcessedDevice | null) {
 	const sourcePortrait = device?.screen_orientation === "portrait";
-	const preview = useScreenPreviewControls({ defaultPortrait: sourcePortrait });
+	const preview = useScreenPreviewControls({
+		defaultPortrait: sourcePortrait,
+		defaultPaletteIndex:
+			device?.palette_id === "color-6a"
+				? 3
+				: device?.grayscale === 2
+					? 0
+					: device?.grayscale === 4
+						? 1
+						: 2,
+	});
 	const isPortrait = preview.isPortrait;
 	const { height, width } = getPreviewDimensions(
 		preview.sizePreset,
@@ -116,6 +126,7 @@ function useLatestScreenPreview(device: ProcessedDevice | null) {
 			grayscale: preview.grayscale,
 			height,
 			mixupId,
+			paletteId: preview.paletteId,
 			previewId,
 			previewType,
 			width,
@@ -161,6 +172,7 @@ function getBitmapSrc({
 	grayscale,
 	height,
 	mixupId,
+	paletteId,
 	previewId,
 	previewType,
 	width,
@@ -168,18 +180,23 @@ function getBitmapSrc({
 	grayscale: number;
 	height: number;
 	mixupId: string | null;
+	paletteId?: string;
 	previewId: string;
 	previewType: ReturnType<typeof resolveRenderableContentType>;
 	width: number;
 }) {
+	const paletteParam = paletteId
+		? `&palette=${encodeURIComponent(paletteId)}`
+		: "";
 	return mixupId
-		? `/api/bitmap/mixup/${mixupId}.bmp?width=${width}&height=${height}&grayscale=${grayscale}`
+		? `/api/bitmap/mixup/${mixupId}.bmp?width=${width}&height=${height}&grayscale=${grayscale}${paletteParam}`
 		: playlistFrameBmpUrl(
 				previewId || "simple-text",
 				previewType,
 				width,
 				height,
 				grayscale,
+				paletteId,
 			);
 }
 
@@ -366,6 +383,7 @@ function LatestScreenPipeline({
 				width,
 				height,
 				grayscale: preview.grayscale,
+				paletteLabel: preview.paletteLabel,
 				reactMode: preview.reactMode,
 			})}
 		</span>

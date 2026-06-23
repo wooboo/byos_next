@@ -9,6 +9,7 @@ import {
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/recipe-renderer";
 import type { Device } from "@/lib/types";
+import { resolveColorPalette } from "@/utils/color-palettes";
 import { parseRequestHeaders, type RequestHeaders } from "../utils";
 
 const jsonError = (status: number, error: string) =>
@@ -76,6 +77,11 @@ const getGrayscaleLevels = (device: Device) => {
 	return 2;
 };
 
+const getPaletteQueryParam = (paletteId: string | null | undefined) => {
+	if (!paletteId || !resolveColorPalette(paletteId)) return "";
+	return `&palette=${encodeURIComponent(paletteId)}`;
+};
+
 const getScreenTarget = (device: Device) => {
 	const screenId = device.screen_id || device.screen || "not-found";
 	const screenType = resolveRenderableContentType(device.screen_type, screenId);
@@ -132,12 +138,13 @@ const buildImageUrl = ({
 	const baseUrl = `${headers.hostUrl}/api/bitmap`;
 	const { width, height } = getDeviceDimensions(device);
 	const grayscaleLevels = getGrayscaleLevels(device);
+	const paletteParam = getPaletteQueryParam(device.palette_id);
 	const { screenPath, needsAccessToken } = getScreenTarget(device);
 	const accessTokenParam = needsAccessToken
 		? `&access_token=${encodeURIComponent(apiKey)}`
 		: "";
 
-	return `${baseUrl}/${screenPath}.bmp?width=${width}&height=${height}&grayscale=${grayscaleLevels}${accessTokenParam}`;
+	return `${baseUrl}/${screenPath}.bmp?width=${width}&height=${height}&grayscale=${grayscaleLevels}${paletteParam}${accessTokenParam}`;
 };
 
 const currentDisplayResponse = ({

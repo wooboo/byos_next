@@ -5,6 +5,8 @@ import {
 	renderRecipeToImage,
 } from "@/lib/recipes/recipe-renderer";
 import { resolveRenderableRef } from "@/lib/screens/render-target";
+import { resolveColorPalette } from "@/utils/color-palettes";
+import type { RgbPalette } from "@/utils/image-processing";
 
 export type RenderSize = {
 	width: number;
@@ -13,6 +15,7 @@ export type RenderSize = {
 
 export type BitmapRenderOptions = RenderSize & {
 	grayscale: number;
+	palette?: RgbPalette;
 };
 
 type RenderRecipeTargetOptions = RenderSize & {
@@ -20,6 +23,7 @@ type RenderRecipeTargetOptions = RenderSize & {
 	screenId: string | null;
 	format: "bitmap" | "png";
 	grayscale?: number;
+	palette?: RgbPalette;
 	userId: string | null;
 	cookies?: string;
 	previewBaseUrl?: string;
@@ -45,20 +49,27 @@ export function parsePositiveBitmapOptions(
 		parseIntParam(searchParams.get("bpp")) ??
 		parseIntParam(searchParams.get("grayscale")) ??
 		16;
+	const palette = resolveColorPalette(searchParams.get("palette"));
 
 	return {
 		width: width > 0 ? width : DEFAULT_IMAGE_WIDTH,
 		height: height > 0 ? height : DEFAULT_IMAGE_HEIGHT,
 		grayscale,
+		...(palette && { palette }),
 	};
 }
 
 export function parseBitmapOptions(req: NextRequest): BitmapRenderOptions {
 	const searchParams = getSearchParams(req);
+	const palette = resolveColorPalette(searchParams.get("palette"));
 	return {
 		width: parseIntParam(searchParams.get("width")) ?? DEFAULT_IMAGE_WIDTH,
 		height: parseIntParam(searchParams.get("height")) ?? DEFAULT_IMAGE_HEIGHT,
-		grayscale: parseIntParam(searchParams.get("grayscale")) ?? 16,
+		grayscale:
+			parseIntParam(searchParams.get("bpp")) ??
+			parseIntParam(searchParams.get("grayscale")) ??
+			16,
+		...(palette && { palette }),
 	};
 }
 
@@ -108,6 +119,10 @@ export function parseRenderPath(
 	};
 }
 
+export function parsePreviewPalette(req: NextRequest) {
+	return resolveColorPalette(getSearchParams(req).get("palette"));
+}
+
 export function binaryImageResponse(
 	buffer: Buffer,
 	contentType: "image/bmp" | "image/png",
@@ -144,6 +159,7 @@ export async function renderRecipeTargetImage({
 	height,
 	format,
 	grayscale,
+	palette,
 	userId,
 	cookies,
 	previewBaseUrl,
@@ -160,6 +176,7 @@ export async function renderRecipeTargetImage({
 		imageHeight: height,
 		formats: [format],
 		...(format === "bitmap" && grayscale !== undefined ? { grayscale } : {}),
+		...(format === "bitmap" && palette ? { palette } : {}),
 		userId,
 		cookies,
 		paramsOverride: target?.params,

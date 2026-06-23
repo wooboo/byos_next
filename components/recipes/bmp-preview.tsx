@@ -8,6 +8,7 @@ interface BmpPreviewProps {
 	height: number;
 	bpp: number;
 	bitmapUrl?: string;
+	paletteId?: string;
 }
 
 interface ImageEndpointPreviewProps {
@@ -24,11 +25,19 @@ export function getBmpPreviewRequestUrl({
 	height,
 	bpp,
 	bitmapUrl,
+	paletteId,
 }: BmpPreviewProps) {
 	const url = bitmapUrl ?? `/api/bitmap/${slug}/default.bmp`;
 	const separator = url.includes("?") ? "&" : "?";
 
-	return `${url}${separator}width=${width}&height=${height}&bpp=${bpp}`;
+	const params = new URLSearchParams({
+		width: String(width),
+		height: String(height),
+		bpp: String(bpp),
+	});
+	if (paletteId) params.set("palette", paletteId);
+
+	return `${url}${separator}${params}`;
 }
 
 export function ImageEndpointPreviewContent({
@@ -153,6 +162,7 @@ export function BmpPreview({
 	height,
 	bpp,
 	bitmapUrl,
+	paletteId,
 }: BmpPreviewProps) {
 	return (
 		<ImageEndpointPreview
@@ -163,6 +173,7 @@ export function BmpPreview({
 				height,
 				bpp,
 				bitmapUrl,
+				paletteId,
 			})}
 			width={width}
 			height={height}
