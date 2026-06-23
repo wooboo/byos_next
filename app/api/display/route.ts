@@ -10,7 +10,6 @@ import {
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/recipe-renderer";
 import type { RefreshSchedule } from "@/lib/types";
-import { resolveColorPalette } from "@/utils/color-palettes";
 import { DEFAULT_REFRESH_RATE, DEFAULT_SCREEN } from "./constants";
 import {
 	buildDisplayResponse,
@@ -18,30 +17,18 @@ import {
 	calculateRefreshRate,
 	findOrCreateDevice,
 	getActivePlaylistItem,
+	getDisplayGrayscaleLevels,
 	parseRequestHeaders,
 	precacheImageInBackground,
+	resolveDisplayPaletteId,
+	resolveKnownPaletteId,
 	updateDeviceStatus,
 } from "./utils";
 
-/**
- * Map grayscale value from database to number of gray levels
- * Valid values: 2, 4, 16, or 256. Defaults to 2 if invalid.
- */
-function getGrayscaleLevels(grayscale: number | null | undefined): number {
-	if (
-		grayscale === 2 ||
-		grayscale === 4 ||
-		grayscale === 16 ||
-		grayscale === 256
-	) {
-		return grayscale;
-	}
-	return 2; // Default to 2 levels (black/white)
-}
-
 function getPaletteQueryParam(paletteId: string | null | undefined): string {
-	if (!paletteId || !resolveColorPalette(paletteId)) return "";
-	return `&palette=${encodeURIComponent(paletteId)}`;
+	const knownPaletteId = resolveKnownPaletteId(paletteId);
+	if (!knownPaletteId) return "";
+	return `&palette=${encodeURIComponent(knownPaletteId)}`;
 }
 
 type DisplayHeaders = ReturnType<typeof parseRequestHeaders>;
@@ -78,7 +65,10 @@ function buildNoDbDisplayResponse(
 
 	const width = headers.width || DEFAULT_IMAGE_WIDTH;
 	const height = headers.height || DEFAULT_IMAGE_HEIGHT;
-	const noDbQueryParams = `width=${width}&height=${height}&grayscale=16${headers.base64 ? "&base64=true" : ""}`;
+	const paletteId = resolveDisplayPaletteId(null, headers.paletteId);
+	const grayscale = paletteId ? 2 : 16;
+	const paletteParam = getPaletteQueryParam(paletteId);
+	const noDbQueryParams = `width=${width}&height=${height}&grayscale=${grayscale}${paletteParam}${headers.base64 ? "&base64=true" : ""}`;
 
 	return buildDisplayResponse(
 		`${baseUrl}/${DEFAULT_SCREEN}.bmp?${noDbQueryParams}`,
@@ -122,8 +112,15 @@ function buildBaseQueryParams(
 	width: number,
 	height: number,
 ) {
-	const grayscaleLevels = getGrayscaleLevels(device.grayscale);
-	const paletteParam = getPaletteQueryParam(device.palette_id);
+	const paletteId = resolveDisplayPaletteId(
+		device.palette_id,
+		headers.paletteId,
+	);
+	const grayscaleLevels = getDisplayGrayscaleLevels(
+		device.grayscale,
+		paletteId,
+	);
+	const paletteParam = getPaletteQueryParam(paletteId);
 	return `width=${width}&height=${height}&grayscale=${grayscaleLevels}${paletteParam}${headers.base64 ? "&base64=true" : ""}`;
 }
 

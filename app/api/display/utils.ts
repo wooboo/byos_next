@@ -15,6 +15,7 @@ import type {
 	RefreshSchedule,
 	TimeRange,
 } from "@/lib/types";
+import { resolveColorPalette } from "@/utils/color-palettes";
 import { generateFriendlyId, timezones } from "@/utils/helpers";
 import { DEFAULT_SCREEN } from "./constants";
 
@@ -30,6 +31,12 @@ export interface RequestHeaders {
 	width: number | null;
 	height: number | null;
 	model: string | null;
+	colorCount?: number | null;
+	displayTechnology?: string | null;
+	colorModel?: string | null;
+	paletteId?: string | null;
+	ditherLocation?: string | null;
+	preferredImageFormat?: string | null;
 	specialFunction: boolean;
 	base64: boolean;
 	hostUrl: string;
@@ -41,6 +48,7 @@ export const parseRequestHeaders = (request: Request): RequestHeaders => {
 	const headers = request.headers;
 	const widthStr = headers.get("Width");
 	const heightStr = headers.get("Height");
+	const colorCountStr = headers.get("Color-Count");
 	let accessToken = headers.get("Access-Token");
 	try {
 		accessToken ||= new URL(request.url).searchParams.get("access_token");
@@ -58,6 +66,12 @@ export const parseRequestHeaders = (request: Request): RequestHeaders => {
 		width: widthStr ? Number.parseInt(widthStr, 10) : null,
 		height: heightStr ? Number.parseInt(heightStr, 10) : null,
 		model: headers.get("Model")?.trim() || null,
+		colorCount: colorCountStr ? Number.parseInt(colorCountStr, 10) : null,
+		displayTechnology: headers.get("Display-Technology")?.trim() || null,
+		colorModel: headers.get("Color-Model")?.trim() || null,
+		paletteId: headers.get("Palette-Id")?.trim() || null,
+		ditherLocation: headers.get("Dither-Location")?.trim() || null,
+		preferredImageFormat: headers.get("Preferred-Image-Format")?.trim() || null,
 		specialFunction: headers.get("Special-Function") === "true",
 		base64: headers.get("BASE64") === "true",
 		hostUrl:
@@ -66,6 +80,39 @@ export const parseRequestHeaders = (request: Request): RequestHeaders => {
 			(headers.get("x-forwarded-host") || headers.get("host") || "localhost"),
 	};
 };
+
+export function resolveKnownPaletteId(
+	paletteId: string | null | undefined,
+): string | null {
+	if (!paletteId || !resolveColorPalette(paletteId)) return null;
+	return paletteId;
+}
+
+export function resolveDisplayPaletteId(
+	devicePaletteId: string | null | undefined,
+	headerPaletteId: string | null | undefined,
+): string | null {
+	return (
+		resolveKnownPaletteId(devicePaletteId) ??
+		resolveKnownPaletteId(headerPaletteId)
+	);
+}
+
+export function getDisplayGrayscaleLevels(
+	grayscale: number | null | undefined,
+	paletteId?: string | null,
+): number {
+	if (paletteId) return 2;
+	if (
+		grayscale === 2 ||
+		grayscale === 4 ||
+		grayscale === 16 ||
+		grayscale === 256
+	) {
+		return grayscale;
+	}
+	return 2;
+}
 
 // --- Helper Functions ---
 
@@ -76,6 +123,9 @@ type DisplayDeviceInsert = {
 	apiKey: string;
 	defaultRefreshRate: number;
 	model: string | null;
+	screenWidth?: number | null;
+	screenHeight?: number | null;
+	paletteId?: string | null;
 	userId: string;
 };
 
@@ -86,6 +136,9 @@ const insertDisplayDevice = ({
 	apiKey,
 	defaultRefreshRate,
 	model,
+	screenWidth,
+	screenHeight,
+	paletteId,
 	userId,
 }: DisplayDeviceInsert) =>
 	db
@@ -104,6 +157,9 @@ const insertDisplayDevice = ({
 			timezone: "UTC",
 			screen: DEFAULT_SCREEN,
 			model,
+			...(screenWidth ? { screen_width: screenWidth } : {}),
+			...(screenHeight ? { screen_height: screenHeight } : {}),
+			...(paletteId ? { grayscale: 2, palette_id: paletteId } : {}),
 			user_id: userId,
 		})
 		.returningAll()
@@ -135,6 +191,32 @@ const updateDeviceIdentity = async (
 
 	return device;
 };
+
+function addCapabilityHeaderPatch(
+	device: Device,
+	headers: RequestHeaders,
+	patch: Partial<Device>,
+) {
+	const paletteId = resolveKnownPaletteId(headers.paletteId);
+
+	if (headers.model && headers.model !== device.model) {
+		patch.model = headers.model;
+	}
+	if (paletteId && !device.palette_id) {
+		patch.palette_id = paletteId;
+		patch.grayscale = 2;
+	}
+	if (headers.width && headers.width !== device.screen_width) {
+		patch.screen_width = headers.width;
+	}
+	if (headers.height && headers.height !== device.screen_height) {
+		patch.screen_height = headers.height;
+	}
+}
+
+function getHeaderPaletteId(headers: RequestHeaders) {
+	return resolveKnownPaletteId(headers.paletteId);
+}
 
 export const precacheImageInBackground = (
 	imageUrl: string,
@@ -377,9 +459,7 @@ const findDeviceByApiKey = async (
 	if (headers.macAddress && headers.macAddress !== device.mac_address) {
 		patch.mac_address = headers.macAddress;
 	}
-	if (headers.model && headers.model !== device.model) {
-		patch.model = headers.model;
-	}
+	addCapabilityHeaderPatch(device, headers, patch);
 
 	return updateDeviceIdentity(device, patch);
 };
@@ -406,9 +486,7 @@ const buildMacMatchPatch = async (
 		patch.api_key = headers.apiKey;
 	}
 
-	if (headers.model && headers.model !== device.model) {
-		patch.model = headers.model;
-	}
+	addCapabilityHeaderPatch(device, headers, patch);
 
 	return patch;
 };
@@ -462,6 +540,9 @@ const createDeviceWithProvidedMac = async (
 				? Number.parseInt(headers.refreshRate, 10)
 				: 60,
 			model: headers.model,
+			screenWidth: headers.width,
+			screenHeight: headers.height,
+			paletteId: getHeaderPaletteId(headers),
 			userId: currentUserId,
 		});
 
@@ -533,6 +614,9 @@ const createMockDisplayDevice = async (
 			apiKey: mockIdentity.apiKey,
 			defaultRefreshRate: 60,
 			model: headers.model,
+			screenWidth: headers.width,
+			screenHeight: headers.height,
+			paletteId: getHeaderPaletteId(headers),
 			userId: currentUserId,
 		});
 

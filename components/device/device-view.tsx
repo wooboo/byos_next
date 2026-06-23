@@ -587,15 +587,17 @@ export default function DeviceView({
 	const preview = useScreenPreviewControls({
 		defaultPortrait: device.screen_orientation === "portrait",
 		defaultPaletteIndex:
-			device.palette_id === "color-6a"
-				? 4
-				: device.grayscale === 256
-					? 3
-					: device.grayscale === 2
-						? 0
-						: device.grayscale === 4
-							? 1
-							: 2,
+			device.palette_id === "m5papercolor-ed2208-m5gfx-v1"
+				? 5
+				: device.palette_id === "color-6a"
+					? 4
+					: device.grayscale === 256
+						? 3
+						: device.grayscale === 2
+							? 0
+							: device.grayscale === 4
+								? 1
+								: 2,
 	});
 
 	useEffect(() => {

@@ -86,7 +86,10 @@ export default function DeviceClientPage({
 		},
 	);
 
-	const updateEditedDeviceField = (name: string, value: string | number) => {
+	const updateEditedDeviceField = (
+		name: string,
+		value: string | number | null,
+	) => {
 		setEditedDevice((currentDevice) => {
 			if (!name.includes(".")) {
 				return {
@@ -179,10 +182,12 @@ export default function DeviceClientPage({
 	};
 
 	// Handle select changes
-	const handleSelectChange = (name: string, value: string) => {
+	const handleSelectChange = (name: string, value: string | null) => {
 		updateEditedDeviceField(
 			name,
-			name === "grayscale" ? Number.parseInt(value, 10) : value,
+			name === "grayscale" && typeof value === "string"
+				? Number.parseInt(value, 10)
+				: value,
 		);
 	};
 
@@ -319,6 +324,8 @@ export default function DeviceClientPage({
 				api_key: editedDevice.api_key,
 				friendly_id: editedDevice.friendly_id,
 				timezone: editedDevice.timezone,
+				model: editedDevice.model,
+				palette_id: editedDevice.palette_id,
 				refresh_schedule: editedDevice.refresh_schedule,
 				screen: editedDevice.screen,
 				screen_id: editedDevice.screen_id,

@@ -159,6 +159,12 @@ describe("app/api/display/utils", () => {
 					RSSI: "-61",
 					"Refresh-Rate": "900",
 					"Special-Function": "true",
+					"Color-Count": "6",
+					"Display-Technology": "eink-spectra6",
+					"Color-Model": "eink-spectra6",
+					"Palette-Id": "m5papercolor-ed2208-m5gfx-v1",
+					"Dither-Location": "server",
+					"Preferred-Image-Format": "palette-bmp",
 					BASE64: "true",
 					"x-forwarded-proto": "https",
 					"x-forwarded-host": "display.example.test",
@@ -176,6 +182,12 @@ describe("app/api/display/utils", () => {
 			width: 800,
 			height: 480,
 			model: "Inkplate",
+			colorCount: 6,
+			displayTechnology: "eink-spectra6",
+			colorModel: "eink-spectra6",
+			paletteId: "m5papercolor-ed2208-m5gfx-v1",
+			ditherLocation: "server",
+			preferredImageFormat: "palette-bmp",
 			specialFunction: true,
 			base64: true,
 			hostUrl: "https://display.example.test",
@@ -203,6 +215,12 @@ describe("app/api/display/utils", () => {
 			width: null,
 			height: null,
 			model: null,
+			colorCount: null,
+			displayTechnology: null,
+			colorModel: null,
+			paletteId: null,
+			ditherLocation: null,
+			preferredImageFormat: null,
 			specialFunction: false,
 			base64: false,
 			hostUrl: "http://device.local",
@@ -537,6 +555,58 @@ describe("app/api/display/utils", () => {
 			}),
 		).resolves.toEqual(device);
 		expect(state.db.updateTable).not.toHaveBeenCalled();
+	});
+
+	it("stores a known header palette on an existing device that has no palette", async () => {
+		const { findOrCreateDevice } = await loadUtils();
+		const update = makeUpdateBuilder();
+		const device = {
+			id: "device-paper",
+			api_key: "api-paper",
+			mac_address: "AA:BB",
+			model: "M5Stack PaperColor",
+			friendly_id: "paper-1",
+			palette_id: null,
+			grayscale: 256,
+			screen_width: null,
+			screen_height: null,
+		};
+		state.db.selectFrom.mockReturnValueOnce(makeQueryBuilder(device));
+		state.db.updateTable.mockReturnValue(update.builder);
+
+		await expect(
+			findOrCreateDevice({
+				apiKey: "api-paper",
+				macAddress: "AA:BB",
+				refreshRate: null,
+				batteryVoltage: null,
+				fwVersion: null,
+				rssi: null,
+				width: 600,
+				height: 400,
+				model: "M5Stack PaperColor",
+				paletteId: "m5papercolor-ed2208-m5gfx-v1",
+				colorCount: 6,
+				specialFunction: false,
+				base64: false,
+				hostUrl: "https://example.test",
+			}),
+		).resolves.toEqual(
+			expect.objectContaining({
+				palette_id: "m5papercolor-ed2208-m5gfx-v1",
+				grayscale: 2,
+				screen_width: 600,
+				screen_height: 400,
+			}),
+		);
+		expect(update.set).toHaveBeenCalledWith(
+			expect.objectContaining({
+				palette_id: "m5papercolor-ed2208-m5gfx-v1",
+				grayscale: 2,
+				screen_width: 600,
+				screen_height: 400,
+			}),
+		);
 	});
 
 	it("rejects MAC-only API key rotation for a different owner", async () => {
