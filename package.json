@@ -1,6 +1,6 @@
 {
 	"name": "byos-nextjs",
-	"version": "0.2.24",
+	"version": "0.2.25",
 	"private": true,
 	"scripts": {
 		"screenshots": "node scripts/take-screenshots.mjs",
