@@ -171,6 +171,7 @@ export function getPreviewSources({
 	previewWidth,
 	previewHeight,
 	grayscale,
+	paletteId,
 }: {
 	editedDevice: DeviceEditData;
 	isMixup: boolean;
@@ -180,6 +181,7 @@ export function getPreviewSources({
 	previewWidth: number;
 	previewHeight: number;
 	grayscale: number;
+	paletteId?: string;
 }) {
 	const playlistPreviewFrame = isPlaylist ? playlistScreens[0] : null;
 	const previewId =
@@ -197,13 +199,14 @@ export function getPreviewSources({
 			: resolveRenderableContentType(previewFrameType, previewId);
 	const heroSrc =
 		previewType === "mixup"
-			? `/api/bitmap/mixup/${previewId}.bmp?width=${previewWidth}&height=${previewHeight}&grayscale=${grayscale}`
+			? `/api/bitmap/mixup/${previewId}.bmp?width=${previewWidth}&height=${previewHeight}&grayscale=${grayscale}${paletteId ? `&palette=${encodeURIComponent(paletteId)}` : ""}`
 			: playlistFrameBmpUrl(
 					previewId,
 					previewType,
 					previewWidth,
 					previewHeight,
 					grayscale,
+					paletteId,
 				);
 
 	return {
@@ -245,6 +248,14 @@ export default function DeviceEditForm({
 }: DeviceEditFormProps) {
 	const preview = useScreenPreviewControls({
 		defaultPortrait: editedDevice.screen_orientation === "portrait",
+		defaultPaletteIndex:
+			editedDevice.palette_id === "color-6a"
+				? 3
+				: editedDevice.grayscale === 2
+					? 0
+					: editedDevice.grayscale === 4
+						? 1
+						: 2,
 	});
 	const previewWidth = preview.width;
 	const previewHeight = preview.height;
@@ -265,6 +276,7 @@ export default function DeviceEditForm({
 		previewWidth,
 		previewHeight,
 		grayscale: preview.grayscale,
+		paletteId: preview.paletteId,
 	});
 
 	return (
@@ -755,6 +767,7 @@ function DevicePreviewPanel({
 							width: preview.width,
 							height: preview.height,
 							grayscale: preview.grayscale,
+							paletteLabel: preview.paletteLabel,
 							reactMode: preview.reactMode,
 						})}
 					</MetaRow>

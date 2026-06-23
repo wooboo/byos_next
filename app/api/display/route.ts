@@ -10,6 +10,7 @@ import {
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/recipe-renderer";
 import type { RefreshSchedule } from "@/lib/types";
+import { resolveColorPalette } from "@/utils/color-palettes";
 import { DEFAULT_REFRESH_RATE, DEFAULT_SCREEN } from "./constants";
 import {
 	buildDisplayResponse,
@@ -36,6 +37,11 @@ function getGrayscaleLevels(grayscale: number | null | undefined): number {
 		return grayscale;
 	}
 	return 2; // Default to 2 levels (black/white)
+}
+
+function getPaletteQueryParam(paletteId: string | null | undefined): string {
+	if (!paletteId || !resolveColorPalette(paletteId)) return "";
+	return `&palette=${encodeURIComponent(paletteId)}`;
 }
 
 type DisplayHeaders = ReturnType<typeof parseRequestHeaders>;
@@ -117,7 +123,8 @@ function buildBaseQueryParams(
 	height: number,
 ) {
 	const grayscaleLevels = getGrayscaleLevels(device.grayscale);
-	return `width=${width}&height=${height}&grayscale=${grayscaleLevels}${headers.base64 ? "&base64=true" : ""}`;
+	const paletteParam = getPaletteQueryParam(device.palette_id);
+	return `width=${width}&height=${height}&grayscale=${grayscaleLevels}${paletteParam}${headers.base64 ? "&base64=true" : ""}`;
 }
 
 function getSingleScreenTarget(device: DisplayDevice) {

@@ -36,6 +36,7 @@ describe("ScreenPreviewControls", () => {
 		assert.match(html, />BW</);
 		assert.match(html, />4 gray</);
 		assert.match(html, />16 gray</);
+		assert.match(html, />6 color</);
 	});
 
 	it("renders react mode controls and omits bitmap palette controls in react mode", () => {
@@ -60,6 +61,7 @@ describe("ScreenPreviewControls", () => {
 		assert.match(html, />Scroll</);
 		assert.doesNotMatch(html, />16 gray</);
 		assert.doesNotMatch(html, />BW</);
+		assert.doesNotMatch(html, />6 color</);
 	});
 
 	it("can relabel the react preview format", () => {
@@ -105,6 +107,19 @@ describe("screenPreviewSummary", () => {
 				reactMode: "scroll",
 			}),
 			"1404×1872px · React scroll",
+		);
+	});
+
+	it("summarizes color bitmap palettes by label", () => {
+		assert.equal(
+			screenPreviewSummary({
+				format: "bmp",
+				width: 800,
+				height: 480,
+				grayscale: 2,
+				paletteLabel: "6 color",
+			}),
+			"800×480px · 6 color · BMP",
 		);
 	});
 });

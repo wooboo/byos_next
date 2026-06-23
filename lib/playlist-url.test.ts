@@ -20,6 +20,14 @@ describe("playlistFrameBmpUrl", () => {
 		);
 	});
 
+	it("adds an optional color palette parameter", () => {
+		expect(
+			playlistFrameBmpUrl("screen-123", "screen", 800, 480, 2, "color-6a"),
+		).toBe(
+			"/api/bitmap/screen/screen-123.bmp?width=800&height=480&grayscale=2&palette=color-6a",
+		);
+	});
+
 	it("omits grayscale only when it is falsy", () => {
 		expect(playlistFrameBmpUrl("screen", "recipe", 100, 200, 0)).toBe(
 			"/api/bitmap/screen.bmp?width=100&height=200",

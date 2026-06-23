@@ -394,6 +394,15 @@ export function MixupBuilder({
 											? optionMap.get(normalizeContentRef(selectedId))
 											: null;
 										const isActive = activeSlot === slot.id;
+										const previewParams = new URLSearchParams({
+											width: String(slot.width),
+											height: String(slot.height),
+											grayscale: String(preview.grayscale),
+										});
+										if (preview.paletteId) {
+											previewParams.set("palette", preview.paletteId);
+										}
+										const previewUrl = `${recipe?.previewUrl}?${previewParams}`;
 
 										return (
 											<button
@@ -413,12 +422,9 @@ export function MixupBuilder({
 											>
 												{recipe ? (
 													<picture>
-														<source
-															srcSet={`${recipe.previewUrl}?width=${slot.width}&height=${slot.height}&grayscale=${preview.grayscale}`}
-															type="image/bmp"
-														/>
+														<source srcSet={previewUrl} type="image/bmp" />
 														<img
-															src={`${recipe.previewUrl}?width=${slot.width}&height=${slot.height}&grayscale=${preview.grayscale}`}
+															src={previewUrl}
 															alt={`${recipe.title} preview`}
 															className="absolute inset-0 h-full w-full object-cover"
 															style={{ imageRendering: "pixelated" }}
@@ -447,6 +453,7 @@ export function MixupBuilder({
 								width: preview.width,
 								height: preview.height,
 								grayscale: preview.grayscale,
+								paletteLabel: preview.paletteLabel,
 							})}
 						</span>
 					</div>

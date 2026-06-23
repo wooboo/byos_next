@@ -252,6 +252,45 @@ describe("app/api/display/current GET", () => {
 		);
 	});
 
+	it("includes a known color palette in the current display bitmap URL", async () => {
+		state.checkDbConnection.mockResolvedValue({ ready: true });
+		state.resolveRenderableContentType.mockReturnValue("recipe");
+		mockDeviceLookup({
+			friendly_id: "device-color",
+			screen: "color-card",
+			screen_id: null,
+			screen_type: "recipe",
+			screen_orientation: "landscape",
+			screen_width: 800,
+			screen_height: 480,
+			grayscale: 2,
+			palette_id: "color-6a",
+			display_mode: "single",
+			mixup_id: null,
+			refresh_schedule: null,
+			last_update_time: "2026-06-13T14:00:00.000Z",
+		});
+		const { GET } = await loadRoute();
+
+		const response = await GET(
+			new Request("https://origin.test/api/display/current", {
+				headers: {
+					"Access-Token": "color-token",
+					host: "origin.test",
+					"x-forwarded-proto": "https",
+				},
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual(
+			expect.objectContaining({
+				image_url:
+					"https://origin.test/api/bitmap/color-card.bmp?width=800&height=480&grayscale=2&palette=color-6a",
+			}),
+		);
+	});
+
 	it("returns 500 when the device lookup throws", async () => {
 		state.checkDbConnection.mockResolvedValue({ ready: true });
 		state.db.selectFrom.mockReturnValue({

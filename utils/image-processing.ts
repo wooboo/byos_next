@@ -16,6 +16,67 @@ export const quantize = (grayscale: Uint8Array, levels = 2): Uint8Array => {
 	return result;
 };
 
+export type RgbColor = readonly [red: number, green: number, blue: number];
+export type RgbPalette = readonly RgbColor[];
+
+const clampByte = (value: number): number =>
+	Math.min(255, Math.max(0, Math.round(value)));
+
+const colorDistance = (first: RgbColor, second: RgbColor): number => {
+	const redMean = (first[0] + second[0]) / 2;
+	const redDelta = first[0] - second[0];
+	const greenDelta = first[1] - second[1];
+	const blueDelta = first[2] - second[2];
+
+	return (
+		(2 + redMean / 256) * redDelta * redDelta +
+		4 * greenDelta * greenDelta +
+		(2 + (255 - redMean) / 256) * blueDelta * blueDelta
+	);
+};
+
+const bufferColorAt = (buffer: ArrayLike<number>, offset: number): RgbColor => [
+	clampByte(buffer[offset] ?? 0),
+	clampByte(buffer[offset + 1] ?? 0),
+	clampByte(buffer[offset + 2] ?? 0),
+];
+
+export const findNearestPaletteColorIndex = (
+	color: RgbColor,
+	palette: RgbPalette,
+): number => {
+	if (palette.length === 0) {
+		throw new Error("palette must include at least one color");
+	}
+
+	let nearestIndex = 0;
+	let nearestDistance = Number.POSITIVE_INFINITY;
+
+	for (let index = 0; index < palette.length; index++) {
+		const distance = colorDistance(color, palette[index]);
+		if (distance < nearestDistance) {
+			nearestDistance = distance;
+			nearestIndex = index;
+		}
+	}
+
+	return nearestIndex;
+};
+
+export const quantizeRgbToPaletteIndices = (
+	rgb: Uint8Array,
+	palette: RgbPalette,
+): Uint8Array => {
+	const result = new Uint8Array(rgb.length / 3);
+	for (let pixel = 0; pixel < result.length; pixel++) {
+		result[pixel] = findNearestPaletteColorIndex(
+			bufferColorAt(rgb, pixel * 3),
+			palette,
+		);
+	}
+	return result;
+};
+
 /** Simple threshold dithering. Pixels below threshold map to black, at or above to white. */
 export const ditherThreshold = (
 	grayscale: Uint8Array,
@@ -85,6 +146,28 @@ const spreadError = (
 	}
 };
 
+const spreadColorError = (
+	buffer: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	error: RgbColor,
+	kernel: readonly ErrorDiffusionOffset[],
+	divisor: number,
+) => {
+	for (const [dx, dy, weight] of kernel) {
+		const targetX = x + dx;
+		const targetY = y + dy;
+		if (targetX >>> 0 >= width || targetY >>> 0 >= height) continue;
+
+		const targetOffset = (targetY * width + targetX) * 3;
+		buffer[targetOffset] += (error[0] * weight) / divisor;
+		buffer[targetOffset + 1] += (error[1] * weight) / divisor;
+		buffer[targetOffset + 2] += (error[2] * weight) / divisor;
+	}
+};
+
 const ditherErrorDiffusion = (
 	grayscale: Uint8Array,
 	width: number,
@@ -109,6 +192,45 @@ const ditherErrorDiffusion = (
 				x,
 				y,
 				oldPixel - newPixel,
+				kernel,
+				divisor,
+			);
+		}
+	}
+
+	return result;
+};
+
+const ditherColorErrorDiffusion = (
+	rgb: Uint8Array,
+	width: number,
+	height: number,
+	palette: RgbPalette,
+	kernel: readonly ErrorDiffusionOffset[],
+	divisor: number,
+): Uint8Array => {
+	const result = new Uint8Array(width * height);
+	const buffer = copyToFloatBuffer(rgb);
+
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const pixel = y * width + x;
+			const offset = pixel * 3;
+			const oldPixel = bufferColorAt(buffer, offset);
+			const paletteIndex = findNearestPaletteColorIndex(oldPixel, palette);
+			const newPixel = palette[paletteIndex];
+			result[pixel] = paletteIndex;
+			spreadColorError(
+				buffer,
+				width,
+				height,
+				x,
+				y,
+				[
+					buffer[offset] - newPixel[0],
+					buffer[offset + 1] - newPixel[1],
+					buffer[offset + 2] - newPixel[2],
+				],
 				kernel,
 				divisor,
 			);
@@ -245,6 +367,82 @@ export const ditherRandom = (grayscale: Uint8Array, levels = 2): Uint8Array => {
 	return result;
 };
 
+const ditherRgbBayer = (
+	rgb: Uint8Array,
+	width: number,
+	height: number,
+	palette: RgbPalette,
+	patternSize = 8,
+): Uint8Array => {
+	const result = new Uint8Array(width * height);
+	const matrixSize = resolveBayerMatrixSize(patternSize);
+	const matrix = BAYER_MATRICES[matrixSize];
+	const matrixLength = matrix.length;
+	const normalizedMatrix = normalizeBayerMatrix(matrix);
+
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const pixel = y * width + x;
+			const offset = pixel * 3;
+			const threshold =
+				normalizedMatrix[y % matrixLength][x % matrixLength] - 128;
+			result[pixel] = findNearestPaletteColorIndex(
+				[
+					clampByte(rgb[offset] + threshold),
+					clampByte(rgb[offset + 1] + threshold),
+					clampByte(rgb[offset + 2] + threshold),
+				],
+				palette,
+			);
+		}
+	}
+
+	return result;
+};
+
+const ditherRgbRandom = (rgb: Uint8Array, palette: RgbPalette): Uint8Array => {
+	const result = new Uint8Array(rgb.length / 3);
+
+	for (let pixel = 0; pixel < result.length; pixel++) {
+		const offset = pixel * 3;
+		result[pixel] = findNearestPaletteColorIndex(
+			[
+				clampByte(rgb[offset] + (Math.random() * 255 - 128)),
+				clampByte(rgb[offset + 1] + (Math.random() * 255 - 128)),
+				clampByte(rgb[offset + 2] + (Math.random() * 255 - 128)),
+			],
+			palette,
+		);
+	}
+
+	return result;
+};
+
+const rgbToLuminance = (rgb: Uint8Array): Uint8Array => {
+	const result = new Uint8Array(rgb.length / 3);
+	for (let pixel = 0; pixel < result.length; pixel++) {
+		const offset = pixel * 3;
+		result[pixel] = clampByte(
+			0.299 * rgb[offset] + 0.587 * rgb[offset + 1] + 0.114 * rgb[offset + 2],
+		);
+	}
+	return result;
+};
+
+const applyColorEdgeSnap = (
+	rgb: Uint8Array,
+	dithered: Uint8Array,
+	edges: Uint8Array,
+	palette: RgbPalette,
+): Uint8Array => {
+	const result = new Uint8Array(dithered);
+	const quantized = quantizeRgbToPaletteIndices(rgb, palette);
+	for (let i = 0; i < result.length; i++) {
+		if (edges[i]) result[i] = quantized[i];
+	}
+	return result;
+};
+
 const EDGE_NEIGHBOR_OFFSETS = [0, -1, 1] as const;
 
 const isExtremeValue = (value: number, fuzziness: number, limit: number) =>
@@ -356,6 +554,12 @@ type DitheringStrategy = (
 	dimensions: ResolvedDimensions,
 ) => Uint8Array;
 
+type ColorDitheringStrategy = (
+	rgb: Uint8Array,
+	options: ColorDitheringOptions,
+	dimensions: ResolvedDimensions,
+) => Uint8Array;
+
 const EMPTY_DIMENSIONS: ResolvedDimensions = { width: 0, height: 0 };
 
 const DIMENSIONAL_METHODS = new Set<DitheringMethod>([
@@ -401,6 +605,58 @@ const DITHERING_STRATEGIES: Record<DitheringMethod, DitheringStrategy> = {
 		),
 	[DitheringMethod.NONE]: (grayscale, options) =>
 		quantize(grayscale, options.levels),
+};
+
+export interface ColorDitheringOptions
+	extends Omit<DitheringOptions, "levels" | "threshold"> {
+	palette: RgbPalette;
+}
+
+const COLOR_DITHERING_STRATEGIES: Record<
+	DitheringMethod,
+	ColorDitheringStrategy
+> = {
+	[DitheringMethod.THRESHOLD]: (rgb, options) =>
+		quantizeRgbToPaletteIndices(rgb, options.palette),
+	[DitheringMethod.FLOYD_STEINBERG]: (rgb, options, dimensions) =>
+		ditherColorErrorDiffusion(
+			rgb,
+			dimensions.width,
+			dimensions.height,
+			options.palette,
+			FLOYD_STEINBERG_KERNEL,
+			16,
+		),
+	[DitheringMethod.ATKINSON]: (rgb, options, dimensions) =>
+		ditherColorErrorDiffusion(
+			rgb,
+			dimensions.width,
+			dimensions.height,
+			options.palette,
+			ATKINSON_KERNEL,
+			8,
+		),
+	[DitheringMethod.BAYER]: (rgb, options, dimensions) =>
+		ditherRgbBayer(
+			rgb,
+			dimensions.width,
+			dimensions.height,
+			options.palette,
+			options.bayerPatternSize,
+		),
+	[DitheringMethod.RANDOM]: (rgb, options) =>
+		ditherRgbRandom(rgb, options.palette),
+	[DitheringMethod.JARVIS_JUDICE_NINKE]: (rgb, options, dimensions) =>
+		ditherColorErrorDiffusion(
+			rgb,
+			dimensions.width,
+			dimensions.height,
+			options.palette,
+			JARVIS_JUDICE_NINKE_KERNEL,
+			48,
+		),
+	[DitheringMethod.NONE]: (rgb, options) =>
+		quantizeRgbToPaletteIndices(rgb, options.palette),
 };
 
 const assertValidBayerPatternSize = (bayerPatternSize?: number) => {
@@ -451,6 +707,33 @@ export function applyDithering(
 			options.edgeDetectionFuzziness,
 		);
 		return applyEdgeSnap(grayscale, result, edges, options.levels);
+	}
+
+	return result;
+}
+
+export function applyColorPaletteDithering(
+	method: DitheringMethod,
+	rgb: Uint8Array,
+	options: ColorDitheringOptions,
+): Uint8Array {
+	if (rgb.length % 3 !== 0) {
+		throw new Error("rgb buffer length must be divisible by 3");
+	}
+
+	assertValidBayerPatternSize(options.bayerPatternSize);
+	const dimensions = resolveDimensions(method, options) ?? EMPTY_DIMENSIONS;
+	const result = COLOR_DITHERING_STRATEGIES[method](rgb, options, dimensions);
+
+	if (options.applyEdgeSnap) {
+		const luminance = rgbToLuminance(rgb);
+		const edges = detectEdges(
+			luminance,
+			dimensions.width,
+			dimensions.height,
+			options.edgeDetectionFuzziness,
+		);
+		return applyColorEdgeSnap(rgb, result, edges, options.palette);
 	}
 
 	return result;

@@ -206,4 +206,41 @@ describe("renderBmp", () => {
 			Array.from(bmp.slice(info.dataOffset + 1, info.dataOffset + 4)),
 		).toEqual([0, 0, 0]);
 	});
+
+	it("renders indexed color BMPs from a fixed 6-color palette", async () => {
+		const palette = [
+			[255, 0, 0],
+			[0, 255, 0],
+			[0, 0, 255],
+			[255, 255, 0],
+			[0, 0, 0],
+			[255, 255, 255],
+		] as const;
+		const png = await pngFromRgb(
+			6,
+			1,
+			[255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 255, 255, 255],
+		);
+
+		const bmp = await renderBmp(png, {
+			width: 6,
+			height: 1,
+			palette,
+			ditheringMethod: DitheringMethod.NONE,
+			applyEdgeSnap: false,
+		});
+		const info = bmpInfo(bmp);
+
+		assert.equal(info.bitsPerPixel, 4);
+		assert.equal(info.colorCount, 6);
+		assert.equal(info.dataOffset, 78);
+		assert.deepEqual(
+			paletteEntries(bmp, 6),
+			[0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0x000000, 0xffffff],
+		);
+		assert.deepEqual(
+			Array.from(bmp.slice(info.dataOffset, info.dataOffset + 4)),
+			[0x01, 0x23, 0x45, 0x00],
+		);
+	});
 });

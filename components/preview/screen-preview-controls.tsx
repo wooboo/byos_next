@@ -40,6 +40,19 @@ export const SCREEN_PREVIEW_PALETTES = [
 		grayscale: 256,
 		swatches: ["#ef4444", "#22c55e", "#3b82f6", "#f8fafc"],
 	},
+	{
+		label: "6 color",
+		grayscale: 2,
+		paletteId: "color-6a",
+		swatches: [
+			"#ff0000",
+			"#00ff00",
+			"#0000ff",
+			"#ffff00",
+			"#000000",
+			"#ffffff",
+		],
+	},
 ] as const;
 
 export function useScreenPreviewControls({
@@ -86,6 +99,8 @@ export function useScreenPreviewControls({
 			width,
 			height,
 			grayscale: palette.grayscale,
+			paletteId: "paletteId" in palette ? palette.paletteId : undefined,
+			paletteLabel: palette.label,
 		}),
 		[
 			format,
@@ -307,17 +322,22 @@ export function screenPreviewSummary({
 	width,
 	height,
 	grayscale,
+	paletteLabel,
 	reactMode,
 }: {
 	format: ScreenPreviewFormat;
 	width: number;
 	height: number;
 	grayscale: number;
+	paletteLabel?: string;
 	reactMode?: ReactPreviewMode;
 }) {
 	if (format === "react")
 		return `${width}×${height}px · React ${reactMode ?? "fit"}`;
 	if (format === "png") return `${width}×${height}px · PNG`;
 	if (grayscale === 256) return `${width}×${height}px · 256 colors · BMP`;
+	if (paletteLabel && !paletteLabel.includes("gray")) {
+		return `${width}×${height}px · ${paletteLabel} · BMP`;
+	}
 	return `${width}×${height}px · ${grayscale} gray levels · BMP`;
 }

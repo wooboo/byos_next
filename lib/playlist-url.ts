@@ -7,6 +7,7 @@ export function playlistFrameBmpUrl(
 	width = 800,
 	height = 480,
 	grayscale = 16,
+	paletteId?: string,
 ): string {
 	const contentType = resolveRenderableContentType(screenType, screenId);
 	const base =
@@ -20,6 +21,7 @@ export function playlistFrameBmpUrl(
 		height: String(height),
 	});
 	if (grayscale) params.set("grayscale", String(grayscale));
+	if (paletteId) params.set("palette", paletteId);
 	return `${base}?${params}`;
 }
 

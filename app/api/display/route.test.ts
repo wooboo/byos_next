@@ -320,6 +320,7 @@ describe("app/api/display GET", () => {
 			screen_width: null,
 			screen_height: null,
 			grayscale: null,
+			palette_id: "color-6a",
 			display_mode: "single",
 			refresh_schedule: null,
 			timezone: null,
@@ -345,7 +346,7 @@ describe("app/api/display GET", () => {
 		await expect(response.json()).resolves.toEqual(
 			expect.objectContaining({
 				image_url:
-					"http://example.test/api/bitmap/screen/screen-5.bmp?width=800&height=480&grayscale=2&base64=true&access_token=token-5",
+					"http://example.test/api/bitmap/screen/screen-5.bmp?width=800&height=480&grayscale=2&palette=color-6a&base64=true&access_token=token-5",
 				refresh_rate: 180,
 				image_rotate: 1,
 			}),

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "vitest";
 import {
+	applyColorPaletteDithering,
 	applyDithering,
 	applyEdgeSnap,
 	DitheringMethod,
@@ -10,7 +11,9 @@ import {
 	ditherFloydSteinberg,
 	ditherRandom,
 	ditherThreshold,
+	findNearestPaletteColorIndex,
 	quantize,
+	quantizeRgbToPaletteIndices,
 	quantizeValue,
 } from "./image-processing.ts";
 
@@ -25,6 +28,29 @@ it("quantize maps a grayscale buffer without changing its length", () => {
 	const result = quantize(new Uint8Array([0, 40, 120, 200, 255]), 4);
 
 	assert.deepEqual(Array.from(result), [0, 0, 85, 170, 255]);
+});
+
+it("maps RGB pixels to the nearest configured palette colors", () => {
+	const palette = [
+		[255, 0, 0],
+		[0, 255, 0],
+		[0, 0, 255],
+		[255, 255, 0],
+		[0, 0, 0],
+		[255, 255, 255],
+	] as const;
+
+	assert.equal(findNearestPaletteColorIndex([245, 12, 10], palette), 0);
+
+	const result = quantizeRgbToPaletteIndices(
+		new Uint8Array([
+			254, 10, 10, 10, 250, 10, 20, 20, 240, 245, 245, 20, 5, 5, 5, 250, 250,
+			250,
+		]),
+		palette,
+	);
+
+	assert.deepEqual(Array.from(result), [0, 1, 2, 3, 4, 5]);
 });
 
 it("threshold dithering does not require image dimensions", () => {
@@ -52,6 +78,23 @@ it("dimension-dependent dithering rejects missing dimensions", () => {
 			),
 		/width and height are required/,
 	);
+});
+
+it("color palette error diffusion returns palette indices", () => {
+	const result = applyColorPaletteDithering(
+		DitheringMethod.FLOYD_STEINBERG,
+		new Uint8Array([250, 0, 0, 250, 250, 250]),
+		{
+			width: 2,
+			height: 1,
+			palette: [
+				[255, 0, 0],
+				[255, 255, 255],
+			],
+		},
+	);
+
+	assert.deepEqual(Array.from(result), [0, 1]);
 });
 
 it("edge snap rejects missing dimensions even for dimensionless strategies", () => {

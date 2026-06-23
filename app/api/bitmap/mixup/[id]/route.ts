@@ -8,6 +8,7 @@ import { checkDbConnection } from "@/lib/database/utils";
 import { getLayoutById, type LayoutSlot } from "@/lib/mixup/constants";
 import { logger, renderRecipeToImage } from "@/lib/recipes/recipe-renderer";
 import { resolveRenderableRef } from "@/lib/screens/render-target";
+import type { RgbPalette } from "@/utils/image-processing";
 import { DitheringMethod, renderBmp } from "@/utils/render-bmp";
 import { binaryImageResponse, parseBitmapOptions } from "../../render-utils";
 
@@ -36,7 +37,7 @@ export async function GET(
 		const { searchParams } = new URL(req.url);
 		const accessToken =
 			searchParams.get("access_token") ?? req.headers.get("Access-Token");
-		const { width, height, grayscale } = parseBitmapOptions(req);
+		const { width, height, grayscale, palette } = parseBitmapOptions(req);
 
 		const { ready } = await checkDbConnection();
 		if (!ready) {
@@ -78,6 +79,7 @@ export async function GET(
 			width,
 			height,
 			grayscale,
+			palette,
 			userIdOrResponse,
 		);
 
@@ -257,6 +259,7 @@ async function renderMixupComposite(
 	width: number,
 	height: number,
 	grayscaleLevels: number,
+	palette: RgbPalette | undefined,
 	userId: string,
 ): Promise<Buffer> {
 	// Render all slots in parallel
@@ -313,6 +316,7 @@ async function renderMixupComposite(
 		width,
 		height,
 		grayscale: grayscaleLevels,
+		...(palette && { palette }),
 	});
 
 	return bmpBuffer;

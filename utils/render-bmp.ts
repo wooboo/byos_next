@@ -1,5 +1,10 @@
 import sharp from "sharp";
-import { applyDithering, DitheringMethod } from "./image-processing";
+import {
+	applyColorPaletteDithering,
+	applyDithering,
+	DitheringMethod,
+	type RgbPalette,
+} from "./image-processing";
 
 export { DitheringMethod };
 
@@ -9,6 +14,7 @@ export interface RenderBmpOptions {
 	width?: number;
 	height?: number;
 	grayscale?: number; // 2, 4, 16 gray levels, or 256 indexed colors
+	palette?: RgbPalette;
 	applyEdgeSnap?: boolean;
 }
 
@@ -53,6 +59,17 @@ const shouldSetMonochromeBit = (
 	paletteIndex: number,
 	grayscale: number,
 ): boolean => paletteIndex === grayscale - 1;
+
+const createColorPaletteEntries = (palette: RgbPalette): number[] =>
+	palette.map(([red, green, blue]) => (red << 16) | (green << 8) | blue);
+
+const getBitsPerPixel = (colorCount: number): number => {
+	if (colorCount <= 2) return 1;
+	if (colorCount <= 4) return 2;
+	if (colorCount <= 16) return 4;
+	if (colorCount <= 256) return 8;
+	throw new Error(`Invalid palette size: ${colorCount}. Must be 256 or less`);
+};
 
 function getPaletteIndex(
 	value: number,
@@ -159,17 +176,97 @@ function writeIndexed8BitmapRows({
 	}
 }
 
+function writePackedIndexedBitmapRows({
+	bitsPerPixel,
+	buffer,
+	dataOffset,
+	paletteIndices,
+	rowSize,
+	targetHeight,
+	targetWidth,
+}: {
+	bitsPerPixel: number;
+	buffer: Buffer;
+	dataOffset: number;
+	paletteIndices: Uint8Array;
+	rowSize: number;
+	targetHeight: number;
+	targetWidth: number;
+}) {
+	const pixelsPerByte = 8 / bitsPerPixel;
+	const byteIndexShift = Math.log2(pixelsPerByte);
+
+	for (let y = 0; y < targetHeight; y++) {
+		const targetY = targetHeight - 1 - y;
+		const yOffset = targetY * targetWidth;
+		const destRowOffset = dataOffset + y * rowSize;
+
+		for (let x = 0; x < targetWidth; x += pixelsPerByte) {
+			let byte = 0;
+			const remainingPixels = Math.min(pixelsPerByte, targetWidth - x);
+
+			for (let bit = 0; bit < remainingPixels; bit++) {
+				const idx = yOffset + x + bit;
+				byte |=
+					paletteIndices[idx] << ((pixelsPerByte - 1 - bit) * bitsPerPixel);
+			}
+
+			buffer[destRowOffset + (x >> byteIndexShift)] = byte;
+		}
+	}
+}
+
+async function extractRgbData(
+	image: sharp.Sharp,
+	targetPixelCount: number,
+): Promise<Uint8Array> {
+	const { data, info } = await image
+		.flatten({ background: { r: 255, g: 255, b: 255 } })
+		.toColorspace("srgb")
+		.raw()
+		.toBuffer({ resolveWithObject: true });
+	const rgbData = new Uint8Array(targetPixelCount * 3);
+
+	for (let i = 0; i < targetPixelCount; i++) {
+		const sourceOffset = i * info.channels;
+		const targetOffset = i * 3;
+		rgbData[targetOffset] = data[sourceOffset] as number;
+		rgbData[targetOffset + 1] = data[sourceOffset + 1] as number;
+		rgbData[targetOffset + 2] = data[sourceOffset + 2] as number;
+	}
+
+	return rgbData;
+}
+
+async function extractGrayscaleData(
+	image: sharp.Sharp,
+	targetPixelCount: number,
+): Promise<Uint8Array> {
+	const grayscaleImage = await image
+		.grayscale()
+		.raw()
+		.toBuffer({ resolveWithObject: true });
+	const grayscaleData = new Uint8Array(targetPixelCount);
+
+	for (let i = 0; i < targetPixelCount; i++) {
+		grayscaleData[i] = grayscaleImage.data[i] as number;
+	}
+
+	return grayscaleData;
+}
+
 export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 	const {
 		ditheringMethod = DitheringMethod.FLOYD_STEINBERG,
 		inverted = false,
 		grayscale = 2,
+		palette,
 		applyEdgeSnap = true,
 	} = options;
 
 	// Validate grayscale levels / color modes
 	const validLevels = [2, 4, 16, 256];
-	if (!validLevels.includes(grayscale)) {
+	if (!palette && !validLevels.includes(grayscale)) {
 		throw new Error(
 			`Invalid grayscale value: ${grayscale}. Must be one of: ${validLevels.join(", ")}`,
 		);
@@ -193,7 +290,9 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 		});
 	}
 
-	if (grayscale === 256) {
+	const isColorPalette = palette !== undefined;
+
+	if (!isColorPalette && grayscale === 256) {
 		const { data } = await image
 			.removeAlpha()
 			.raw()
@@ -242,30 +341,32 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 		return buffer;
 	}
 
-	const grayscaleImage = await image
-		.grayscale()
-		.raw()
-		.toBuffer({ resolveWithObject: true });
+	const pixelData = isColorPalette
+		? await extractRgbData(image, targetPixelCount)
+		: await extractGrayscaleData(image, targetPixelCount);
 
-	const { data } = grayscaleImage;
+	const dithered = isColorPalette
+		? applyColorPaletteDithering(ditheringMethod, pixelData, {
+				width: targetWidth,
+				height: targetHeight,
+				palette,
+				applyEdgeSnap,
+			})
+		: applyDithering(ditheringMethod, pixelData, {
+				width: targetWidth,
+				height: targetHeight,
+				levels: grayscale,
+				applyEdgeSnap,
+			});
 
-	// Step 2: Copy grayscale data
-	const grayscaleData = new Uint8Array(targetPixelCount);
-	for (let i = 0; i < targetPixelCount; i++) {
-		grayscaleData[i] = data[i] as number;
-	}
-
-	// Step 3: Apply dithering with edge snapping
-	const dithered = applyDithering(ditheringMethod, grayscaleData, {
-		width: targetWidth,
-		height: targetHeight,
-		levels: grayscale,
-		applyEdgeSnap,
-	});
-
-	// Determine BMP format based on grayscale levels
-	const bitsPerPixel = grayscale === 2 ? 1 : grayscale === 4 ? 2 : 4;
-	const numColors = grayscale;
+	const numColors = isColorPalette ? palette.length : grayscale;
+	const bitsPerPixel = isColorPalette
+		? getBitsPerPixel(numColors)
+		: grayscale === 2
+			? 1
+			: grayscale === 4
+				? 2
+				: 4;
 	const paletteSize = numColors * 4; // Each color is 4 bytes (BGR + reserved)
 
 	// BMP file header (14 bytes) + Info header (40 bytes)
@@ -297,27 +398,41 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 	buffer.writeUInt32LE(numColors, 46); // Total Colors
 	buffer.writeUInt32LE(numColors, 50); // Important Colors
 
-	// Color palette entries are ordered from black to white so monochrome BMPs
-	// match the device's expected pixel semantics.
+	// Palette entries are written in display order. Grayscale palettes stay
+	// black-to-white so monochrome BMPs keep the device's expected semantics.
 	const paletteOffset = fileHeaderSize + infoHeaderSize;
-	const paletteEntries = createGrayscalePaletteEntries(grayscale);
+	const paletteEntries = isColorPalette
+		? createColorPaletteEntries(palette)
+		: createGrayscalePaletteEntries(grayscale);
 	for (const [index, paletteEntry] of paletteEntries.entries()) {
 		buffer.writeUInt32LE(paletteEntry, paletteOffset + index * 4);
 	}
 
 	// Step 4: Generate the final bitmap
 	const dataOffset = fileHeaderSize + infoHeaderSize + paletteSize;
-	writePackedBitmapRows({
-		buffer,
-		dataOffset,
-		dithered,
-		grayscale,
-		inverted,
-		rowSize,
-		targetHeight,
-		targetWidth,
-		bitsPerPixel,
-	});
+	if (isColorPalette) {
+		writePackedIndexedBitmapRows({
+			buffer,
+			dataOffset,
+			paletteIndices: dithered,
+			rowSize,
+			targetHeight,
+			targetWidth,
+			bitsPerPixel,
+		});
+	} else {
+		writePackedBitmapRows({
+			buffer,
+			dataOffset,
+			dithered,
+			grayscale,
+			inverted,
+			rowSize,
+			targetHeight,
+			targetWidth,
+			bitsPerPixel,
+		});
+	}
 
 	return buffer;
 }

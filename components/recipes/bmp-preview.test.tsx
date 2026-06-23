@@ -28,6 +28,16 @@ describe("BmpPreview", () => {
 			}),
 			"/api/bitmap/weather.bmp?cache=1&width=1200&height=825&bpp=4",
 		);
+		assert.equal(
+			getBmpPreviewRequestUrl({
+				slug: "weather",
+				width: 800,
+				height: 480,
+				bpp: 2,
+				paletteId: "color-6a",
+			}),
+			"/api/bitmap/weather/default.bmp?width=800&height=480&bpp=2&palette=color-6a",
+		);
 	});
 
 	it("renders the bitmap URL directly during SSR", () => {
