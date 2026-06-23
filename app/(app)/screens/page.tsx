@@ -44,7 +44,7 @@ export default async function ScreensPage() {
 									Recipe: {screen.recipe_name}
 								</div>
 							</CardHeader>
-							<CardContent>
+							<CardContent className="mt-auto">
 								<Button asChild size="sm">
 									<Link href={`/screens/${screen.id}`}>Edit</Link>
 								</Button>

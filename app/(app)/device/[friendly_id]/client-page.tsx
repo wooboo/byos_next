@@ -8,6 +8,7 @@ import { fetchDeviceByFriendlyId, updateDevice } from "@/app/actions/device";
 import { createScreenFromRecipe } from "@/app/actions/screens";
 import { PageTemplate } from "@/components/common/page-template";
 import { StatusIndicator } from "@/components/common/status-indicator";
+import { DeleteDeviceButton } from "@/components/device/delete-device-button";
 import DeviceEditForm from "@/components/device/device-edit-form";
 import DeviceView from "@/components/device/device-view";
 import DeviceLogsContainer from "@/components/device-logs/device-logs-container";
@@ -485,14 +486,20 @@ export default function DeviceClientPage({
 							</Button>
 						</>
 					) : (
-						<Button
-							size="sm"
-							variant="outline"
-							onClick={() => setIsEditing(true)}
-						>
-							<Pencil className="mr-1.5 h-3.5 w-3.5" />
-							Edit device
-						</Button>
+						<>
+							<Button
+								size="sm"
+								variant="outline"
+								onClick={() => setIsEditing(true)}
+							>
+								<Pencil className="mr-1.5 h-3.5 w-3.5" />
+								Edit device
+							</Button>
+							<DeleteDeviceButton
+								friendlyId={device.friendly_id}
+								name={device.name}
+							/>
+						</>
 					)}
 				</div>
 			}

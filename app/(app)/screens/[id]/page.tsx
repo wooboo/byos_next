@@ -1,9 +1,13 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { updateNamedScreenParams } from "@/app/actions/screens";
 import { PageTemplate } from "@/components/common/page-template";
 import { ScreenParamsForm } from "@/components/recipes/screen-params-form";
+import { CloneScreenButton } from "@/components/screens/clone-screen-button";
+import { DeleteScreenButton } from "@/components/screens/delete-screen-button";
 import { ScreenNameForm } from "@/components/screens/screen-name-form";
 import { ScreenRenderPreview } from "@/components/screens/screen-render-preview";
+import { Button } from "@/components/ui/button";
 import { getCurrentUserId } from "@/lib/auth/get-user";
 import { withUserScope } from "@/lib/database/scoped-db";
 import {
@@ -58,6 +62,15 @@ export default async function ScreenDetailPage({
 		<PageTemplate
 			title={screen.name}
 			subtitle={`Named screen based on ${screen.recipe_name}`}
+			left={
+				<div className="flex items-center gap-2">
+					<Button asChild variant="outline" size="sm">
+						<Link href="/screens">Back to list</Link>
+					</Button>
+					<CloneScreenButton id={screen.id} />
+					<DeleteScreenButton id={screen.id} name={screen.name} />
+				</div>
+			}
 		>
 			<div className="space-y-6">
 				<ScreenRenderPreview

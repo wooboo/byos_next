@@ -493,18 +493,22 @@ export function MixupBuilder({
 								const isActive = activeSlot === slot.id;
 
 								return (
-									<button
-										type="button"
+									<div
 										key={slot.id}
-										onClick={() => setActiveSlot(slot.id)}
 										className={cn(
 											"flex w-full items-center gap-3 px-4 py-3 text-left transition-colors",
-											isActive ? "bg-primary/5" : "hover:bg-muted/40",
+											isActive ? "bg-primary/5" : "bg-card",
 										)}
 									>
-										<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background text-[11px] font-semibold tabular-nums text-muted-foreground">
+										<button
+											type="button"
+											onClick={() => setActiveSlot(slot.id)}
+											className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background text-[11px] font-semibold tabular-nums text-muted-foreground transition-colors hover:bg-muted"
+											aria-label={`Select ${slot.label}`}
+											aria-pressed={isActive}
+										>
 											{index + 1}
-										</div>
+										</button>
 										<div className="min-w-0 flex-1">
 											<div className="flex items-center justify-between gap-2 text-xs">
 												<span className="font-semibold">{slot.label}</span>
@@ -564,7 +568,7 @@ export function MixupBuilder({
 												)}
 											</div>
 										</div>
-									</button>
+									</div>
 								);
 							})}
 						</div>

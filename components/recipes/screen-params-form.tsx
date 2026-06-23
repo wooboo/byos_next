@@ -6,6 +6,13 @@ import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import type {
 	RecipeParamDefinition,
 	RecipeParamDefinitions,
@@ -137,6 +144,25 @@ export const renderField = (
 	value: unknown,
 	onChange: (key: string, value: unknown) => void,
 ) => {
+	if (key === "orientationFilter") {
+		const normalizedValue = typeof value === "string" ? value : "any";
+		return (
+			<Select
+				value={normalizedValue}
+				onValueChange={(nextValue) => onChange(key, nextValue)}
+			>
+				<SelectTrigger className="h-9 w-full">
+					<SelectValue placeholder="any" />
+				</SelectTrigger>
+				<SelectContent>
+					<SelectItem value="any">Any</SelectItem>
+					<SelectItem value="portrait">Portrait</SelectItem>
+					<SelectItem value="landscape">Landscape</SelectItem>
+				</SelectContent>
+			</Select>
+		);
+	}
+
 	const commonProps = {
 		id: key,
 		name: key,

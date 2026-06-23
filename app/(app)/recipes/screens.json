@@ -289,6 +289,13 @@
 		"hasDataFetch": true,
 		"props": {},
 		"params": {
+			"orientationFilter": {
+				"type": "string",
+				"label": "Orientation filter",
+				"description": "Limit random favorites by orientation: any, portrait, or landscape.",
+				"default": "any",
+				"placeholder": "any"
+			},
 			"serverUrl": {
 				"type": "string",
 				"label": "Immich Server URL",
@@ -299,8 +306,7 @@
 			"apiKey": {
 				"type": "string",
 				"label": "Immich API Key",
-				"description": "API key used to fetch favorite photos. Falls back to IMMICH_API_KEY when empty.",
-				"default": "",
+				"description": "API key used to fetch favorite photos.",
 				"placeholder": "Immich API key"
 			}
 		},

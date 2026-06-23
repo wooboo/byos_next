@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
 import { StatusIndicator } from "@/components/common/status-indicator";
-import { DeleteDeviceButton } from "@/components/device/delete-device-button";
 import { ScaledReactPreview } from "@/components/preview/scaled-react-preview";
 import {
 	ScreenPreviewControls,
@@ -408,20 +407,14 @@ function IdentityPanel({
 			<PanelHeader
 				label="Identity"
 				right={
-					<div className="flex items-center gap-2">
-						<span
-							className="text-[11px] text-muted-foreground tabular-nums"
-							suppressHydrationWarning
-						>
-							{device.last_update_time
-								? `Last seen ${formatDate(device.last_update_time)}`
-								: "—"}
-						</span>
-						<DeleteDeviceButton
-							friendlyId={device.friendly_id}
-							name={device.name}
-						/>
-					</div>
+					<span
+						className="text-[11px] text-muted-foreground tabular-nums"
+						suppressHydrationWarning
+					>
+						{device.last_update_time
+							? `Last seen ${formatDate(device.last_update_time)}`
+							: "—"}
+					</span>
 				}
 			/>
 			<div className="grid gap-3 p-4 sm:grid-cols-2">
