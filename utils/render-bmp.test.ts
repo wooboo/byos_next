@@ -31,6 +31,23 @@ async function pngFromRgb(width: number, height: number, pixels: number[]) {
 		.toBuffer();
 }
 
+async function solidRgbPng(
+	width: number,
+	height: number,
+	background: { r: number; g: number; b: number },
+) {
+	return sharp({
+		create: {
+			width,
+			height,
+			channels: 3,
+			background,
+		},
+	})
+		.png()
+		.toBuffer();
+}
+
 function bmpInfo(buffer: Buffer) {
 	return {
 		signature: buffer.toString("ascii", 0, 2),
@@ -241,6 +258,46 @@ describe("renderBmp", () => {
 		assert.deepEqual(
 			Array.from(bmp.slice(info.dataOffset, info.dataOffset + 4)),
 			[0x01, 0x23, 0x45, 0x00],
+		);
+	});
+
+	it("renders 600x400 PaperColor palette BMPs as 4-bit indexed color", async () => {
+		const paperColorPalette = [
+			[0, 0, 0],
+			[255, 255, 255],
+			[255, 243, 56],
+			[191, 0, 0],
+			[100, 64, 255],
+			[67, 138, 28],
+		] as const;
+		const png = await solidRgbPng(600, 400, { r: 255, g: 255, b: 255 });
+
+		const bmp = await renderBmp(png, {
+			width: 600,
+			height: 400,
+			palette: paperColorPalette,
+			ditheringMethod: DitheringMethod.NONE,
+			applyEdgeSnap: false,
+		});
+		const info = bmpInfo(bmp);
+
+		assert.deepEqual(info, {
+			signature: "BM",
+			fileSize: 120_078,
+			dataOffset: 78,
+			infoHeaderSize: 40,
+			width: 600,
+			height: 400,
+			planes: 1,
+			bitsPerPixel: 4,
+			compression: 0,
+			imageSize: 120_000,
+			colorCount: 6,
+			importantColors: 6,
+		});
+		assert.deepEqual(
+			paletteEntries(bmp, 6),
+			[0x000000, 0xffffff, 0xfff338, 0xbf0000, 0x6440ff, 0x438a1c],
 		);
 	});
 });

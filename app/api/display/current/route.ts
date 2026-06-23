@@ -9,8 +9,13 @@ import {
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/recipe-renderer";
 import type { Device } from "@/lib/types";
-import { resolveColorPalette } from "@/utils/color-palettes";
-import { parseRequestHeaders, type RequestHeaders } from "../utils";
+import {
+	getDisplayGrayscaleLevels,
+	parseRequestHeaders,
+	type RequestHeaders,
+	resolveDisplayPaletteId,
+	resolveKnownPaletteId,
+} from "../utils";
 
 const jsonError = (status: number, error: string) =>
 	NextResponse.json({ status, error }, { status });
@@ -50,36 +55,32 @@ const defaultDimension = (
 	fallback: number,
 ) => value || fallback;
 
-const getDeviceDimensions = (device: Device) => {
+const getDeviceDimensions = (device: Device, headers: RequestHeaders) => {
 	const orientation = device.screen_orientation || "landscape";
 	const landscapeDimensions = {
-		width: defaultDimension(device.screen_width, DEFAULT_IMAGE_WIDTH),
-		height: defaultDimension(device.screen_height, DEFAULT_IMAGE_HEIGHT),
+		width:
+			headers.width ??
+			defaultDimension(device.screen_width, DEFAULT_IMAGE_WIDTH),
+		height:
+			headers.height ??
+			defaultDimension(device.screen_height, DEFAULT_IMAGE_HEIGHT),
 	};
 	const portraitDimensions = {
-		width: defaultDimension(device.screen_height, DEFAULT_IMAGE_HEIGHT),
-		height: defaultDimension(device.screen_width, DEFAULT_IMAGE_WIDTH),
+		width:
+			headers.width ??
+			defaultDimension(device.screen_height, DEFAULT_IMAGE_HEIGHT),
+		height:
+			headers.height ??
+			defaultDimension(device.screen_width, DEFAULT_IMAGE_WIDTH),
 	};
 
 	return orientation === "landscape" ? landscapeDimensions : portraitDimensions;
 };
 
-const getGrayscaleLevels = (device: Device) => {
-	if (
-		device.grayscale === 2 ||
-		device.grayscale === 4 ||
-		device.grayscale === 16 ||
-		device.grayscale === 256
-	) {
-		return device.grayscale;
-	}
-
-	return 2;
-};
-
 const getPaletteQueryParam = (paletteId: string | null | undefined) => {
-	if (!paletteId || !resolveColorPalette(paletteId)) return "";
-	return `&palette=${encodeURIComponent(paletteId)}`;
+	const knownPaletteId = resolveKnownPaletteId(paletteId);
+	if (!knownPaletteId) return "";
+	return `&palette=${encodeURIComponent(knownPaletteId)}`;
 };
 
 const getScreenTarget = (device: Device) => {
@@ -136,9 +137,16 @@ const buildImageUrl = ({
 	headers: RequestHeaders;
 }) => {
 	const baseUrl = `${headers.hostUrl}/api/bitmap`;
-	const { width, height } = getDeviceDimensions(device);
-	const grayscaleLevels = getGrayscaleLevels(device);
-	const paletteParam = getPaletteQueryParam(device.palette_id);
+	const { width, height } = getDeviceDimensions(device, headers);
+	const paletteId = resolveDisplayPaletteId(
+		device.palette_id,
+		headers.paletteId,
+	);
+	const grayscaleLevels = getDisplayGrayscaleLevels(
+		device.grayscale,
+		paletteId,
+	);
+	const paletteParam = getPaletteQueryParam(paletteId);
 	const { screenPath, needsAccessToken } = getScreenTarget(device);
 	const accessTokenParam = needsAccessToken
 		? `&access_token=${encodeURIComponent(apiKey)}`

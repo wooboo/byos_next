@@ -37,6 +37,7 @@ describe("ScreenPreviewControls", () => {
 		assert.match(html, />4 gray</);
 		assert.match(html, />16 gray</);
 		assert.match(html, />6 color</);
+		assert.match(html, />PaperColor</);
 	});
 
 	it("renders react mode controls and omits bitmap palette controls in react mode", () => {
@@ -62,6 +63,7 @@ describe("ScreenPreviewControls", () => {
 		assert.doesNotMatch(html, />16 gray</);
 		assert.doesNotMatch(html, />BW</);
 		assert.doesNotMatch(html, />6 color</);
+		assert.doesNotMatch(html, />PaperColor</);
 	});
 
 	it("can relabel the react preview format", () => {

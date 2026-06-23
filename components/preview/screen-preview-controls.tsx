@@ -53,6 +53,19 @@ export const SCREEN_PREVIEW_PALETTES = [
 			"#ffffff",
 		],
 	},
+	{
+		label: "PaperColor",
+		grayscale: 2,
+		paletteId: "m5papercolor-ed2208-m5gfx-v1",
+		swatches: [
+			"#000000",
+			"#ffffff",
+			"#fff338",
+			"#bf0000",
+			"#6440ff",
+			"#438a1c",
+		],
+	},
 ] as const;
 
 export function useScreenPreviewControls({

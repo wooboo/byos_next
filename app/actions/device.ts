@@ -188,6 +188,8 @@ const DEVICE_UPDATE_FIELDS_BEFORE_REFRESH = [
 	"api_key",
 	"friendly_id",
 	"timezone",
+	"model",
+	"palette_id",
 ] as const satisfies readonly (keyof Device)[];
 
 const DEVICE_UPDATE_FIELDS_AFTER_REFRESH = [

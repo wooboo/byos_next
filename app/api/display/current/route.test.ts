@@ -291,6 +291,49 @@ describe("app/api/display/current GET", () => {
 		);
 	});
 
+	it("uses a known Palette-Id header when the device has no stored palette", async () => {
+		state.checkDbConnection.mockResolvedValue({ ready: true });
+		state.resolveRenderableContentType.mockReturnValue("screen");
+		mockDeviceLookup({
+			friendly_id: "paper-current",
+			screen: "screen-paper",
+			screen_id: "screen-paper",
+			screen_type: "screen",
+			screen_orientation: "landscape",
+			screen_width: 800,
+			screen_height: 480,
+			grayscale: 256,
+			palette_id: null,
+			display_mode: "single",
+			mixup_id: null,
+			refresh_schedule: null,
+			last_update_time: "2026-06-13T15:00:00.000Z",
+		});
+		const { GET } = await loadRoute();
+
+		const response = await GET(
+			new Request("https://origin.test/api/display/current", {
+				headers: {
+					"Access-Token": "paper-current-token",
+					host: "origin.test",
+					"x-forwarded-proto": "https",
+					Width: "600",
+					Height: "400",
+					"Palette-Id": "m5papercolor-ed2208-m5gfx-v1",
+					"Color-Count": "6",
+				},
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual(
+			expect.objectContaining({
+				image_url:
+					"https://origin.test/api/bitmap/screen/screen-paper.bmp?width=600&height=400&grayscale=2&palette=m5papercolor-ed2208-m5gfx-v1&access_token=paper-current-token",
+			}),
+		);
+	});
+
 	it("returns 500 when the device lookup throws", async () => {
 		state.checkDbConnection.mockResolvedValue({ ready: true });
 		state.db.selectFrom.mockReturnValue({
