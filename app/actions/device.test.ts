@@ -304,13 +304,19 @@ describe("device actions", () => {
 					],
 				},
 				screen_id: "screen-1",
+				model: "M5Stack PaperColor",
+				palette_id: "m5papercolor-ed2208-m5gfx-v1",
+				grayscale: 2,
 			}),
 		).resolves.toEqual({ success: true });
 		expect(set).toHaveBeenCalledWith({
 			name: "Kitchen",
+			model: "M5Stack PaperColor",
 			refresh_schedule:
 				'{"default_refresh_rate":120,"time_ranges":[{"start_time":"08:00","end_time":"12:00","refresh_rate":300}]}',
 			screen_id: "screen-1",
+			grayscale: 2,
+			palette_id: "m5papercolor-ed2208-m5gfx-v1",
 			updated_at: "2026-01-02T03:04:05.000Z",
 		});
 		expect(where).toHaveBeenCalledWith("id", "=", "42");

@@ -482,6 +482,7 @@ describe("DeviceEditForm", () => {
 		assert.match(html, /value="800"/);
 		assert.match(html, /value="480"/);
 		assert.match(html, /data-toggle-group-value="16"/);
+		assert.match(html, /M5Stack PaperColor/);
 		assert.match(
 			html,
 			/\/api\/bitmap\/weather\.bmp\?width=800&amp;height=480&amp;grayscale=16/,

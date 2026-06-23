@@ -362,6 +362,90 @@ describe("app/api/display GET", () => {
 		);
 	});
 
+	it("uses a known Palette-Id header when the device has no stored palette", async () => {
+		state.checkDbConnection.mockResolvedValue({ ready: true });
+		state.findOrCreateDevice.mockResolvedValue({
+			id: "55",
+			friendly_id: "paper-55",
+			screen: "screen-paper",
+			screen_id: "screen-paper",
+			screen_type: "screen",
+			screen_orientation: "landscape",
+			screen_width: null,
+			screen_height: null,
+			grayscale: 256,
+			palette_id: null,
+			display_mode: "single",
+			refresh_schedule: null,
+			timezone: null,
+			firmware_version: "1.0.0",
+		});
+		state.getLatestFirmware.mockResolvedValue(null);
+		const { GET } = await loadRoute();
+
+		const response = await GET(
+			new Request("https://example.test/api/display", {
+				headers: {
+					"Access-Token": "paper-token",
+					host: "example.test",
+					Width: "600",
+					Height: "400",
+					"Palette-Id": "m5papercolor-ed2208-m5gfx-v1",
+					"Color-Count": "6",
+					"Display-Technology": "eink-spectra6",
+					"Dither-Location": "server",
+					"Preferred-Image-Format": "palette-bmp",
+				},
+			}),
+		);
+
+		await expect(response.json()).resolves.toEqual(
+			expect.objectContaining({
+				image_url:
+					"http://example.test/api/bitmap/screen/screen-paper.bmp?width=600&height=400&grayscale=2&palette=m5papercolor-ed2208-m5gfx-v1&access_token=paper-token",
+			}),
+		);
+	});
+
+	it("prefers the stored device palette over the Palette-Id header", async () => {
+		state.checkDbConnection.mockResolvedValue({ ready: true });
+		state.findOrCreateDevice.mockResolvedValue({
+			id: "56",
+			friendly_id: "panel-56",
+			screen: "screen-56",
+			screen_id: "screen-56",
+			screen_type: "screen",
+			screen_orientation: "landscape",
+			screen_width: 800,
+			screen_height: 480,
+			grayscale: 256,
+			palette_id: "color-6a",
+			display_mode: "single",
+			refresh_schedule: null,
+			timezone: null,
+			firmware_version: "1.0.0",
+		});
+		state.getLatestFirmware.mockResolvedValue(null);
+		const { GET } = await loadRoute();
+
+		const response = await GET(
+			new Request("https://example.test/api/display", {
+				headers: {
+					"Access-Token": "token-56",
+					host: "example.test",
+					"Palette-Id": "m5papercolor-ed2208-m5gfx-v1",
+				},
+			}),
+		);
+
+		await expect(response.json()).resolves.toEqual(
+			expect.objectContaining({
+				image_url:
+					"http://example.test/api/bitmap/screen/screen-56.bmp?width=800&height=480&grayscale=2&palette=color-6a&access_token=token-56",
+			}),
+		);
+	});
+
 	it("includes the access token when mixup mode falls back to a named screen", async () => {
 		state.checkDbConnection.mockResolvedValue({ ready: true });
 		state.findOrCreateDevice.mockResolvedValue({

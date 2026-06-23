@@ -55,6 +55,15 @@ export const DEVICE_SIZE_PRESETS = {
 	custom: null,
 } as const;
 
+const DEVICE_PALETTE_OPTIONS = [
+	{ value: "none", label: "None" },
+	{ value: "color-6a", label: "Generic 6 color" },
+	{
+		value: "m5papercolor-ed2208-m5gfx-v1",
+		label: "M5Stack PaperColor",
+	},
+] as const;
+
 type DeviceSizePreset = keyof typeof DEVICE_SIZE_PRESETS;
 type DeviceEditData = Device & { status?: string; type?: string };
 type ScreenOption = { id: string; title: string };
@@ -82,7 +91,7 @@ interface DeviceEditFormProps {
 		>,
 	) => void;
 	onNestedInputChange: (path: string, value: string) => void;
-	onSelectChange: (name: string, value: string) => void;
+	onSelectChange: (name: string, value: string | null) => void;
 	onContentRefChange: (
 		kind: "recipe" | "screen" | "playlist" | "mixup" | "none",
 		id: string | null,
@@ -249,13 +258,15 @@ export default function DeviceEditForm({
 	const preview = useScreenPreviewControls({
 		defaultPortrait: editedDevice.screen_orientation === "portrait",
 		defaultPaletteIndex:
-			editedDevice.palette_id === "color-6a"
-				? 3
-				: editedDevice.grayscale === 2
-					? 0
-					: editedDevice.grayscale === 4
-						? 1
-						: 2,
+			editedDevice.palette_id === "m5papercolor-ed2208-m5gfx-v1"
+				? 5
+				: editedDevice.palette_id === "color-6a"
+					? 4
+					: editedDevice.grayscale === 2
+						? 0
+						: editedDevice.grayscale === 4
+							? 1
+							: 2,
 	});
 	const previewWidth = preview.width;
 	const previewHeight = preview.height;
@@ -671,6 +682,29 @@ function DisplayTab({
 					<ToggleGroupItem value="16">16</ToggleGroupItem>
 					<ToggleGroupItem value="256">256 colors</ToggleGroupItem>
 				</ToggleGroup>
+			</Field>
+
+			<Field
+				label="Palette"
+				hint="Optional fixed color palette for device bitmap renders."
+			>
+				<Select
+					value={editedDevice.palette_id || "none"}
+					onValueChange={(value) =>
+						onSelectChange("palette_id", value === "none" ? null : value)
+					}
+				>
+					<SelectTrigger className="w-full">
+						<SelectValue placeholder="Select palette…" />
+					</SelectTrigger>
+					<SelectContent>
+						{DEVICE_PALETTE_OPTIONS.map((palette) => (
+							<SelectItem key={palette.value} value={palette.value}>
+								{palette.label}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
 			</Field>
 		</>
 	);
