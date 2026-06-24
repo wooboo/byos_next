@@ -58,12 +58,12 @@ export const SCREEN_PREVIEW_PALETTES = [
 		grayscale: 2,
 		paletteId: "m5papercolor-ed2208-m5gfx-v1",
 		swatches: [
-			"#000000",
-			"#ffffff",
-			"#fff338",
-			"#bf0000",
-			"#6440ff",
-			"#438a1c",
+			"#46425f",
+			"#b2c1b8",
+			"#af9900",
+			"#614148",
+			"#13509b",
+			"#246d28",
 		],
 	},
 ] as const;

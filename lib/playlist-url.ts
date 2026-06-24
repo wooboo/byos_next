@@ -21,7 +21,10 @@ export function playlistFrameBmpUrl(
 		height: String(height),
 	});
 	if (grayscale) params.set("grayscale", String(grayscale));
-	if (paletteId) params.set("palette", paletteId);
+	if (paletteId) {
+		params.set("palette", paletteId);
+		params.set("palette_preview", "observed");
+	}
 	return `${base}?${params}`;
 }
 

@@ -35,7 +35,10 @@ export function getBmpPreviewRequestUrl({
 		height: String(height),
 		bpp: String(bpp),
 	});
-	if (paletteId) params.set("palette", paletteId);
+	if (paletteId) {
+		params.set("palette", paletteId);
+		params.set("palette_preview", "observed");
+	}
 
 	return `${url}${separator}${params}`;
 }

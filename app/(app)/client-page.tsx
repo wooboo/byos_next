@@ -186,7 +186,7 @@ function getBitmapSrc({
 	width: number;
 }) {
 	const paletteParam = paletteId
-		? `&palette=${encodeURIComponent(paletteId)}`
+		? `&palette=${encodeURIComponent(paletteId)}&palette_preview=observed`
 		: "";
 	return mixupId
 		? `/api/bitmap/mixup/${mixupId}.bmp?width=${width}&height=${height}&grayscale=${grayscale}${paletteParam}`

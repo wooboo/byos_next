@@ -36,7 +36,7 @@ describe("BmpPreview", () => {
 				bpp: 2,
 				paletteId: "color-6a",
 			}),
-			"/api/bitmap/weather/default.bmp?width=800&height=480&bpp=2&palette=color-6a",
+			"/api/bitmap/weather/default.bmp?width=800&height=480&bpp=2&palette=color-6a&palette_preview=observed",
 		);
 	});
 

@@ -33,7 +33,7 @@ export async function GET(
 		const screenId = id.replace(".bmp", "");
 		const { width, height } = parsePreviewSize(req);
 		const grayscale = parsePreviewGrayscale(req);
-		const palette = parsePreviewPalette(req);
+		const { palette, ditherPalette } = parsePreviewPalette(req);
 		const userId = headers.apiKey
 			? await resolveUserIdFromApiKey(headers.apiKey)
 			: await getCurrentUserId();
@@ -45,6 +45,7 @@ export async function GET(
 			height,
 			grayscale,
 			palette,
+			ditherPalette,
 			userId,
 			cookieHeader,
 			headers.hostUrl,
@@ -66,6 +67,7 @@ const renderScreenBitmap = cache(
 		height: number,
 		grayscale: number,
 		palette: RgbPalette | undefined,
+		ditherPalette: RgbPalette | undefined,
 		userId: string | null,
 		cookies?: string,
 		previewBaseUrl?: string,
@@ -84,6 +86,7 @@ const renderScreenBitmap = cache(
 			formats: ["bitmap"],
 			grayscale,
 			...(palette && { palette }),
+			...(ditherPalette && { ditherPalette }),
 			userId,
 			cookies,
 			paramsOverride: target.params,
