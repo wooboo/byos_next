@@ -5,7 +5,7 @@ import {
 	renderRecipeToImage,
 } from "@/lib/recipes/recipe-renderer";
 import { resolveRenderableRef } from "@/lib/screens/render-target";
-import { resolveColorPalette } from "@/utils/color-palettes";
+import { resolveColorPaletteProfile } from "@/utils/color-palettes";
 import type { RgbPalette } from "@/utils/image-processing";
 
 export type RenderSize = {
@@ -16,6 +16,7 @@ export type RenderSize = {
 export type BitmapRenderOptions = RenderSize & {
 	grayscale: number;
 	palette?: RgbPalette;
+	ditherPalette?: RgbPalette;
 };
 
 type RenderRecipeTargetOptions = RenderSize & {
@@ -24,6 +25,7 @@ type RenderRecipeTargetOptions = RenderSize & {
 	format: "bitmap" | "png";
 	grayscale?: number;
 	palette?: RgbPalette;
+	ditherPalette?: RgbPalette;
 	userId: string | null;
 	cookies?: string;
 	previewBaseUrl?: string;
@@ -38,6 +40,26 @@ function parseIntParam(value: string | null) {
 	return value ? Number.parseInt(value, 10) : undefined;
 }
 
+function shouldUseObservedPalette(searchParams: URLSearchParams) {
+	const value =
+		searchParams.get("palette_preview") ??
+		searchParams.get("palettePreview") ??
+		searchParams.get("palette_mode");
+	return value === "observed" || value === "1" || value === "true";
+}
+
+function resolveBitmapPaletteOptions(searchParams: URLSearchParams) {
+	const profile = resolveColorPaletteProfile(searchParams.get("palette"));
+	if (!profile) return {};
+
+	return {
+		palette: shouldUseObservedPalette(searchParams)
+			? profile.previewColors
+			: profile.colors,
+		ditherPalette: profile.ditherColors,
+	};
+}
+
 export function parsePositiveBitmapOptions(
 	req: NextRequest,
 ): BitmapRenderOptions {
@@ -49,19 +71,18 @@ export function parsePositiveBitmapOptions(
 		parseIntParam(searchParams.get("bpp")) ??
 		parseIntParam(searchParams.get("grayscale")) ??
 		16;
-	const palette = resolveColorPalette(searchParams.get("palette"));
+	const paletteOptions = resolveBitmapPaletteOptions(searchParams);
 
 	return {
 		width: width > 0 ? width : DEFAULT_IMAGE_WIDTH,
 		height: height > 0 ? height : DEFAULT_IMAGE_HEIGHT,
 		grayscale,
-		...(palette && { palette }),
+		...paletteOptions,
 	};
 }
 
 export function parseBitmapOptions(req: NextRequest): BitmapRenderOptions {
 	const searchParams = getSearchParams(req);
-	const palette = resolveColorPalette(searchParams.get("palette"));
 	return {
 		width: parseIntParam(searchParams.get("width")) ?? DEFAULT_IMAGE_WIDTH,
 		height: parseIntParam(searchParams.get("height")) ?? DEFAULT_IMAGE_HEIGHT,
@@ -69,7 +90,7 @@ export function parseBitmapOptions(req: NextRequest): BitmapRenderOptions {
 			parseIntParam(searchParams.get("bpp")) ??
 			parseIntParam(searchParams.get("grayscale")) ??
 			16,
-		...(palette && { palette }),
+		...resolveBitmapPaletteOptions(searchParams),
 	};
 }
 
@@ -120,7 +141,7 @@ export function parseRenderPath(
 }
 
 export function parsePreviewPalette(req: NextRequest) {
-	return resolveColorPalette(getSearchParams(req).get("palette"));
+	return resolveBitmapPaletteOptions(getSearchParams(req));
 }
 
 export function binaryImageResponse(
@@ -160,6 +181,7 @@ export async function renderRecipeTargetImage({
 	format,
 	grayscale,
 	palette,
+	ditherPalette,
 	userId,
 	cookies,
 	previewBaseUrl,
@@ -177,6 +199,7 @@ export async function renderRecipeTargetImage({
 		formats: [format],
 		...(format === "bitmap" && grayscale !== undefined ? { grayscale } : {}),
 		...(format === "bitmap" && palette ? { palette } : {}),
+		...(format === "bitmap" && ditherPalette ? { ditherPalette } : {}),
 		userId,
 		cookies,
 		paramsOverride: target?.params,

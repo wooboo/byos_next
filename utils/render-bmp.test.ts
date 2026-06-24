@@ -300,4 +300,40 @@ describe("renderBmp", () => {
 			[0x000000, 0xffffff, 0xfff338, 0xbf0000, 0x6440ff, 0x438a1c],
 		);
 	});
+
+	it("uses a calibrated dither palette while keeping device palette entries", async () => {
+		const paperColorPalette = [
+			[0, 0, 0],
+			[255, 255, 255],
+			[255, 243, 56],
+			[191, 0, 0],
+			[100, 64, 255],
+			[67, 138, 28],
+		] as const;
+		const observedPaperColorPalette = [
+			[70, 66, 95],
+			[178, 193, 184],
+			[175, 153, 0],
+			[97, 65, 72],
+			[19, 80, 155],
+			[36, 109, 40],
+		] as const;
+		const png = await pngFromRgb(1, 1, [97, 65, 72]);
+
+		const bmp = await renderBmp(png, {
+			width: 1,
+			height: 1,
+			palette: paperColorPalette,
+			ditherPalette: observedPaperColorPalette,
+			ditheringMethod: DitheringMethod.NONE,
+			applyEdgeSnap: false,
+		});
+		const info = bmpInfo(bmp);
+
+		assert.deepEqual(
+			paletteEntries(bmp, 6),
+			[0x000000, 0xffffff, 0xfff338, 0xbf0000, 0x6440ff, 0x438a1c],
+		);
+		assert.equal(bmp[info.dataOffset], 0x30);
+	});
 });

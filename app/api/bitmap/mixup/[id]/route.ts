@@ -37,7 +37,8 @@ export async function GET(
 		const { searchParams } = new URL(req.url);
 		const accessToken =
 			searchParams.get("access_token") ?? req.headers.get("Access-Token");
-		const { width, height, grayscale, palette } = parseBitmapOptions(req);
+		const { width, height, grayscale, palette, ditherPalette } =
+			parseBitmapOptions(req);
 
 		const { ready } = await checkDbConnection();
 		if (!ready) {
@@ -80,6 +81,7 @@ export async function GET(
 			height,
 			grayscale,
 			palette,
+			ditherPalette,
 			userIdOrResponse,
 		);
 
@@ -260,6 +262,7 @@ async function renderMixupComposite(
 	height: number,
 	grayscaleLevels: number,
 	palette: RgbPalette | undefined,
+	ditherPalette: RgbPalette | undefined,
 	userId: string,
 ): Promise<Buffer> {
 	// Render all slots in parallel
@@ -317,6 +320,7 @@ async function renderMixupComposite(
 		height,
 		grayscale: grayscaleLevels,
 		...(palette && { palette }),
+		...(ditherPalette && { ditherPalette }),
 	});
 
 	return bmpBuffer;

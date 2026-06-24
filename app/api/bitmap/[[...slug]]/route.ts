@@ -30,7 +30,7 @@ export async function GET(
 		const { slug = ["not-found"] } = await params;
 		const bitmapPath = Array.isArray(slug) ? slug.join("/") : slug;
 		const targetRef = parseRenderPath(slug, "bmp");
-		const { width, height, grayscale, palette } =
+		const { width, height, grayscale, palette, ditherPalette } =
 			parsePositiveBitmapOptions(req);
 
 		logger.info(
@@ -52,6 +52,7 @@ export async function GET(
 			height,
 			grayscale,
 			palette,
+			ditherPalette,
 			userId,
 			cookieHeader || undefined,
 			headers.hostUrl,
@@ -87,6 +88,7 @@ const renderRecipeBitmap = cache(
 		height: number,
 		grayscale: number = 16,
 		palette: RgbPalette | undefined = undefined,
+		ditherPalette: RgbPalette | undefined = undefined,
 		userId: string | null = null,
 		cookies?: string,
 		previewBaseUrl?: string,
@@ -100,6 +102,7 @@ const renderRecipeBitmap = cache(
 			format: "bitmap",
 			grayscale,
 			...(palette && { palette }),
+			...(ditherPalette && { ditherPalette }),
 			userId,
 			cookies,
 			previewBaseUrl,

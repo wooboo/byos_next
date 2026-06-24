@@ -15,6 +15,7 @@ export interface RenderBmpOptions {
 	height?: number;
 	grayscale?: number; // 2, 4, 16 gray levels, or 256 indexed colors
 	palette?: RgbPalette;
+	ditherPalette?: RgbPalette;
 	applyEdgeSnap?: boolean;
 }
 
@@ -261,6 +262,7 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 		inverted = false,
 		grayscale = 2,
 		palette,
+		ditherPalette,
 		applyEdgeSnap = true,
 	} = options;
 
@@ -291,6 +293,16 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 	}
 
 	const isColorPalette = palette !== undefined;
+	const colorDitherPalette = isColorPalette
+		? (ditherPalette ?? palette)
+		: undefined;
+	if (
+		isColorPalette &&
+		colorDitherPalette &&
+		colorDitherPalette.length !== palette.length
+	) {
+		throw new Error("ditherPalette must match palette size");
+	}
 
 	if (!isColorPalette && grayscale === 256) {
 		const { data } = await image
@@ -349,7 +361,7 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 		? applyColorPaletteDithering(ditheringMethod, pixelData, {
 				width: targetWidth,
 				height: targetHeight,
-				palette,
+				palette: colorDitherPalette ?? palette,
 				applyEdgeSnap,
 			})
 		: applyDithering(ditheringMethod, pixelData, {

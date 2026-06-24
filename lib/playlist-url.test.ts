@@ -24,7 +24,7 @@ describe("playlistFrameBmpUrl", () => {
 		expect(
 			playlistFrameBmpUrl("screen-123", "screen", 800, 480, 2, "color-6a"),
 		).toBe(
-			"/api/bitmap/screen/screen-123.bmp?width=800&height=480&grayscale=2&palette=color-6a",
+			"/api/bitmap/screen/screen-123.bmp?width=800&height=480&grayscale=2&palette=color-6a&palette_preview=observed",
 		);
 	});
 

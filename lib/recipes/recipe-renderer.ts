@@ -334,6 +334,7 @@ type RenderOptions = {
 	formats?: RenderFormats;
 	grayscale?: number; // Number of gray levels: 2, 4, or 16
 	palette?: RgbPalette;
+	ditherPalette?: RgbPalette;
 	html?: string; // When set, uses Puppeteer screenshot instead of Takumi/Satori
 	cookies?: string; // Cookie header to forward to browser renderer
 	previewPath?: string; // Browser renderer route to capture
@@ -361,6 +362,7 @@ export const renderRecipeOutputs = cache(
 		formats = ["bitmap", "png"],
 		grayscale,
 		palette,
+		ditherPalette,
 		html,
 		cookies,
 		previewPath,
@@ -441,6 +443,7 @@ export const renderRecipeOutputs = cache(
 					applyEdgeSnap: config?.renderSettings?.applyEdgeSnap ?? true,
 					...(grayscale !== undefined && { grayscale }),
 					...(palette && { palette }),
+					...(ditherPalette && { ditherPalette }),
 				});
 			} catch (error) {
 				logger.error(`Error generating bitmap for ${slug}:`, error);

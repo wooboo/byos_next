@@ -208,7 +208,7 @@ export function getPreviewSources({
 			: resolveRenderableContentType(previewFrameType, previewId);
 	const heroSrc =
 		previewType === "mixup"
-			? `/api/bitmap/mixup/${previewId}.bmp?width=${previewWidth}&height=${previewHeight}&grayscale=${grayscale}${paletteId ? `&palette=${encodeURIComponent(paletteId)}` : ""}`
+			? `/api/bitmap/mixup/${previewId}.bmp?width=${previewWidth}&height=${previewHeight}&grayscale=${grayscale}${paletteId ? `&palette=${encodeURIComponent(paletteId)}&palette_preview=observed` : ""}`
 			: playlistFrameBmpUrl(
 					previewId,
 					previewType,

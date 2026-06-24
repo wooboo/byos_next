@@ -140,7 +140,7 @@ export function getDevicePreviewModel({
 		heroContentType,
 		bmpSrc:
 			heroContentType === "mixup"
-				? `/api/bitmap/mixup/${heroFrameId}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}${paletteId ? `&palette=${encodeURIComponent(paletteId)}` : ""}`
+				? `/api/bitmap/mixup/${heroFrameId}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}${paletteId ? `&palette=${encodeURIComponent(paletteId)}&palette_preview=observed` : ""}`
 				: playlistFrameBmpUrl(
 						heroFrameId || "simple-text",
 						heroContentType,

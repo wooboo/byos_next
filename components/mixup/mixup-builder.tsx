@@ -401,6 +401,7 @@ export function MixupBuilder({
 										});
 										if (preview.paletteId) {
 											previewParams.set("palette", preview.paletteId);
+											previewParams.set("palette_preview", "observed");
 										}
 										const previewUrl = `${recipe?.previewUrl}?${previewParams}`;
 
