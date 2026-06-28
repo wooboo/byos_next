@@ -53,6 +53,13 @@ history wholesale.
   - `utils/helpers.ts` builds the timezone list from
     `Intl.supportedValuesOf("timeZone")` with labels for common zones.
 
+- Dokploy deployment:
+  - `docker-compose.dokploy.yml` is the production compose contract used by
+    Dokploy for the fork.
+  - `dokploy.env.example` documents the required Dokploy environment variables.
+  - Keep this overlay when syncing with upstream; upstream's local
+    `docker-compose.yml` is not a replacement for the Dokploy stack.
+
 ## Deferred overlays
 
 - Named screens / configurable mixup slots:
@@ -79,7 +86,9 @@ history wholesale.
 7. Reapply authenticated browser preview cookie/base-URL handling without
    removing upstream's per-render browser context isolation.
 8. Reapply small UX overlays: device deletion and full timezone list.
-9. Re-run `pnpm typecheck`, targeted tests, then broader project gates.
+9. Reapply Dokploy deployment files and verify Dokploy still uses
+   `docker-compose.dokploy.yml`.
+10. Re-run `pnpm typecheck`, targeted tests, then broader project gates.
 
 Avoid reintroducing these old fork structures:
 
