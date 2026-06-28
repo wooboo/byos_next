@@ -29,6 +29,7 @@ export type {
 import type { RegistryResource, TrmnlModel, TrmnlPalette } from "./types";
 
 type WrappedList<T> = { data: T[] };
+type RegistryItem = Record<string, unknown>;
 
 export async function listModels(): Promise<TrmnlModel[]> {
 	const payload = (await getRegistry("models")) as WrappedList<TrmnlModel>;
@@ -109,9 +110,11 @@ async function refresh(resource: RegistryResource): Promise<unknown> {
 	pending = (async () => {
 		try {
 			const fresh = await fetchUpstream(resource);
-			memCache.set(resource, { data: fresh, fetchedAt: Date.now() });
-			await writeSnapshot(resource, fresh);
-			return fresh;
+			const snapshot = await readSnapshot(resource);
+			const merged = mergeLocalSnapshotOverlay(resource, fresh, snapshot);
+			memCache.set(resource, { data: merged, fetchedAt: Date.now() });
+			await writeSnapshot(resource, merged);
+			return merged;
 		} catch (err) {
 			const snapshot = await readSnapshot(resource);
 			if (snapshot !== null) {
@@ -126,6 +129,50 @@ async function refresh(resource: RegistryResource): Promise<unknown> {
 
 	inflight.set(resource, pending);
 	return pending;
+}
+
+function getOverlayKey(resource: RegistryResource): "name" | "id" | null {
+	switch (resource) {
+		case "models":
+			return "name";
+		case "palettes":
+			return "id";
+		default:
+			return null;
+	}
+}
+
+function isWrappedList(value: unknown): value is WrappedList<RegistryItem> {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		Array.isArray((value as { data?: unknown }).data)
+	);
+}
+
+function mergeLocalSnapshotOverlay(
+	resource: RegistryResource,
+	fresh: unknown,
+	snapshot: unknown,
+): unknown {
+	const key = getOverlayKey(resource);
+	if (!key || !isWrappedList(fresh) || !isWrappedList(snapshot)) return fresh;
+
+	const merged = [...fresh.data];
+	const seen = new Set(
+		merged
+			.map((item) => item[key])
+			.filter((value): value is string => typeof value === "string"),
+	);
+
+	for (const item of snapshot.data) {
+		const value = item[key];
+		if (typeof value !== "string" || seen.has(value)) continue;
+		merged.push(item);
+		seen.add(value);
+	}
+
+	return { ...fresh, data: merged };
 }
 
 export async function getRegistry(
