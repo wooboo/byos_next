@@ -1,10 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import {
-	actionErrorResult,
-	databaseUnavailableResult,
-} from "@/app/actions/action-results";
 import { getCurrentUserId } from "@/lib/auth/get-user";
 import type { MixupLayoutId as DbMixupLayoutId } from "@/lib/database/db.d";
 import {
@@ -59,7 +55,14 @@ export async function fetchMixupWithSlots(mixupId: string): Promise<{
 				.executeTakeFirst(),
 			scopedDb
 				.selectFrom("mixup_slots")
-				.selectAll()
+				.select([
+					"mixup_slots.id",
+					"mixup_slots.mixup_id",
+					"mixup_slots.slot_id",
+					"mixup_slots.recipe_id",
+					"mixup_slots.order_index",
+					"mixup_slots.created_at",
+				])
 				.where("mixup_id", "=", mixupId)
 				.orderBy("order_index", "asc")
 				.execute(),
@@ -90,7 +93,8 @@ export async function createMixup(
 	const { ready } = await checkDbConnection();
 
 	if (!ready) {
-		return databaseUnavailableResult();
+		console.warn("Database client not initialized");
+		return { success: false, error: "Database client not initialized" };
 	}
 
 	const userId = await getCurrentUserId();
@@ -110,7 +114,11 @@ export async function createMixup(
 
 		return { success: true, mixup: mixup as unknown as Mixup };
 	} catch (error) {
-		return actionErrorResult("Error creating mixup:", error);
+		console.error("Error creating mixup:", error);
+		return {
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+		};
 	}
 }
 
@@ -125,7 +133,8 @@ export async function updateMixup(
 	const { ready } = await checkDbConnection();
 
 	if (!ready) {
-		return databaseUnavailableResult();
+		console.warn("Database client not initialized");
+		return { success: false, error: "Database client not initialized" };
 	}
 
 	try {
@@ -143,7 +152,11 @@ export async function updateMixup(
 
 		return { success: true };
 	} catch (error) {
-		return actionErrorResult("Error updating mixup:", error);
+		console.error("Error updating mixup:", error);
+		return {
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+		};
 	}
 }
 
@@ -157,7 +170,8 @@ export async function deleteMixup(mixupId: string): Promise<{
 	const { ready } = await checkDbConnection();
 
 	if (!ready) {
-		return databaseUnavailableResult();
+		console.warn("Database client not initialized");
+		return { success: false, error: "Database client not initialized" };
 	}
 
 	try {
@@ -168,7 +182,11 @@ export async function deleteMixup(mixupId: string): Promise<{
 		revalidatePath("/mixup");
 		return { success: true };
 	} catch (error) {
-		return actionErrorResult("Error deleting mixup:", error);
+		console.error("Error deleting mixup:", error);
+		return {
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+		};
 	}
 }
 
@@ -185,7 +203,8 @@ export async function saveMixupWithSlots(mixupData: {
 	const { ready } = await checkDbConnection();
 
 	if (!ready) {
-		return databaseUnavailableResult();
+		console.warn("Database client not initialized");
+		return { success: false, error: "Database client not initialized" };
 	}
 
 	const userId = await getCurrentUserId();
@@ -232,19 +251,12 @@ export async function saveMixupWithSlots(mixupData: {
 			// Insert new slots
 			const slotEntries = Object.entries(mixupData.assignments);
 			if (slotEntries.length > 0) {
-				const slotsToInsert = slotEntries.map(([slotId, ref], index) => {
-					const [kind, id] = ref.includes(":")
-						? ref.split(":", 2)
-						: ["recipe", ref];
-					return {
-						mixup_id: mixupId,
-						slot_id: slotId,
-						recipe_id: kind === "recipe" ? id || null : null,
-						ref_type: kind,
-						ref_id: id || null,
-						order_index: index,
-					};
-				});
+				const slotsToInsert = slotEntries.map(([slotId, recipeId], index) => ({
+					mixup_id: mixupId,
+					slot_id: slotId,
+					recipe_id: recipeId || null,
+					order_index: index,
+				}));
 
 				await trx.insertInto("mixup_slots").values(slotsToInsert).execute();
 			}
@@ -253,7 +265,11 @@ export async function saveMixupWithSlots(mixupData: {
 			return { success: true, mixupId };
 		});
 	} catch (error) {
-		return actionErrorResult("Error saving mixup with slots:", error);
+		console.error("Error saving mixup with slots:", error);
+		return {
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+		};
 	}
 }
 

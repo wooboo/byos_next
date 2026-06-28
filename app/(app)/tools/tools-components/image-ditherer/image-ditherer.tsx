@@ -20,15 +20,18 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
-import { applyDithering as processDithering } from "@/utils/image-processing";
 import {
-	applyDitheredValuesToImageData,
-	buildBmpBuffer,
-	extractGrayscaleChannel,
-	preprocessImageData,
-	resolveBayerPatternSize,
-	resolveDitheringMethod,
-} from "./image-ditherer-helpers";
+	DitheringMethod,
+	applyDithering as processDithering,
+} from "@/utils/image-processing";
+
+const METHOD_MAP: Record<string, DitheringMethod> = {
+	threshold: DitheringMethod.THRESHOLD,
+	floydSteinberg: DitheringMethod.FLOYD_STEINBERG,
+	atkinson: DitheringMethod.ATKINSON,
+	bayer: DitheringMethod.BAYER,
+	random: DitheringMethod.RANDOM,
+};
 
 export default function ImageDitherer() {
 	const [originalImage, setOriginalImage] = useState<HTMLImageElement | null>(
@@ -90,18 +93,46 @@ export default function ImageDitherer() {
 		tempCtx.clearRect(0, 0, width, height);
 		tempCtx.drawImage(originalImage, 0, 0, width, height);
 
+		// Apply brightness and contrast
 		const imageData = tempCtx.getImageData(0, 0, width, height);
-		imageData.data.set(
-			preprocessImageData(imageData.data, brightness[0], contrast[0]),
-		);
+		const data = imageData.data;
+
+		const factor = (259 * (contrast[0] + 255)) / (255 * (259 - contrast[0]));
+
+		for (let i = 0; i < data.length; i += 4) {
+			// Apply brightness
+			data[i] += brightness[0];
+			data[i + 1] += brightness[0];
+			data[i + 2] += brightness[0];
+
+			// Apply contrast
+			data[i] = factor * (data[i] - 128) + 128;
+			data[i + 1] = factor * (data[i + 1] - 128) + 128;
+			data[i + 2] = factor * (data[i + 2] - 128) + 128;
+
+			// Convert to grayscale
+			const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+			data[i] = data[i + 1] = data[i + 2] = gray;
+		}
+
 		tempCtx.putImageData(imageData, 0, 0);
 
 		// Get the pre-processed image data for dithering
 		const processedImageData = tempCtx.getImageData(0, 0, width, height);
-		const grayscaleData = extractGrayscaleChannel(processedImageData.data);
+		const { data: processedData } = processedImageData;
 
-		const bayerSize = resolveBayerPatternSize(patternSize[0]);
-		const method = resolveDitheringMethod(ditheringMethod);
+		// Extract single-channel grayscale for image-processing functions
+		const grayscaleData = new Uint8Array(width * height);
+		for (let i = 0; i < width * height; i++) {
+			grayscaleData[i] = processedData[i * 4];
+		}
+
+		const bayerSize = (patternSize[0] <= 2 ? 2 : patternSize[0] <= 4 ? 4 : 8) as
+			| 2
+			| 4
+			| 8;
+		const method =
+			METHOD_MAP[ditheringMethod] ?? DitheringMethod.FLOYD_STEINBERG;
 		const dithered = processDithering(method, grayscaleData, {
 			width,
 			height,
@@ -109,13 +140,16 @@ export default function ImageDitherer() {
 			bayerPatternSize: bayerSize,
 		});
 
-		processedImageData.data.set(
-			applyDitheredValuesToImageData(
-				processedImageData.data,
-				dithered,
-				inverted,
-			),
-		);
+		// Write result back to ImageData with optional inversion
+		for (let i = 0; i < width * height; i++) {
+			const value = inverted ? 255 - dithered[i] : dithered[i];
+			processedData[i * 4] =
+				processedData[i * 4 + 1] =
+				processedData[i * 4 + 2] =
+					value;
+		}
+
+		// Put the processed image data back
 		ctx.putImageData(processedImageData, 0, 0);
 	}, [
 		originalImage,
@@ -140,7 +174,59 @@ export default function ImageDitherer() {
 
 		if (!imageData) return;
 
-		const buffer = buildBmpBuffer(imageData.data, width, height);
+		// BMP file header (14 bytes)
+		const fileHeaderSize = 14;
+		// DIB header (40 bytes for BITMAPINFOHEADER)
+		const dibHeaderSize = 40;
+		// Each row must be padded to a multiple of 4 bytes
+		const rowSize = Math.floor((width * 3 + 3) / 4) * 4;
+		const pixelArraySize = rowSize * height;
+		const fileSize = fileHeaderSize + dibHeaderSize + pixelArraySize;
+
+		const buffer = new ArrayBuffer(fileSize);
+		const view = new DataView(buffer);
+
+		// BMP file header (14 bytes)
+		view.setUint8(0, 0x42); // 'B'
+		view.setUint8(1, 0x4d); // 'M'
+		view.setUint32(2, fileSize, true); // File size
+		view.setUint16(6, 0, true); // Reserved
+		view.setUint16(8, 0, true); // Reserved
+		view.setUint32(10, fileHeaderSize + dibHeaderSize, true); // Offset to pixel array
+
+		// DIB header (40 bytes for BITMAPINFOHEADER)
+		view.setUint32(14, dibHeaderSize, true); // DIB header size
+		view.setInt32(18, width, true); // Width
+		view.setInt32(22, -height, true); // Height (negative for top-down)
+		view.setUint16(26, 1, true); // Color planes
+		view.setUint16(28, 24, true); // Bits per pixel (24 for RGB)
+		view.setUint32(30, 0, true); // No compression
+		view.setUint32(34, pixelArraySize, true); // Size of pixel array
+		view.setInt32(38, 2835, true); // Horizontal resolution (72 DPI)
+		view.setInt32(42, 2835, true); // Vertical resolution (72 DPI)
+		view.setUint32(46, 0, true); // Number of colors in palette
+		view.setUint32(50, 0, true); // All colors are important
+
+		// Pixel array (bottom-up, padded rows)
+		const data = imageData.data;
+		let offset = fileHeaderSize + dibHeaderSize;
+
+		for (let y = 0; y < height; y++) {
+			let rowOffset = 0;
+			for (let x = 0; x < width; x++) {
+				const index = (y * width + x) * 4;
+				view.setUint8(offset++, data[index + 2]); // Blue
+				view.setUint8(offset++, data[index + 1]); // Green
+				view.setUint8(offset++, data[index]); // Red
+				rowOffset += 3;
+			}
+
+			// Pad row to multiple of 4 bytes
+			while (rowOffset % 4 !== 0) {
+				view.setUint8(offset++, 0);
+				rowOffset++;
+			}
+		}
 
 		// Create blob and download
 		const blob = new Blob([buffer], { type: "image/bmp" });

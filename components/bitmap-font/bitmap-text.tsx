@@ -1,9 +1,3 @@
-import {
-	base64ToBinary,
-	binaryToSvgPath,
-	parseGridSize,
-} from "@/app/(app)/tools/tools-components/bitmap-font-designer/bitmap-font-utils";
-
 // Types for the bitmap font structure
 interface BitmapFontCharacter {
 	charCode: number;
@@ -35,6 +29,22 @@ interface BitmapTextProps {
 	scale?: number;
 	gap?: number;
 	className?: string;
+}
+
+// Utility function to convert base64 to binary string
+const base64ToBinary = (base64: string): string => {
+	// Decode base64 to binary
+	const binary = atob(base64);
+	// Convert each byte to its binary representation
+	return Array.from(binary)
+		.map((char) => char.charCodeAt(0).toString(2).padStart(8, "0"))
+		.join("");
+};
+
+// Helper functions for bitmap processing
+function parseGridSize(gridSize: string): [number, number] {
+	const [w, h] = gridSize.split("x").map(Number);
+	return [w, h];
 }
 
 function parseFontData(fontData: BitmapFontFile | string): BitmapFontFile {
@@ -120,7 +130,19 @@ function generateSvgData(
 		}
 
 		// Generate path for this character
-		const pathData = binaryToSvgPath(binaryString, fontWidth, fontHeight);
+		const binaryArray = binaryString
+			.padEnd(fontWidth * fontHeight, "0")
+			.slice(0, fontWidth * fontHeight);
+		const pathData = Array.from({ length: fontWidth * fontHeight })
+			.map((_, i) => {
+				if (i >= binaryArray.length) return "";
+				const isBlack = binaryArray[i] === "1";
+				if (!isBlack) return "";
+				const x = i % fontWidth;
+				const y = Math.floor(i / fontWidth);
+				return `M ${x} ${y} h 1 v 1 h -1 z`;
+			})
+			.join(" ");
 
 		// Add path with position
 		paths.push({

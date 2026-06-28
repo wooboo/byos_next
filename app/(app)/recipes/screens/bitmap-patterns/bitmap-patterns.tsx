@@ -1,12 +1,31 @@
+import { z } from "zod";
+import {
+	DEFAULT_IMAGE_HEIGHT,
+	DEFAULT_IMAGE_WIDTH,
+} from "@/lib/recipes/constants";
+import type { RecipeDefinition } from "@/lib/recipes/types";
+import {
+	createScreenProfile,
+	type ScreenProfile,
+} from "@/lib/trmnl/screen-profile";
 import { PreSatori } from "@/utils/pre-satori";
 
+export const paramsSchema = z.object({});
+export const dataSchema = paramsSchema;
+
 export default function BitmapPatterns({
-	width = 800,
-	height = 480,
+	width: renderWidth = DEFAULT_IMAGE_WIDTH,
+	height: renderHeight = DEFAULT_IMAGE_HEIGHT,
+	screen,
 }: {
 	width?: number;
 	height?: number;
+	screen?: ScreenProfile;
 }) {
+	const screenProfile =
+		screen ?? createScreenProfile({ width: renderWidth, height: renderHeight });
+	const width = screenProfile.logicalWidth;
+	const height = screenProfile.logicalHeight;
 	// Define an array of dither values and their corresponding percentages
 	const ditherValues = [
 		{ value: 0, percentage: "0%" },
@@ -35,7 +54,10 @@ export default function BitmapPatterns({
 	// Calculate row height to evenly distribute across the container
 	const rowHeight = height / Math.ceil(ditherValues.length / 2);
 	return (
-		<PreSatori width={width} height={height}>
+		<PreSatori
+			width={screenProfile.logicalWidth}
+			height={screenProfile.logicalHeight}
+		>
 			<div className="w-full h-full bg-white relative">
 				<div
 					style={{
@@ -98,21 +120,17 @@ export default function BitmapPatterns({
 						.map(({ value }) => (
 							<div
 								key={`text-${value}`}
-								className={
-									value > 850
-										? "text-white sm:text-white"
-										: "text-white sm:text-black"
-								}
+								className={"text-white"}
 								style={{
 									height: `${rowHeight}px`,
 								}}
 							>
 								<div
+									className="text-2xl lg:text-4xl 2xl:text-5xl"
 									style={{
 										display: "flex",
 										justifyContent: "center",
 										alignItems: "center",
-										fontSize: "24px",
 									}}
 								>
 									{value} | {1000 - value}
@@ -120,7 +138,7 @@ export default function BitmapPatterns({
 							</div>
 						))}
 				</div>
-				<div className="absolute bottom-0 right-0 flex flex-col text-2xl p-2 items-end text-white sm:text-black">
+				<div className="absolute bottom-0 right-0 flex flex-col text-2xl lg:text-4xl 2xl:text-5xl p-2 lg:p-4 items-end text-white sm:text-black">
 					<div>22 shades of gray</div>
 					<div>0: white, 1000: black</div>
 				</div>
@@ -128,3 +146,25 @@ export default function BitmapPatterns({
 		</PreSatori>
 	);
 }
+
+export const definition: RecipeDefinition<typeof paramsSchema> = {
+	meta: {
+		slug: "bitmap-patterns",
+		title: "Bitmap Patterns",
+		description:
+			"Demonstrating using custom classes to create bitmap patterns. See /utils/pre-satori.ts for more details. Edit this recipe at /app/recipes/screens/bitmap-patterns.tsx",
+		published: true,
+		tags: ["bitmap", "patterns"],
+		author: { name: "Mangle Kuo", github: "ghcpuman902" },
+		category: "display-components",
+		version: "0.1.0",
+		createdAt: "2025-03-01T00:00:00Z",
+		updatedAt: "2025-03-01T00:00:00Z",
+		renderSettings: { applyEdgeSnap: false },
+	},
+	paramsSchema,
+	dataSchema,
+	Component: ({ width, height, screen }) => (
+		<BitmapPatterns width={width} height={height} screen={screen} />
+	),
+};

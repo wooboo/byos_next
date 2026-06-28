@@ -2,7 +2,6 @@
 
 # dependencies
 /node_modules
-/.pnpm-store
 /.pnp
 .pnp.*
 .yarn/*
@@ -55,7 +54,3 @@ sync.sh
 
 # local planning notes
 .notes/
-
-# local agent/devserver runtime artifacts
-.pi-lens/
-tmp/

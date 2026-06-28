@@ -1,11 +1,7 @@
-# syntax=docker/dockerfile:1.7
-
-ARG NODE_VERSION=22
-ARG PNPM_VERSION=10
+ARG NODE_VERSION=22.22.3
 
 # Base stage - minimal Node.js only
 FROM node:${NODE_VERSION}-slim AS base
-ARG PNPM_VERSION=10
 
 LABEL org.opencontainers.image.title="TRMNL BYOS Next.js"
 LABEL org.opencontainers.image.description="A Next.js application for BYOS"
@@ -13,23 +9,18 @@ LABEL org.opencontainers.image.vendor="rbouteiller"
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV ENABLE_EXTERNAL_CATALOG=false
 
 WORKDIR /app
 
-RUN corepack enable \
-    && corepack prepare pnpm@${PNPM_VERSION} --activate
+RUN corepack enable pnpm && corepack prepare pnpm@11.8.0 --activate
 
 # Install dependencies only when needed
 FROM base AS deps
-ARG TARGETPLATFORM
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-RUN --mount=type=cache,id=pnpm-${TARGETPLATFORM},target=/pnpm/store \
-    pnpm config set store-dir /pnpm/store \
-    && pnpm install --frozen-lockfile --prod=false \
-    && rm -rf ~/.npm /root/.cache
+RUN pnpm install --frozen-lockfile --prod=false \
+    && rm -rf ~/.npm ~/.pnpm-store /root/.cache
 
 # Build the application
 FROM base AS builder
@@ -47,23 +38,24 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV ENABLE_EXTERNAL_CATALOG=false
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV CHROME_EXECUTABLE_PATH=/headless-shell/headless-shell
+ENV XDG_CACHE_HOME=/home/nextjs/.cache
 
 # Copy Node.js binary from build stage
 COPY --from=base /usr/local/bin/node /usr/local/bin/node
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # Install fonts for HTML rendering
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
-    && rm -rf /var/lib/apt/lists/* \
-    && chmod +x /usr/local/bin/docker-entrypoint.sh
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-privileged user
 RUN groupadd -g 1001 nodejs \
     && useradd -u 1001 -g nodejs -s /bin/false nextjs
+
+RUN mkdir -p /var/cache/fontconfig /home/nextjs/.cache/fontconfig /home/nextjs/.fontconfig \
+    && chown -R nextjs:nodejs /var/cache/fontconfig /home/nextjs
 
 # Copy built application
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
@@ -80,5 +72,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-ENTRYPOINT ["docker-entrypoint.sh"]
+ENTRYPOINT []
 CMD ["node", "server.js"]

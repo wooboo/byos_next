@@ -115,10 +115,11 @@ Create `.env.local` (for `pnpm dev`) or `.env` (for Docker Compose) with the key
 | `BETTER_AUTH_SECRET` | Required when `AUTH_ENABLED=true`. Generate with `openssl rand -base64 32`. |
 | `BETTER_AUTH_URL` | Public URL of your deployment (defaults to `http://localhost:3000`). |
 | `AUTH_ENABLED` | Set to `false` to disable authentication (mono-user mode). |
-| `ADMIN_EMAIL` | Email that receives admin role on first sign-up. |
-| `ALLOWED_SERVER_ACTION_ORIGINS` | Optional comma-separated LAN/reverse-proxy hosts allowed to call Next Server Actions, e.g. `192.168.1.20:3001,byos.local:3001`. Local IPv4 addresses are auto-detected on startup. |
 | `REACT_RENDERER` | `takumi` (default), `satori`, or `browser`. See below. |
 | `ENABLE_EXTERNAL_CATALOG` | Allow fetching the community / TRMNL recipe catalog. |
+
+When authentication is enabled, visit `/setup` after configuring the database.
+The first account created during setup is assigned the admin role automatically.
 
 ### Renderer Options
 - **`takumi`** (default): fast Rust-backed Satori-compatible renderer.
@@ -129,17 +130,6 @@ Create `.env.local` (for `pnpm dev`) or `.env` (for Docker Compose) with the key
 - **Supabase or Neon:** run migrations in `migrations/` in order, or use the in-app Initialize button on first launch. **Note:** migration `0009_add_user_tenancy.sql` assumes a `postgres` superuser role. On managed providers where the connection role differs, edit `GRANT byos_app TO <your_role>` before running it (see [#46](https://github.com/usetrmnl/byos_next/issues/46)).
 - **Docker/Postgres:** set `POSTGRES_PASSWORD` and `BETTER_AUTH_SECRET` in `.env`, then run `docker-compose up -d`.
 - **No-DB mode:** run `pnpm dev` without DB env vars to preview screens only (device management disabled).
-
-## GitHub + Dokploy Deployment
-The GitHub Actions workflow in `.github/workflows/release.yml` builds the Docker image and pushes it to GitHub Container Registry after a release.
-
-The image is published as:
-
-```text
-ghcr.io/<owner>/<repo>:latest
-```
-
-In Dokploy, use `docker-compose.dokploy.yml` and set environment variables from `dokploy.env.example`. `APP_IMAGE` must point at the pushed image, usually `ghcr.io/<owner>/<repo>:latest`. Trigger the Dokploy deploy manually after the release image build finishes.
 
 ## Project Structure
 - `app/` - Next.js routes and screens (including `/recipes`).
@@ -156,11 +146,13 @@ In Dokploy, use `docker-compose.dokploy.yml` and set environment variables from 
 
 ## Recipes
 Visit `/recipes` to browse screens and compare direct vs. bitmap rendering. To add one:
-1. Create a folder under `app/recipes/screens`.
-2. Add your component and data fetching logic.
-3. Register it in `app/recipes/screens.json`.
+1. Create a folder under `app/(app)/recipes/screens/<slug>/`.
+2. Add `<slug>.tsx` exporting `paramsSchema`, `dataSchema`, and a
+   `definition` of type `RecipeDefinition<P, D>`.
+3. That's it — the recipe index regenerates on `pnpm dev` and the
+   sidebar picks it up automatically.
 
-See `docs/recipes.md` for more detail.
+See `docs/recipes.md` for the full pattern, including data fetching.
 
 ## Documentation
 - API endpoints and payloads: `docs/api.md`

@@ -2,16 +2,13 @@
 
 import { Edit3, Film, Trash2 } from "lucide-react";
 import { FormattedDate } from "@/components/common/formatted-date";
-import { PerforationMarks } from "@/components/playlists/perforation-marks";
 import { Button } from "@/components/ui/button";
-import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/constants";
 import type { Playlist, PlaylistItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { formatPlaylistDuration } from "./duration-format";
 
 interface PlaylistReelCardProps {
 	playlist: Playlist;
@@ -35,7 +32,7 @@ export function PlaylistReelCard({
 	const previews = items.slice(0, MAX_PREVIEWS);
 	const remaining = Math.max(0, items.length - previews.length);
 	const totalSeconds = items.reduce((sum, it) => sum + it.duration, 0);
-	const loopLabel = formatPlaylistDuration(totalSeconds, { suffix: "loop" });
+	const loopLabel = formatLoop(totalSeconds);
 
 	const isEmpty = items.length === 0;
 
@@ -48,11 +45,7 @@ export function PlaylistReelCard({
 		>
 			{/* Reel header strip */}
 			<div className="relative bg-neutral-950 px-4 py-3">
-				<PerforationMarks
-					count={10}
-					containerClassName="flex items-center justify-between gap-1.5"
-					markClassName="h-1.5 flex-1 rounded-[2px] bg-neutral-800"
-				/>
+				<Perforations />
 				<div className="mt-2 flex items-center justify-between">
 					<div className="flex items-center gap-2">
 						<Film className="h-4 w-4 text-neutral-400" />
@@ -89,21 +82,11 @@ export function PlaylistReelCard({
 							>
 								<picture>
 									<source
-										srcSet={playlistFrameBmpUrl(
-											item.screen_id,
-											item.screen_type,
-											DEFAULT_IMAGE_WIDTH,
-											DEFAULT_IMAGE_HEIGHT,
-										)}
+										srcSet={`/api/bitmap/${item.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
 										type="image/bmp"
 									/>
 									<img
-										src={playlistFrameBmpUrl(
-											item.screen_id,
-											item.screen_type,
-											DEFAULT_IMAGE_WIDTH,
-											DEFAULT_IMAGE_HEIGHT,
-										)}
+										src={`/api/bitmap/${item.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
 										alt={getRecipeName(item.screen_id)}
 										width={DEFAULT_IMAGE_WIDTH}
 										height={DEFAULT_IMAGE_HEIGHT}
@@ -132,11 +115,7 @@ export function PlaylistReelCard({
 
 			{/* Bottom perforations */}
 			<div className="bg-neutral-950 px-4 py-2">
-				<PerforationMarks
-					count={10}
-					containerClassName="flex items-center justify-between gap-1.5"
-					markClassName="h-1.5 flex-1 rounded-[2px] bg-neutral-800"
-				/>
+				<Perforations />
 			</div>
 
 			{/* Meta + actions */}
@@ -193,4 +172,27 @@ export function PlaylistReelCard({
 			</div>
 		</div>
 	);
+}
+
+function Perforations() {
+	return (
+		<div className="flex items-center justify-between gap-1.5">
+			{Array.from({ length: 10 }).map((_, i) => (
+				<span
+					key={i}
+					className="h-1.5 flex-1 rounded-[2px] bg-neutral-800"
+					aria-hidden
+				/>
+			))}
+		</div>
+	);
+}
+
+function formatLoop(seconds: number): string {
+	if (seconds <= 0) return "0s";
+	const m = Math.floor(seconds / 60);
+	const s = seconds % 60;
+	if (m === 0) return `${s}s loop`;
+	if (s === 0) return `${m}m loop`;
+	return `${m}m ${s}s loop`;
 }

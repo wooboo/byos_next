@@ -115,14 +115,7 @@ export const getTakumiFonts = () => {
 	return takumiFonts;
 };
 
-export const extractFontFamily = (
-	className?: string,
-	existingStyle?: Record<string, unknown>,
-): string | undefined => {
-	// If the element already has an explicit fontFamily in its style, don't override it.
-	// This allows components using inline styles to pick their own font.
-	if (existingStyle?.fontFamily) return undefined;
-
+export const extractFontFamily = (className?: string): string | undefined => {
 	const defaultFont = "blockkie";
 	if (!className) return defaultFont;
 

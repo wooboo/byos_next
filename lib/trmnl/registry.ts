@@ -20,7 +20,35 @@ const DATA_DIR = path.join(process.cwd(), "data", "trmnl");
 const TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 10_000;
 
-export type RegistryResource = "models" | "palettes" | "categories" | "ips";
+export type {
+	RegistryResource,
+	TrmnlModel,
+	TrmnlPalette,
+} from "./types";
+
+import type { RegistryResource, TrmnlModel, TrmnlPalette } from "./types";
+
+type WrappedList<T> = { data: T[] };
+
+export async function listModels(): Promise<TrmnlModel[]> {
+	const payload = (await getRegistry("models")) as WrappedList<TrmnlModel>;
+	return payload?.data ?? [];
+}
+
+export async function listPalettes(): Promise<TrmnlPalette[]> {
+	const payload = (await getRegistry("palettes")) as WrappedList<TrmnlPalette>;
+	return payload?.data ?? [];
+}
+
+export async function findModel(name: string): Promise<TrmnlModel | null> {
+	const models = await listModels();
+	return models.find((m) => m.name === name) ?? null;
+}
+
+export async function findPalette(id: string): Promise<TrmnlPalette | null> {
+	const palettes = await listPalettes();
+	return palettes.find((p) => p.id === id) ?? null;
+}
 
 type CacheEntry = { data: unknown; fetchedAt: number };
 
@@ -29,21 +57,6 @@ const inflight = new Map<RegistryResource, Promise<unknown>>();
 
 export function isProxyLive(): boolean {
 	return process.env.TRMNL_PROXY_LIVE === "true";
-}
-
-export async function registryResponse(resource: RegistryResource) {
-	try {
-		const data = await getRegistry(resource);
-		return Response.json(data);
-	} catch (error) {
-		return Response.json(
-			{
-				error: `Failed to load ${resource} registry`,
-				message: error instanceof Error ? error.message : "Unknown error",
-			},
-			{ status: 502 },
-		);
-	}
 }
 
 async function readSnapshot(

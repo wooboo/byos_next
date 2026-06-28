@@ -1,5 +1,4 @@
 import { unstable_cache } from "next/cache";
-import { formatShortDateTime } from "../date-format";
 
 // Export config to mark this component as dynamic
 export const dynamic = "force-dynamic";
@@ -112,6 +111,17 @@ async function getCryptoData(cryptoSymbol: string): Promise<CryptoData | null> {
 			return formatCurrency(value);
 		};
 
+		// Format the date
+		const formatDate = (dateString: string): string => {
+			const date = new Date(dateString);
+			return date.toLocaleString("en-US", {
+				month: "short",
+				day: "numeric",
+				hour: "2-digit",
+				minute: "2-digit",
+			});
+		};
+
 		// Check if we have valid market data
 		if (!data.market_data) {
 			throw new Error("No market data available");
@@ -122,7 +132,7 @@ async function getCryptoData(cryptoSymbol: string): Promise<CryptoData | null> {
 			change24h: data.market_data.price_change_percentage_24h.toFixed(2),
 			marketCap: formatLargeNumber(data.market_data.market_cap.usd),
 			volume24h: formatLargeNumber(data.market_data.total_volume.usd),
-			lastUpdated: formatShortDateTime(data.last_updated),
+			lastUpdated: formatDate(data.last_updated),
 			high24h: formatCurrency(data.market_data.high_24h.usd),
 			low24h: formatCurrency(data.market_data.low_24h.usd),
 			historicalPrices: historicalPrices || [],

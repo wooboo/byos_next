@@ -3,19 +3,16 @@
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
-import {
-	ScreenPreviewControls,
-	screenPreviewSummary,
-	useScreenPreviewControls,
-} from "@/components/preview/screen-preview-controls";
 import { Button } from "@/components/ui/button";
-import { playlistFrameBmpUrl } from "@/lib/playlist-url";
+import {
+	DEFAULT_IMAGE_HEIGHT,
+	DEFAULT_IMAGE_WIDTH,
+} from "@/lib/recipes/constants";
 import { cn } from "@/lib/utils";
 
 export interface PreviewFrame {
 	id: string;
 	screen_id: string;
-	screen_type?: string;
 	duration: number;
 	label: string;
 }
@@ -26,44 +23,6 @@ interface PlaylistLivePreviewProps {
 	onActiveIndexChange: (index: number) => void;
 }
 
-export function getPlaylistLivePreviewDuration(active?: PreviewFrame) {
-	return Math.max(1, active?.duration ?? 30);
-}
-
-export function getWrappedPlaylistIndex(index: number, length: number) {
-	if (length === 0) return null;
-
-	return ((index % length) + length) % length;
-}
-
-export function getPlaylistPreviewProgressWidth(progress: number) {
-	return `${Math.min(100, progress * 100)}%`;
-}
-
-export function getPlaylistCountdownSeconds(
-	duration: number,
-	progress: number,
-) {
-	return Math.max(0, Math.ceil(duration * (1 - progress)));
-}
-
-export function getPlaylistLivePreviewSrc(
-	frame: PreviewFrame,
-	width: number,
-	height: number,
-	grayscale: number,
-	paletteId?: string,
-) {
-	return playlistFrameBmpUrl(
-		frame.screen_id,
-		frame.screen_type,
-		width,
-		height,
-		grayscale,
-		paletteId,
-	);
-}
-
 export function PlaylistLivePreview({
 	frames,
 	activeIndex,
@@ -71,10 +30,12 @@ export function PlaylistLivePreview({
 }: PlaylistLivePreviewProps) {
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [progress, setProgress] = useState(0);
-	const preview = useScreenPreviewControls();
 
-	const active = frames[activeIndex];
-	const duration = getPlaylistLivePreviewDuration(active);
+	// Deleting the last/selected frame leaves activeIndex out of bounds for one
+	// render (parent clamps it via effect afterwards); fall back to the last
+	// frame so we never deref undefined and crash the editor.
+	const active = frames[activeIndex] ?? frames[frames.length - 1];
+	const duration = Math.max(1, active?.duration ?? 30);
 	const isEmpty = frames.length === 0;
 
 	// Stash dynamic values in refs so the RAF loop sees the latest without
@@ -132,32 +93,15 @@ export function PlaylistLivePreview({
 
 	const goTo = useCallback((index: number) => {
 		const len = stateRef.current.frames.length;
-		const next = getWrappedPlaylistIndex(index, len);
-		if (next === null) return;
+		if (len === 0) return;
+		const next = ((index % len) + len) % len;
 		stateRef.current.onActiveIndexChange(next);
 	}, []);
 
 	return (
 		<div className="flex flex-col gap-4">
-			<ScreenPreviewControls
-				format={preview.format}
-				onFormatChange={preview.setFormat}
-				sizeIndex={preview.sizeIndex}
-				onSizeIndexChange={preview.setSizeIndex}
-				paletteIndex={preview.paletteIndex}
-				onPaletteIndexChange={preview.setPaletteIndex}
-				isPortrait={preview.isPortrait}
-				onPortraitChange={preview.setIsPortrait}
-				formats={["bmp"]}
-				className="rounded-lg border"
-			/>
 			<div className="relative mx-auto w-full max-w-[640px]">
-				<DeviceFrame
-					size="lg"
-					portrait={preview.isPortrait}
-					screenWidth={preview.width}
-					screenHeight={preview.height}
-				>
+				<DeviceFrame size="lg">
 					{isEmpty ? (
 						<div className="absolute inset-0 flex items-center justify-center text-sm text-neutral-500">
 							Add a frame to preview the playlist
@@ -165,26 +109,14 @@ export function PlaylistLivePreview({
 					) : (
 						<picture key={active.id}>
 							<source
-								srcSet={getPlaylistLivePreviewSrc(
-									active,
-									preview.width,
-									preview.height,
-									preview.grayscale,
-									preview.paletteId,
-								)}
+								srcSet={`/api/bitmap/${active.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
 								type="image/bmp"
 							/>
 							<img
-								src={getPlaylistLivePreviewSrc(
-									active,
-									preview.width,
-									preview.height,
-									preview.grayscale,
-									preview.paletteId,
-								)}
+								src={`/api/bitmap/${active.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
 								alt={active.label}
-								width={preview.width}
-								height={preview.height}
+								width={DEFAULT_IMAGE_WIDTH}
+								height={DEFAULT_IMAGE_HEIGHT}
 								className="absolute inset-0 h-full w-full object-cover"
 								style={{ imageRendering: "pixelated" }}
 							/>
@@ -204,26 +136,14 @@ export function PlaylistLivePreview({
 						<div
 							className="h-1.5 bg-neutral-100 transition-[width] duration-100 ease-linear"
 							style={{
-								width: getPlaylistPreviewProgressWidth(progress),
+								width: `${Math.min(100, progress * 100)}%`,
 							}}
 						/>
 					</div>
 					<span className="text-xs tabular-nums text-neutral-400">
-						{getPlaylistCountdownSeconds(duration, progress)}s
+						{Math.max(0, Math.ceil(duration * (1 - progress)))}s
 					</span>
 				</div>
-			</div>
-			<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-				<span>Playlist frame pipeline</span>
-				<span className="tabular-nums">
-					{screenPreviewSummary({
-						format: "bmp",
-						width: preview.width,
-						height: preview.height,
-						grayscale: preview.grayscale,
-						paletteLabel: preview.paletteLabel,
-					})}
-				</span>
 			</div>
 
 			<div className="flex items-center justify-between gap-2">

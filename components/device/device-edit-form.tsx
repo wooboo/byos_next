@@ -1,15 +1,11 @@
 "use client";
 
-import { Check, ChevronsUpDown, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, RefreshCw, Search, Trash2 } from "lucide-react";
 import Image from "next/image";
 import type React from "react";
+import { type ChangeEvent, type ReactNode, useEffect, useMemo } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
-import { ScaledReactPreview } from "@/components/preview/scaled-react-preview";
-import {
-	ScreenPreviewControls,
-	screenPreviewSummary,
-	useScreenPreviewControls,
-} from "@/components/preview/screen-preview-controls";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
 	Command,
@@ -36,209 +32,93 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { resolveRenderableContentType } from "@/lib/content-ref";
+import {
+	DEFAULT_DEVICE_SCREEN,
+	UI_REFRESH_FALLBACK_SECONDS,
+} from "@/lib/device/defaults";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
-import { playlistFrameBmpUrl, playlistFramePngUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/constants";
+import { type DeviceSizePreset } from "@/lib/trmnl/device-presets";
+import { normalizeGrayscale } from "@/lib/trmnl/grayscale";
+import {
+	DEFAULT_MODEL_NAME,
+	type TrmnlModel,
+	type TrmnlPalette,
+} from "@/lib/trmnl/types";
 import type { Device, Mixup, Playlist } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { formatTimezone, timezones } from "@/utils/helpers";
 
-export const DEVICE_SIZE_PRESETS = {
-	"800x480": { width: 800, height: 480 },
-	"600x400": { width: 600, height: 400 },
-	"1872x1404": { width: 1872, height: 1404 },
-	"2048x1536": { width: 2048, height: 1536 },
-	custom: null,
-} as const;
-
-const DEVICE_PALETTE_OPTIONS = [
-	{ value: "none", label: "None" },
-	{ value: "color-6a", label: "Generic 6 color" },
-	{
-		value: "m5papercolor-ed2208-m5gfx-v1",
-		label: "M5Stack PaperColor",
-	},
-] as const;
-
-type DeviceSizePreset = keyof typeof DEVICE_SIZE_PRESETS;
-type DeviceEditData = Device & { status?: string; type?: string };
-type ScreenOption = { id: string; title: string };
-type RecipeOption = { id: string; title: string };
-type PlaylistPreviewFrame = {
-	screen: string;
-	screen_type?: string | null;
-	duration: number;
-};
-
 interface DeviceEditFormProps {
-	editedDevice: DeviceEditData;
-	availableScreens: ScreenOption[];
-	availableRecipes: RecipeOption[];
+	editedDevice: Device & { status?: string; type?: string };
+	availableScreens: { id: string; title: string }[];
 	availablePlaylists: Playlist[];
 	availableMixups: Mixup[];
-	playlistScreens: PlaylistPreviewFrame[];
+	trmnlModels: TrmnlModel[];
+	trmnlPalettes: TrmnlPalette[];
 	deviceSizePreset: DeviceSizePreset;
 	apiKeyError: string | null;
 	friendlyIdError: string | null;
 	isSaving: boolean;
 	onInputChange: (
-		e: React.ChangeEvent<
-			HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-		>,
+		e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
 	) => void;
 	onNestedInputChange: (path: string, value: string) => void;
-	onSelectChange: (name: string, value: string | null) => void;
-	onContentRefChange: (
-		kind: "recipe" | "screen" | "playlist" | "mixup" | "none",
-		id: string | null,
-	) => void;
+	onSelectChange: (name: string, value: string) => void;
+	onScreenChange: (screenId: string | null) => void;
 	onDeviceSizePresetChange: (preset: DeviceSizePreset) => void;
 	onCustomSizeChange: (field: "width" | "height", value: number) => void;
 	onRegenerateApiKey: () => void;
 	onRegenerateFriendlyId: () => void;
 	onAddTimeRange: () => void;
-	onSubmit: (e?: React.FormEvent | React.MouseEvent) => void;
+	onRemoveTimeRange: (index: number) => void;
+	onSubmit: (e: React.FormEvent) => void;
 	onCancel: () => void;
 }
 
-export function getDeviceGrayscale(editedDevice: DeviceEditData) {
-	return editedDevice.grayscale === 2 ||
-		editedDevice.grayscale === 4 ||
-		editedDevice.grayscale === 16 ||
-		editedDevice.grayscale === 256
-		? editedDevice.grayscale
-		: 16;
-}
+const GRAYSCALE_LEVELS_BY_PALETTE: Record<string, number> = {
+	bw: 2,
+	"gray-4": 4,
+	"gray-16": 16,
+	"gray-256": 256,
+};
 
-export function getSelectedContent({
-	editedDevice,
-	availableScreens,
-	availableRecipes,
-	availablePlaylists,
-	availableMixups,
-}: Pick<
-	DeviceEditFormProps,
-	| "editedDevice"
-	| "availableScreens"
-	| "availableRecipes"
-	| "availablePlaylists"
-	| "availableMixups"
->) {
-	const isPlaylist =
-		editedDevice.display_mode === DeviceDisplayMode.PLAYLIST &&
-		!!editedDevice.playlist_id;
-	const isMixup =
-		editedDevice.display_mode === DeviceDisplayMode.MIXUP &&
-		!!editedDevice.mixup_id;
-	const legacySingleScreenId = editedDevice.screen_id || editedDevice.screen;
-	const legacySingleScreenType = resolveRenderableContentType(
-		editedDevice.screen_type,
-		legacySingleScreenId,
+// Static Tailwind class map so the JIT compiler sees concrete class names.
+const GRID_COLS_BY_COUNT: Record<number, string> = {
+	1: "grid-cols-1",
+	2: "grid-cols-2",
+	3: "grid-cols-3",
+	4: "grid-cols-4",
+};
+
+const closestLevel = (target: number, available: readonly number[]): number => {
+	if (available.length === 0) return target;
+	return available.reduce((best, current) =>
+		Math.abs(current - target) < Math.abs(best - target) ? current : best,
 	);
-	const value = isPlaylist
-		? `playlist:${editedDevice.playlist_id}`
-		: isMixup
-			? `mixup:${editedDevice.mixup_id}`
-			: legacySingleScreenId
-				? `${legacySingleScreenType}:${legacySingleScreenId}`
-				: "none";
-	const label =
-		value === "none"
-			? "None (use default)"
-			: value.startsWith("recipe:")
-				? availableRecipes.find((recipe) => `recipe:${recipe.id}` === value)
-						?.title
-				: value.startsWith("screen:")
-					? availableScreens.find((screen) => `screen:${screen.id}` === value)
-							?.title
-					: value.startsWith("playlist:")
-						? availablePlaylists.find(
-								(playlist) => `playlist:${playlist.id}` === value,
-							)?.name
-						: availableMixups.find((mixup) => `mixup:${mixup.id}` === value)
-								?.name;
+};
 
-	return {
-		isPlaylist,
-		isMixup,
-		legacySingleScreenId,
-		value,
-		label,
-	};
-}
-
-export function getPreviewSources({
-	editedDevice,
-	isMixup,
-	isPlaylist,
-	legacySingleScreenId,
-	playlistScreens,
-	previewWidth,
-	previewHeight,
-	grayscale,
-	paletteId,
-}: {
-	editedDevice: DeviceEditData;
-	isMixup: boolean;
-	isPlaylist: boolean;
-	legacySingleScreenId: string | null;
-	playlistScreens: PlaylistPreviewFrame[];
-	previewWidth: number;
-	previewHeight: number;
-	grayscale: number;
-	paletteId?: string;
-}) {
-	const playlistPreviewFrame = isPlaylist ? playlistScreens[0] : null;
-	const previewId =
-		playlistPreviewFrame?.screen ||
-		(isMixup ? editedDevice.mixup_id : legacySingleScreenId) ||
-		"simple-text";
-	const previewFrameType = playlistPreviewFrame
-		? playlistPreviewFrame.screen_type || "recipe"
-		: isMixup
-			? "mixup"
-			: editedDevice.screen_type;
-	const previewType =
-		previewFrameType === "mixup"
-			? "mixup"
-			: resolveRenderableContentType(previewFrameType, previewId);
-	const heroSrc =
-		previewType === "mixup"
-			? `/api/bitmap/mixup/${previewId}.bmp?width=${previewWidth}&height=${previewHeight}&grayscale=${grayscale}${paletteId ? `&palette=${encodeURIComponent(paletteId)}&palette_preview=observed` : ""}`
-			: playlistFrameBmpUrl(
-					previewId,
-					previewType,
-					previewWidth,
-					previewHeight,
-					grayscale,
-					paletteId,
-				);
-
-	return {
-		playlistPreviewFrame,
-		previewType,
-		heroSrc,
-		pngSrc: playlistFramePngUrl(
-			previewId,
-			previewType,
-			previewWidth,
-			previewHeight,
-		),
-		reactSrc: `/preview/${previewType}/${previewId}?width=${previewWidth}&height=${previewHeight}`,
-	};
+function PanelHeader({ label, right }: { label: string; right?: ReactNode }) {
+	return (
+		<div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2">
+			<h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+				{label}
+			</h3>
+			{right}
+		</div>
+	);
 }
 
 export default function DeviceEditForm({
 	editedDevice,
 	availableScreens,
-	availableRecipes,
 	availablePlaylists,
 	availableMixups,
-	playlistScreens,
+	trmnlModels,
+	trmnlPalettes,
 	deviceSizePreset,
 	apiKeyError,
 	friendlyIdError,
@@ -246,845 +126,741 @@ export default function DeviceEditForm({
 	onInputChange,
 	onNestedInputChange,
 	onSelectChange,
-	onContentRefChange,
+	onScreenChange,
 	onDeviceSizePresetChange,
 	onCustomSizeChange,
 	onRegenerateApiKey,
 	onRegenerateFriendlyId,
 	onAddTimeRange,
+	onRemoveTimeRange,
 	onSubmit,
 	onCancel: _onCancel,
 }: DeviceEditFormProps) {
-	const preview = useScreenPreviewControls({
-		defaultPortrait: editedDevice.screen_orientation === "portrait",
-		defaultPaletteIndex:
-			editedDevice.palette_id === "m5papercolor-ed2208-m5gfx-v1"
-				? 5
-				: editedDevice.palette_id === "color-6a"
-					? 4
-					: editedDevice.grayscale === 2
-						? 0
-						: editedDevice.grayscale === 4
-							? 1
-							: 2,
+	const isPortrait = editedDevice.screen_orientation === "portrait";
+	const deviceWidth = isPortrait
+		? editedDevice.screen_height || DEFAULT_IMAGE_HEIGHT
+		: editedDevice.screen_width || DEFAULT_IMAGE_WIDTH;
+	const deviceHeight = isPortrait
+		? editedDevice.screen_width || DEFAULT_IMAGE_WIDTH
+		: editedDevice.screen_height || DEFAULT_IMAGE_HEIGHT;
+	const grayscaleLevels = normalizeGrayscale(editedDevice.grayscale);
+	const savedModelName = editedDevice.model?.trim() || null;
+	const savedModelMatch =
+		savedModelName != null
+			? trmnlModels.find((model) => model.name === savedModelName)
+			: null;
+	const selectedModel =
+		savedModelName != null
+			? savedModelMatch
+			: (trmnlModels.find((model) => model.name === DEFAULT_MODEL_NAME) ??
+				trmnlModels[0]);
+	const hasUnknownModel = savedModelName != null && !savedModelMatch;
+	const selectedPaletteIds = selectedModel?.palette_ids ?? [];
+	const selectedPalette =
+		trmnlPalettes.find((palette) => palette.id === editedDevice.palette_id) ??
+		trmnlPalettes.find((palette) => palette.id === selectedPaletteIds[0]);
+	const availableGrayscaleLevels = useMemo(() => {
+		const set = new Set<number>();
+		for (const id of selectedPaletteIds) {
+			const levels = GRAYSCALE_LEVELS_BY_PALETTE[id];
+			if (levels) set.add(levels);
+		}
+		return Array.from(set).sort((a, b) => a - b);
+	}, [selectedPaletteIds]);
+	// Show the toggle only when the model offers a real choice (≥ 2 levels).
+	// One-level models (e.g. seeed_e1002 has only `bw`) are synchronized below.
+	const showGrayscaleField = availableGrayscaleLevels.length > 1;
+
+	useEffect(() => {
+		if (availableGrayscaleLevels.length === 0) return;
+		if (availableGrayscaleLevels.includes(grayscaleLevels)) return;
+		const next = closestLevel(grayscaleLevels, availableGrayscaleLevels);
+		if (next !== grayscaleLevels) {
+			onSelectChange("grayscale", String(next));
+		}
+	}, [availableGrayscaleLevels, grayscaleLevels, onSelectChange]);
+	const imageExtension = getModelImageExtension(selectedModel ?? undefined);
+	const profileQuery = new URLSearchParams({
+		width: String(deviceWidth),
+		height: String(deviceHeight),
+		grayscale: String(grayscaleLevels),
 	});
-	const previewWidth = preview.width;
-	const previewHeight = preview.height;
-	const deviceGrayscale = getDeviceGrayscale(editedDevice);
-	const selectedContent = getSelectedContent({
-		editedDevice,
-		availableScreens,
-		availableRecipes,
-		availablePlaylists,
-		availableMixups,
-	});
-	const previewSources = getPreviewSources({
-		editedDevice,
-		isMixup: selectedContent.isMixup,
-		isPlaylist: selectedContent.isPlaylist,
-		legacySingleScreenId: selectedContent.legacySingleScreenId,
-		playlistScreens,
-		previewWidth,
-		previewHeight,
-		grayscale: preview.grayscale,
-		paletteId: preview.paletteId,
-	});
+	if (selectedModel?.name) {
+		profileQuery.set("model", selectedModel.name);
+	}
+	if (selectedPalette?.id) {
+		profileQuery.set("palette_id", selectedPalette.id);
+	}
+
+	const isMixup =
+		editedDevice.display_mode === DeviceDisplayMode.MIXUP &&
+		!!editedDevice.mixup_id;
+	const isPlaylist =
+		editedDevice.display_mode === DeviceDisplayMode.PLAYLIST &&
+		!!editedDevice.playlist_id;
+	const isScreenMissing = !editedDevice.screen && !isMixup && !isPlaylist;
+
+	const heroSrc =
+		selectedModel && !hasUnknownModel && !isScreenMissing
+			? isMixup
+				? `/api/bitmap/mixup/${editedDevice.mixup_id}.${imageExtension}?${profileQuery}`
+				: `/api/bitmap/${editedDevice.screen}.${imageExtension}?${profileQuery}`
+			: null;
 
 	return (
 		<form onSubmit={onSubmit}>
 			<div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
-				<DevicePreviewPanel
-					editedDevice={editedDevice}
-					isPlaylist={selectedContent.isPlaylist}
-					preview={preview}
-					previewSources={previewSources}
-				/>
+				{/* Hero preview — left column, sticky on lg */}
+				<section className="flex flex-col overflow-hidden rounded-2xl border bg-card lg:sticky lg:top-4 lg:self-start">
+					{hasUnknownModel && (
+						<Alert className="rounded-none border-x-0 border-t-0 bg-muted/40 py-3 text-xs">
+							<AlertTriangle />
+							<AlertTitle>Unknown model</AlertTitle>
+							<AlertDescription>
+								Saved model <code className="font-mono">{savedModelName}</code>{" "}
+								isn't in the local TRMNL registry. Pick a supported model in the
+								Display tab to restore previews and device rendering.
+							</AlertDescription>
+						</Alert>
+					)}
+					{isScreenMissing && (
+						<Alert className="rounded-none border-x-0 border-t-0 bg-muted/40 py-3 text-xs">
+							<AlertTriangle />
+							<AlertTitle>Screen not configured</AlertTitle>
+							<AlertDescription>
+								Select a screen in the Content tab to restore previews and
+								device rendering.
+							</AlertDescription>
+						</Alert>
+					)}
+					<PanelHeader
+						label="Live preview"
+						right={
+							<span className="text-[11px] tabular-nums text-muted-foreground">
+								{deviceWidth}×{deviceHeight}px ·{" "}
+								<span className="capitalize">
+									{isPortrait ? "portrait" : "landscape"}
+								</span>
+								{availableGrayscaleLevels.length > 0
+									? ` · ${grayscaleLevels} levels`
+									: ""}
+								{selectedPalette ? ` · ${selectedPalette.name}` : ""}
+							</span>
+						}
+					/>
+					<div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] p-6">
+						{isPlaylist ? (
+							<div className="text-center text-sm text-muted-foreground">
+								Playlist mode — preview shows on the device when saved.
+							</div>
+						) : !heroSrc ? (
+							<div className="max-w-sm text-center text-sm text-muted-foreground">
+								Preview unavailable until the display configuration is complete.
+							</div>
+						) : (
+							<div
+								className={cn(
+									"w-full",
+									isPortrait ? "max-w-[260px]" : "max-w-[520px]",
+								)}
+							>
+								<DeviceFrame
+									size="lg"
+									portrait={isPortrait}
+									screenAspectRatio={`${deviceWidth} / ${deviceHeight}`}
+								>
+									<Image
+										src={heroSrc}
+										alt="Device screen preview"
+										fill
+										className="absolute inset-0 h-full w-full object-cover"
+										style={{ imageRendering: "pixelated" }}
+										unoptimized
+									/>
+								</DeviceFrame>
+							</div>
+						)}
+					</div>
+					<div className="border-t bg-muted/20 px-4 py-3 text-xs">
+						<div className="grid gap-1.5 sm:grid-cols-3">
+							<MetaRow label="Mode">
+								<span className="capitalize">
+									{editedDevice.display_mode.toLowerCase()}
+								</span>
+							</MetaRow>
+							<MetaRow label="Timezone">
+								{editedDevice?.timezone
+									? formatTimezone(editedDevice.timezone)
+									: "—"}
+							</MetaRow>
+							<MetaRow label="Refresh">
+								{editedDevice?.refresh_schedule?.default_refresh_rate ||
+									UI_REFRESH_FALLBACK_SECONDS}
+								s
+							</MetaRow>
+						</div>
+					</div>
+				</section>
 
-				<ConfigurationPanel
-					editedDevice={editedDevice}
-					availableScreens={availableScreens}
-					availableRecipes={availableRecipes}
-					availablePlaylists={availablePlaylists}
-					availableMixups={availableMixups}
-					selectedContent={selectedContent}
-					deviceSizePreset={deviceSizePreset}
-					deviceGrayscale={deviceGrayscale}
-					apiKeyError={apiKeyError}
-					friendlyIdError={friendlyIdError}
-					onInputChange={onInputChange}
-					onNestedInputChange={onNestedInputChange}
-					onSelectChange={onSelectChange}
-					onContentRefChange={onContentRefChange}
-					onDeviceSizePresetChange={onDeviceSizePresetChange}
-					onCustomSizeChange={onCustomSizeChange}
-					onRegenerateApiKey={onRegenerateApiKey}
-					onRegenerateFriendlyId={onRegenerateFriendlyId}
-					onAddTimeRange={onAddTimeRange}
-				/>
+				{/* Form — right column with tabs */}
+				<section className="overflow-hidden rounded-2xl border bg-card">
+					<div className="border-b bg-muted/30 px-4 py-2">
+						<h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+							Configuration
+						</h3>
+					</div>
+					<Tabs defaultValue="essentials" className="p-4">
+						<TabsList className="grid w-full grid-cols-4">
+							<TabsTrigger value="essentials">Essentials</TabsTrigger>
+							<TabsTrigger value="content">Content</TabsTrigger>
+							<TabsTrigger value="display">Display</TabsTrigger>
+							<TabsTrigger value="refresh">Refresh</TabsTrigger>
+						</TabsList>
+
+						<TabsContent value="essentials" className="mt-4 space-y-4">
+							<Field label="Device name" htmlFor="name">
+								<Input
+									id="name"
+									name="name"
+									value={editedDevice?.name || ""}
+									onChange={onInputChange}
+								/>
+							</Field>
+							<Field label="MAC address" htmlFor="mac_address">
+								<Input
+									id="mac_address"
+									name="mac_address"
+									value={editedDevice?.mac_address || ""}
+									onChange={onInputChange}
+									className="font-mono text-sm"
+								/>
+							</Field>
+							<Field
+								label="Friendly ID"
+								htmlFor="friendly_id"
+								error={friendlyIdError}
+							>
+								<div className="flex gap-2">
+									<Input
+										id="friendly_id"
+										name="friendly_id"
+										value={editedDevice?.friendly_id || ""}
+										onChange={onInputChange}
+										className="font-mono"
+									/>
+									<Button
+										type="button"
+										variant="outline"
+										size="icon"
+										onClick={onRegenerateFriendlyId}
+										title="Generate new Friendly ID"
+									>
+										<RefreshCw className="h-4 w-4" />
+									</Button>
+								</div>
+							</Field>
+							<Field label="API key" htmlFor="api_key" error={apiKeyError}>
+								<div className="flex gap-2">
+									<Input
+										id="api_key"
+										name="api_key"
+										value={editedDevice?.api_key || ""}
+										onChange={onInputChange}
+										className="font-mono"
+									/>
+									<Button
+										type="button"
+										variant="outline"
+										size="icon"
+										onClick={onRegenerateApiKey}
+										title="Generate new API key"
+									>
+										<RefreshCw className="h-4 w-4" />
+									</Button>
+								</div>
+							</Field>
+							<Field label="Timezone" htmlFor="timezone">
+								<Popover>
+									<PopoverTrigger asChild>
+										<Button
+											variant="outline"
+											className="w-full justify-between font-normal"
+										>
+											{editedDevice?.timezone
+												? formatTimezone(editedDevice.timezone)
+												: "Select timezone…"}
+											<Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+										</Button>
+									</PopoverTrigger>
+									<PopoverContent className="w-[300px] p-0">
+										<Command>
+											<CommandInput placeholder="Search timezone…" />
+											<CommandEmpty>No timezone found.</CommandEmpty>
+											<CommandList>
+												<ScrollArea className="h-[300px]">
+													{[
+														"Europe",
+														"North America",
+														"Asia",
+														"Australia & Pacific",
+													].map((region) => (
+														<CommandGroup key={region} heading={region}>
+															{timezones
+																.filter((tz) => tz.region === region)
+																.map((tz) => (
+																	<CommandItem
+																		key={tz.value}
+																		value={tz.value}
+																		keywords={[tz.label, tz.region]}
+																		onSelect={() =>
+																			onSelectChange("timezone", tz.value)
+																		}
+																		className="cursor-pointer"
+																	>
+																		<span
+																			className={cn(
+																				"mr-2",
+																				editedDevice?.timezone === tz.value &&
+																					"font-medium",
+																			)}
+																		>
+																			{tz.label}
+																		</span>
+																	</CommandItem>
+																))}
+														</CommandGroup>
+													))}
+												</ScrollArea>
+											</CommandList>
+										</Command>
+									</PopoverContent>
+								</Popover>
+							</Field>
+						</TabsContent>
+
+						<TabsContent value="content" className="mt-4 space-y-4">
+							<Field
+								label="Display mode"
+								hint="What should this device render?"
+							>
+								<ToggleGroup
+									type="single"
+									variant="outline"
+									value={editedDevice.display_mode}
+									onValueChange={(value) => {
+										if (value) onSelectChange("display_mode", value);
+									}}
+									className="grid grid-cols-3"
+								>
+									<ToggleGroupItem value={DeviceDisplayMode.SCREEN}>
+										Single
+									</ToggleGroupItem>
+									<ToggleGroupItem value={DeviceDisplayMode.PLAYLIST}>
+										Playlist
+									</ToggleGroupItem>
+									<ToggleGroupItem value={DeviceDisplayMode.MIXUP}>
+										Mixup
+									</ToggleGroupItem>
+								</ToggleGroup>
+							</Field>
+
+							{editedDevice.display_mode === DeviceDisplayMode.PLAYLIST && (
+								<Field label="Playlist" htmlFor="playlist">
+									<Select
+										value={editedDevice?.playlist_id || ""}
+										onValueChange={(value) =>
+											onSelectChange(
+												"playlist_id",
+												value === "none" ? "" : value,
+											)
+										}
+									>
+										<SelectTrigger id="playlist" className="w-full">
+											<SelectValue placeholder="Select playlist…" />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="none">None</SelectItem>
+											{availablePlaylists.map((playlist) => (
+												<SelectItem key={playlist.id} value={playlist.id}>
+													{playlist.name}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</Field>
+							)}
+
+							{editedDevice.display_mode === DeviceDisplayMode.MIXUP && (
+								<Field
+									label="Mixup"
+									htmlFor="mixup"
+									hint="A mixup combines multiple recipes into a single split-screen layout."
+								>
+									<Select
+										value={editedDevice?.mixup_id || ""}
+										onValueChange={(value) =>
+											onSelectChange("mixup_id", value === "none" ? "" : value)
+										}
+									>
+										<SelectTrigger id="mixup" className="w-full">
+											<SelectValue placeholder="Select mixup…" />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="none">None</SelectItem>
+											{availableMixups.map((mixup) => (
+												<SelectItem key={mixup.id} value={mixup.id}>
+													{mixup.name}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</Field>
+							)}
+
+							{editedDevice.display_mode === DeviceDisplayMode.SCREEN && (
+								<Field
+									label="Screen component"
+									htmlFor="screen"
+									hint={`Default selection is ${DEFAULT_DEVICE_SCREEN}.`}
+								>
+									<Select
+										value={editedDevice?.screen || ""}
+										onValueChange={(value) => onScreenChange(value)}
+									>
+										<SelectTrigger id="screen" className="w-full">
+											<SelectValue placeholder="Select screen…" />
+										</SelectTrigger>
+										<SelectContent>
+											{availableScreens.map((screen) => (
+												<SelectItem key={screen.id} value={screen.id}>
+													{screen.title}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</Field>
+							)}
+						</TabsContent>
+
+						<TabsContent value="display" className="mt-4 space-y-4">
+							<Field
+								label="Device model"
+								htmlFor="model"
+								hint="Determines output format, dimensions, and available palettes."
+							>
+								<Select
+									value={selectedModel?.name || ""}
+									onValueChange={(value) => onSelectChange("model", value)}
+								>
+									<SelectTrigger id="model" className="w-full">
+										<SelectValue placeholder="Select model…" />
+									</SelectTrigger>
+									<SelectContent>
+										{trmnlModels.map((model) => (
+											<SelectItem key={model.name} value={model.name}>
+												{model.label} · {model.width}×{model.height} ·{" "}
+												{model.mime_type.replace("image/", "")}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</Field>
+
+							{selectedPaletteIds.length > 0 && (
+								<Field
+									label="Palette"
+									htmlFor="palette_id"
+									hint="Restricted to palettes declared by the selected model."
+								>
+									<Select
+										value={selectedPalette?.id || selectedPaletteIds[0]}
+										onValueChange={(value) =>
+											onSelectChange("palette_id", value)
+										}
+									>
+										<SelectTrigger id="palette_id" className="w-full">
+											<SelectValue placeholder="Select palette…" />
+										</SelectTrigger>
+										<SelectContent>
+											{selectedPaletteIds.map((paletteId) => {
+												const palette = trmnlPalettes.find(
+													(item) => item.id === paletteId,
+												);
+												return (
+													<SelectItem key={paletteId} value={paletteId}>
+														{palette?.name ?? paletteId}
+													</SelectItem>
+												);
+											})}
+										</SelectContent>
+									</Select>
+								</Field>
+							)}
+
+							<Field label="Device size" htmlFor="device_size_preset">
+								<Select
+									value={deviceSizePreset}
+									onValueChange={(value) =>
+										onDeviceSizePresetChange(value as DeviceSizePreset)
+									}
+								>
+									<SelectTrigger id="device_size_preset" className="w-full">
+										<SelectValue placeholder="Select device size…" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="800x480">800 × 480</SelectItem>
+										<SelectItem value="1872x1404">1872 × 1404</SelectItem>
+										<SelectItem value="custom">Custom</SelectItem>
+									</SelectContent>
+								</Select>
+							</Field>
+
+							{deviceSizePreset === "custom" && (
+								<div className="grid gap-3 sm:grid-cols-2">
+									<Field label="Width (px)" htmlFor="screen_width">
+										<Input
+											id="screen_width"
+											name="screen_width"
+											type="number"
+											min={1}
+											value={editedDevice?.screen_width || DEFAULT_IMAGE_WIDTH}
+											onChange={(e) =>
+												onCustomSizeChange(
+													"width",
+													Number.parseInt(e.target.value, 10) ||
+														DEFAULT_IMAGE_WIDTH,
+												)
+											}
+										/>
+									</Field>
+									<Field label="Height (px)" htmlFor="screen_height">
+										<Input
+											id="screen_height"
+											name="screen_height"
+											type="number"
+											min={1}
+											value={
+												editedDevice?.screen_height || DEFAULT_IMAGE_HEIGHT
+											}
+											onChange={(e) =>
+												onCustomSizeChange(
+													"height",
+													Number.parseInt(e.target.value, 10) ||
+														DEFAULT_IMAGE_HEIGHT,
+												)
+											}
+										/>
+									</Field>
+								</div>
+							)}
+
+							<Field label="Orientation" htmlFor="screen_orientation">
+								<Select
+									value={editedDevice?.screen_orientation || "landscape"}
+									onValueChange={(value) =>
+										onSelectChange("screen_orientation", value)
+									}
+								>
+									<SelectTrigger id="screen_orientation" className="w-full">
+										<SelectValue placeholder="Select orientation…" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="landscape">Landscape</SelectItem>
+										<SelectItem value="portrait">Portrait</SelectItem>
+									</SelectContent>
+								</Select>
+							</Field>
+
+							{showGrayscaleField && (
+								<Field
+									label="Grayscale levels"
+									hint="Choices reflect the grayscale palettes declared by the selected model."
+								>
+									<ToggleGroup
+										type="single"
+										value={String(grayscaleLevels)}
+										onValueChange={(value) => {
+											if (value) onSelectChange("grayscale", value);
+										}}
+										variant="outline"
+										className={cn(
+											"grid w-fit",
+											GRID_COLS_BY_COUNT[availableGrayscaleLevels.length] ??
+												"grid-flow-col",
+										)}
+									>
+										{availableGrayscaleLevels.map((level) => (
+											<ToggleGroupItem key={level} value={String(level)}>
+												{level}
+											</ToggleGroupItem>
+										))}
+									</ToggleGroup>
+								</Field>
+							)}
+
+							{editedDevice.supports_temperature_profile && (
+								<Field
+									label="Temperature profile"
+									hint="Try A then B if the display looks washed out."
+								>
+									<ToggleGroup
+										type="single"
+										value={editedDevice.temperature_profile ?? "default"}
+										onValueChange={(value) => {
+											if (value) onSelectChange("temperature_profile", value);
+										}}
+										variant="outline"
+										className="grid w-fit grid-cols-4"
+									>
+										<ToggleGroupItem value="default">Default</ToggleGroupItem>
+										<ToggleGroupItem value="a">A</ToggleGroupItem>
+										<ToggleGroupItem value="b">B</ToggleGroupItem>
+										<ToggleGroupItem value="c">C</ToggleGroupItem>
+									</ToggleGroup>
+								</Field>
+							)}
+						</TabsContent>
+
+						<TabsContent value="refresh" className="mt-4 space-y-4">
+							<Field
+								label="Default refresh rate"
+								htmlFor="refresh_schedule.default_refresh_rate"
+								hint="Seconds between refreshes when no time range applies."
+							>
+								<Input
+									id="refresh_schedule.default_refresh_rate"
+									name="refresh_schedule.default_refresh_rate"
+									type="number"
+									value={
+										editedDevice?.refresh_schedule?.default_refresh_rate ||
+										UI_REFRESH_FALLBACK_SECONDS
+									}
+									onChange={onInputChange}
+								/>
+							</Field>
+
+							<div className="space-y-2">
+								<div className="flex items-end justify-between gap-2">
+									<div>
+										<Label className="text-xs font-semibold">
+											Time-range overrides
+										</Label>
+										<p className="text-[11px] text-muted-foreground">
+											Use a different rate during specific windows.
+										</p>
+									</div>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onClick={onAddTimeRange}
+									>
+										Add range
+									</Button>
+								</div>
+
+								{editedDevice?.refresh_schedule?.time_ranges &&
+								editedDevice.refresh_schedule.time_ranges.length > 0 ? (
+									<div className="divide-y rounded-lg border">
+										{editedDevice.refresh_schedule.time_ranges.map(
+											(range, index) => (
+												<div
+													key={index}
+													className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 p-3"
+												>
+													<div className="space-y-1">
+														<Label
+															htmlFor={`start_time_${index}`}
+															className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+														>
+															Start
+														</Label>
+														<Input
+															id={`start_time_${index}`}
+															type="time"
+															value={range.start_time}
+															onChange={(e) =>
+																onNestedInputChange(
+																	`refresh_schedule.time_ranges.${index}.start_time`,
+																	e.target.value,
+																)
+															}
+														/>
+													</div>
+													<div className="space-y-1">
+														<Label
+															htmlFor={`end_time_${index}`}
+															className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+														>
+															End
+														</Label>
+														<Input
+															id={`end_time_${index}`}
+															type="time"
+															value={range.end_time}
+															onChange={(e) =>
+																onNestedInputChange(
+																	`refresh_schedule.time_ranges.${index}.end_time`,
+																	e.target.value,
+																)
+															}
+														/>
+													</div>
+													<div className="space-y-1">
+														<Label
+															htmlFor={`refresh_rate_${index}`}
+															className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+														>
+															Rate (s)
+														</Label>
+														<Input
+															id={`refresh_rate_${index}`}
+															type="number"
+															value={range.refresh_rate}
+															onChange={(e) =>
+																onNestedInputChange(
+																	`refresh_schedule.time_ranges.${index}.refresh_rate`,
+																	e.target.value,
+																)
+															}
+														/>
+													</div>
+													<div className="flex items-end">
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon"
+															className="text-muted-foreground hover:text-destructive"
+															aria-label={`Remove time range ${index + 1}`}
+															onClick={() => onRemoveTimeRange(index)}
+														>
+															<Trash2 className="h-4 w-4" />
+														</Button>
+													</div>
+												</div>
+											),
+										)}
+									</div>
+								) : (
+									<p className="rounded-lg border border-dashed bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+										No custom time ranges configured.
+									</p>
+								)}
+							</div>
+						</TabsContent>
+					</Tabs>
+				</section>
 			</div>
 		</form>
 	);
 }
 
-function ConfigurationPanel({
-	editedDevice,
-	availableScreens,
-	availableRecipes,
-	availablePlaylists,
-	availableMixups,
-	selectedContent,
-	deviceSizePreset,
-	deviceGrayscale,
-	apiKeyError,
-	friendlyIdError,
-	onInputChange,
-	onNestedInputChange,
-	onSelectChange,
-	onContentRefChange,
-	onDeviceSizePresetChange,
-	onCustomSizeChange,
-	onRegenerateApiKey,
-	onRegenerateFriendlyId,
-	onAddTimeRange,
-}: Pick<
-	DeviceEditFormProps,
-	| "editedDevice"
-	| "availableScreens"
-	| "availableRecipes"
-	| "availablePlaylists"
-	| "availableMixups"
-	| "deviceSizePreset"
-	| "apiKeyError"
-	| "friendlyIdError"
-	| "onInputChange"
-	| "onNestedInputChange"
-	| "onSelectChange"
-	| "onContentRefChange"
-	| "onDeviceSizePresetChange"
-	| "onCustomSizeChange"
-	| "onRegenerateApiKey"
-	| "onRegenerateFriendlyId"
-	| "onAddTimeRange"
-> & {
-	selectedContent: ReturnType<typeof getSelectedContent>;
-	deviceGrayscale: number;
-}) {
-	return (
-		<section className="overflow-hidden rounded-2xl border bg-card">
-			<div className="border-b bg-muted/30 px-4 py-2">
-				<h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-					Configuration
-				</h3>
-			</div>
-			<Tabs defaultValue="essentials" className="p-4">
-				<TabsList className="grid w-full grid-cols-4">
-					<TabsTrigger value="essentials">Essentials</TabsTrigger>
-					<TabsTrigger value="content">Content</TabsTrigger>
-					<TabsTrigger value="display">Display</TabsTrigger>
-					<TabsTrigger value="refresh">Refresh</TabsTrigger>
-				</TabsList>
-
-				<TabsContent value="essentials" className="mt-4 space-y-4">
-					<EssentialsTab
-						editedDevice={editedDevice}
-						apiKeyError={apiKeyError}
-						friendlyIdError={friendlyIdError}
-						onInputChange={onInputChange}
-						onSelectChange={onSelectChange}
-						onRegenerateApiKey={onRegenerateApiKey}
-						onRegenerateFriendlyId={onRegenerateFriendlyId}
-					/>
-				</TabsContent>
-
-				<TabsContent value="content" className="mt-4 space-y-4">
-					<ContentPicker
-						availableScreens={availableScreens}
-						availableRecipes={availableRecipes}
-						availablePlaylists={availablePlaylists}
-						availableMixups={availableMixups}
-						selectedContent={selectedContent}
-						onContentRefChange={onContentRefChange}
-					/>
-				</TabsContent>
-
-				<TabsContent value="display" className="mt-4 space-y-4">
-					<DisplayTab
-						editedDevice={editedDevice}
-						deviceSizePreset={deviceSizePreset}
-						deviceGrayscale={deviceGrayscale}
-						onSelectChange={onSelectChange}
-						onDeviceSizePresetChange={onDeviceSizePresetChange}
-						onCustomSizeChange={onCustomSizeChange}
-					/>
-				</TabsContent>
-
-				<TabsContent value="refresh" className="mt-4 space-y-4">
-					<RefreshScheduleFields
-						editedDevice={editedDevice}
-						onInputChange={onInputChange}
-						onNestedInputChange={onNestedInputChange}
-						onAddTimeRange={onAddTimeRange}
-					/>
-				</TabsContent>
-			</Tabs>
-		</section>
-	);
-}
-
-function EssentialsTab({
-	editedDevice,
-	apiKeyError,
-	friendlyIdError,
-	onInputChange,
-	onSelectChange,
-	onRegenerateApiKey,
-	onRegenerateFriendlyId,
-}: Pick<
-	DeviceEditFormProps,
-	| "editedDevice"
-	| "apiKeyError"
-	| "friendlyIdError"
-	| "onInputChange"
-	| "onSelectChange"
-	| "onRegenerateApiKey"
-	| "onRegenerateFriendlyId"
->) {
-	return (
-		<>
-			<Field label="Device name" htmlFor="name">
-				<Input
-					id="name"
-					name="name"
-					value={editedDevice?.name || ""}
-					onChange={onInputChange}
-				/>
-			</Field>
-			<Field label="MAC address" htmlFor="mac_address">
-				<Input
-					id="mac_address"
-					name="mac_address"
-					value={editedDevice?.mac_address || ""}
-					onChange={onInputChange}
-					className="font-mono text-sm"
-				/>
-			</Field>
-			<Field label="Friendly ID" htmlFor="friendly_id" error={friendlyIdError}>
-				<div className="flex gap-2">
-					<Input
-						id="friendly_id"
-						name="friendly_id"
-						value={editedDevice?.friendly_id || ""}
-						onChange={onInputChange}
-						className="font-mono"
-					/>
-					<Button
-						type="button"
-						variant="outline"
-						size="icon"
-						onClick={onRegenerateFriendlyId}
-						title="Generate new Friendly ID"
-					>
-						<RefreshCw className="h-4 w-4" />
-					</Button>
-				</div>
-			</Field>
-			<Field label="API key" htmlFor="api_key" error={apiKeyError}>
-				<div className="flex gap-2">
-					<Input
-						id="api_key"
-						name="api_key"
-						value={editedDevice?.api_key || ""}
-						onChange={onInputChange}
-						className="font-mono"
-					/>
-					<Button
-						type="button"
-						variant="outline"
-						size="icon"
-						onClick={onRegenerateApiKey}
-						title="Generate new API key"
-					>
-						<RefreshCw className="h-4 w-4" />
-					</Button>
-				</div>
-			</Field>
-			<TimezoneField
-				timezone={editedDevice?.timezone}
-				onSelectChange={onSelectChange}
-			/>
-		</>
-	);
-}
-
-function TimezoneField({
-	timezone,
-	onSelectChange,
-}: {
-	timezone?: string | null;
-	onSelectChange: DeviceEditFormProps["onSelectChange"];
-}) {
-	const timezoneRegions = Array.from(new Set(timezones.map((tz) => tz.region)));
-
-	return (
-		<Field label="Timezone" htmlFor="timezone">
-			<Popover>
-				<PopoverTrigger asChild>
-					<Button
-						variant="outline"
-						className="w-full justify-between font-normal"
-					>
-						{timezone ? formatTimezone(timezone) : "Select timezone…"}
-						<Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-					</Button>
-				</PopoverTrigger>
-				<PopoverContent className="w-[300px] p-0">
-					<Command>
-						<CommandInput placeholder="Search timezone…" />
-						<CommandEmpty>No timezone found.</CommandEmpty>
-						<CommandList>
-							<ScrollArea className="h-[300px]">
-								{timezoneRegions.map((region) => (
-									<CommandGroup key={region} heading={region}>
-										{timezones
-											.filter((tz) => tz.region === region)
-											.map((tz) => (
-												<CommandItem
-													key={tz.value}
-													value={`${tz.value} ${tz.label} ${tz.region}`}
-													onSelect={() => onSelectChange("timezone", tz.value)}
-													className="cursor-pointer"
-												>
-													<span
-														className={cn(
-															"mr-2",
-															timezone === tz.value && "font-medium",
-														)}
-													>
-														{tz.label}
-													</span>
-												</CommandItem>
-											))}
-									</CommandGroup>
-								))}
-							</ScrollArea>
-						</CommandList>
-					</Command>
-				</PopoverContent>
-			</Popover>
-		</Field>
-	);
-}
-
-function DisplayTab({
-	editedDevice,
-	deviceSizePreset,
-	deviceGrayscale,
-	onSelectChange,
-	onDeviceSizePresetChange,
-	onCustomSizeChange,
-}: Pick<
-	DeviceEditFormProps,
-	| "editedDevice"
-	| "deviceSizePreset"
-	| "onSelectChange"
-	| "onDeviceSizePresetChange"
-	| "onCustomSizeChange"
-> & {
-	deviceGrayscale: number;
-}) {
-	return (
-		<>
-			<Field label="Device size" htmlFor="device_size_preset">
-				<Select
-					value={deviceSizePreset}
-					onValueChange={(value) =>
-						onDeviceSizePresetChange(value as DeviceSizePreset)
-					}
-				>
-					<SelectTrigger className="w-full">
-						<SelectValue placeholder="Select device size…" />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="800x480">800 × 480</SelectItem>
-						<SelectItem value="600x400">600 × 400</SelectItem>
-						<SelectItem value="1872x1404">1872 × 1404</SelectItem>
-						<SelectItem value="2048x1536">2048 × 1536</SelectItem>
-						<SelectItem value="custom">Custom</SelectItem>
-					</SelectContent>
-				</Select>
-			</Field>
-
-			{deviceSizePreset === "custom" && (
-				<div className="grid gap-3 sm:grid-cols-2">
-					<Field label="Width (px)" htmlFor="screen_width">
-						<Input
-							id="screen_width"
-							name="screen_width"
-							type="number"
-							min={1}
-							value={editedDevice?.screen_width || DEFAULT_IMAGE_WIDTH}
-							onChange={(e) =>
-								onCustomSizeChange(
-									"width",
-									Number.parseInt(e.target.value, 10) || DEFAULT_IMAGE_WIDTH,
-								)
-							}
-						/>
-					</Field>
-					<Field label="Height (px)" htmlFor="screen_height">
-						<Input
-							id="screen_height"
-							name="screen_height"
-							type="number"
-							min={1}
-							value={editedDevice?.screen_height || DEFAULT_IMAGE_HEIGHT}
-							onChange={(e) =>
-								onCustomSizeChange(
-									"height",
-									Number.parseInt(e.target.value, 10) || DEFAULT_IMAGE_HEIGHT,
-								)
-							}
-						/>
-					</Field>
-				</div>
-			)}
-
-			<Field label="Orientation" htmlFor="screen_orientation">
-				<Select
-					value={editedDevice?.screen_orientation || "landscape"}
-					onValueChange={(value) => onSelectChange("screen_orientation", value)}
-				>
-					<SelectTrigger className="w-full">
-						<SelectValue placeholder="Select orientation…" />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="landscape">Landscape</SelectItem>
-						<SelectItem value="portrait">Portrait</SelectItem>
-					</SelectContent>
-				</Select>
-			</Field>
-
-			<Field
-				label="Grayscale levels"
-				hint="Number of gray levels for image rendering."
-			>
-				<ToggleGroup
-					type="single"
-					value={String(deviceGrayscale)}
-					onValueChange={(value) => {
-						if (value) onSelectChange("grayscale", value);
-					}}
-					variant="outline"
-					className="grid w-fit grid-cols-4"
-				>
-					<ToggleGroupItem value="2">2</ToggleGroupItem>
-					<ToggleGroupItem value="4">4</ToggleGroupItem>
-					<ToggleGroupItem value="16">16</ToggleGroupItem>
-					<ToggleGroupItem value="256">256 colors</ToggleGroupItem>
-				</ToggleGroup>
-			</Field>
-
-			<Field
-				label="Palette"
-				hint="Optional fixed color palette for device bitmap renders."
-			>
-				<Select
-					value={editedDevice.palette_id || "none"}
-					onValueChange={(value) =>
-						onSelectChange("palette_id", value === "none" ? null : value)
-					}
-				>
-					<SelectTrigger className="w-full">
-						<SelectValue placeholder="Select palette…" />
-					</SelectTrigger>
-					<SelectContent>
-						{DEVICE_PALETTE_OPTIONS.map((palette) => (
-							<SelectItem key={palette.value} value={palette.value}>
-								{palette.label}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
-			</Field>
-		</>
-	);
-}
-
-function DevicePreviewPanel({
-	editedDevice,
-	isPlaylist,
-	preview,
-	previewSources,
-}: {
-	editedDevice: DeviceEditData;
-	isPlaylist: boolean;
-	preview: ReturnType<typeof useScreenPreviewControls>;
-	previewSources: ReturnType<typeof getPreviewSources>;
-}) {
-	return (
-		<section className="flex flex-col overflow-hidden rounded-2xl border bg-card lg:sticky lg:top-4 lg:self-start">
-			<div className="space-y-2 border-b bg-muted/30 px-3 py-2">
-				<div className="flex items-center justify-between gap-2">
-					<h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-						Live preview
-					</h3>
-				</div>
-			</div>
-			<ScreenPreviewControls
-				format={preview.format}
-				onFormatChange={preview.setFormat}
-				sizeIndex={preview.sizeIndex}
-				onSizeIndexChange={preview.setSizeIndex}
-				paletteIndex={preview.paletteIndex}
-				onPaletteIndexChange={preview.setPaletteIndex}
-				isPortrait={preview.isPortrait}
-				onPortraitChange={preview.setIsPortrait}
-				reactMode={preview.reactMode}
-				onReactModeChange={preview.setReactMode}
-				className="border-b bg-muted/20 px-3"
-			/>
-			<div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] p-6">
-				{isPlaylist && !previewSources.playlistPreviewFrame ? (
-					<div className="text-center text-sm text-muted-foreground">
-						This playlist does not have any frames yet.
-					</div>
-				) : previewSources.previewType === "mixup" &&
-					preview.format !== "bmp" ? (
-					<div className="text-center text-sm text-muted-foreground">
-						{preview.format.toUpperCase()} preview is not available for mixups
-						yet.
-					</div>
-				) : (
-					<div
-						className={cn(
-							"w-full",
-							preview.isPortrait ? "max-w-[260px]" : "max-w-[520px]",
-						)}
-					>
-						<DeviceFrame
-							size="lg"
-							portrait={preview.isPortrait}
-							screenWidth={preview.width}
-							screenHeight={preview.height}
-						>
-							{preview.format === "react" ? (
-								<ScaledReactPreview
-									title="Device React preview"
-									src={previewSources.reactSrc}
-									width={preview.width}
-									height={preview.height}
-									mode={preview.reactMode}
-								/>
-							) : (
-								<Image
-									src={
-										preview.format === "png"
-											? previewSources.pngSrc
-											: previewSources.heroSrc
-									}
-									alt="Device screen preview"
-									fill
-									className="absolute inset-0 h-full w-full object-cover"
-									style={{ imageRendering: "pixelated" }}
-									unoptimized
-								/>
-							)}
-						</DeviceFrame>
-					</div>
-				)}
-			</div>
-			<div className="border-t bg-muted/20 px-4 py-3 text-xs">
-				<div className="grid gap-1.5 sm:grid-cols-4">
-					<MetaRow label="Pipeline">
-						{screenPreviewSummary({
-							format: preview.format,
-							width: preview.width,
-							height: preview.height,
-							grayscale: preview.grayscale,
-							paletteLabel: preview.paletteLabel,
-							reactMode: preview.reactMode,
-						})}
-					</MetaRow>
-					<MetaRow label="Mode">
-						<span className="capitalize">
-							{editedDevice.display_mode.toLowerCase()}
-						</span>
-					</MetaRow>
-					<MetaRow label="Timezone">
-						{editedDevice?.timezone
-							? formatTimezone(editedDevice.timezone)
-							: "—"}
-					</MetaRow>
-					<MetaRow label="Refresh">
-						{editedDevice?.refresh_schedule?.default_refresh_rate || 300}s
-					</MetaRow>
-				</div>
-			</div>
-		</section>
-	);
-}
-
-function ContentPicker({
-	availableScreens,
-	availableRecipes,
-	availablePlaylists,
-	availableMixups,
-	selectedContent,
-	onContentRefChange,
-}: Pick<
-	DeviceEditFormProps,
-	| "availableScreens"
-	| "availableRecipes"
-	| "availablePlaylists"
-	| "availableMixups"
-	| "onContentRefChange"
-> & {
-	selectedContent: ReturnType<typeof getSelectedContent>;
-}) {
-	return (
-		<Field label="Content" hint="Choose what this device should render.">
-			<Popover>
-				<PopoverTrigger asChild>
-					<Button
-						variant="outline"
-						role="combobox"
-						className="w-full justify-between"
-					>
-						<span className="truncate">
-							{selectedContent.label || "Search or select content…"}
-						</span>
-						<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-					</Button>
-				</PopoverTrigger>
-				<PopoverContent
-					className="w-[--radix-popover-trigger-width] p-0"
-					align="start"
-				>
-					<Command>
-						<CommandInput placeholder="Search content…" />
-						<CommandList>
-							<CommandEmpty>No results found.</CommandEmpty>
-							<ContentPickerGroup
-								heading="Recipes"
-								items={availableRecipes}
-								kind="recipe"
-								selectedValue={selectedContent.value}
-								onContentRefChange={onContentRefChange}
-							/>
-							<ContentPickerGroup
-								heading="Screens"
-								items={availableScreens}
-								kind="screen"
-								selectedValue={selectedContent.value}
-								onContentRefChange={onContentRefChange}
-							/>
-							<ContentPickerGroup
-								heading="Playlists"
-								items={availablePlaylists}
-								kind="playlist"
-								selectedValue={selectedContent.value}
-								onContentRefChange={onContentRefChange}
-							/>
-							<ContentPickerGroup
-								heading="Mixups"
-								items={availableMixups}
-								kind="mixup"
-								selectedValue={selectedContent.value}
-								onContentRefChange={onContentRefChange}
-							/>
-						</CommandList>
-					</Command>
-				</PopoverContent>
-			</Popover>
-		</Field>
-	);
-}
-
-function ContentPickerGroup({
-	heading,
-	items,
-	kind,
-	selectedValue,
-	onContentRefChange,
-}: {
-	heading: string;
-	items: Array<ScreenOption | RecipeOption | Playlist | Mixup>;
-	kind: "recipe" | "screen" | "playlist" | "mixup";
-	selectedValue: string;
-	onContentRefChange: DeviceEditFormProps["onContentRefChange"];
-}) {
-	return (
-		<CommandGroup heading={heading}>
-			{items.map((item) => {
-				const label = "title" in item ? item.title : item.name;
-				const value = `${kind}:${item.id}`;
-				return (
-					<CommandItem
-						key={value}
-						value={`${kind} ${label}`}
-						onSelect={() => onContentRefChange(kind, item.id)}
-					>
-						<Check
-							className={cn(
-								"mr-2 h-4 w-4",
-								selectedValue === value ? "opacity-100" : "opacity-0",
-							)}
-						/>
-						{label}
-					</CommandItem>
-				);
-			})}
-		</CommandGroup>
-	);
-}
-
-function RefreshScheduleFields({
-	editedDevice,
-	onInputChange,
-	onNestedInputChange,
-	onAddTimeRange,
-}: Pick<
-	DeviceEditFormProps,
-	"editedDevice" | "onInputChange" | "onNestedInputChange" | "onAddTimeRange"
->) {
-	return (
-		<>
-			<Field
-				label="Default refresh rate"
-				htmlFor="refresh_schedule.default_refresh_rate"
-				hint="Seconds between refreshes when no time range applies."
-			>
-				<Input
-					id="refresh_schedule.default_refresh_rate"
-					name="refresh_schedule.default_refresh_rate"
-					type="number"
-					value={editedDevice?.refresh_schedule?.default_refresh_rate || 300}
-					onChange={onInputChange}
-				/>
-			</Field>
-
-			<div className="space-y-2">
-				<div className="flex items-end justify-between gap-2">
-					<div>
-						<Label className="text-xs font-semibold">
-							Time-range overrides
-						</Label>
-						<p className="text-[11px] text-muted-foreground">
-							Use a different rate during specific windows.
-						</p>
-					</div>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						onClick={onAddTimeRange}
-					>
-						Add range
-					</Button>
-				</div>
-
-				{editedDevice?.refresh_schedule?.time_ranges &&
-				editedDevice.refresh_schedule.time_ranges.length > 0 ? (
-					<div className="divide-y rounded-lg border">
-						{editedDevice.refresh_schedule.time_ranges.map((range, index) => (
-							<TimeRangeFields
-								key={index}
-								index={index}
-								range={range}
-								onNestedInputChange={onNestedInputChange}
-							/>
-						))}
-					</div>
-				) : (
-					<p className="rounded-lg border border-dashed bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-						No custom time ranges configured.
-					</p>
-				)}
-			</div>
-		</>
-	);
-}
-
-function TimeRangeFields({
-	index,
-	range,
-	onNestedInputChange,
-}: {
-	index: number;
-	range: NonNullable<Device["refresh_schedule"]>["time_ranges"][number];
-	onNestedInputChange: DeviceEditFormProps["onNestedInputChange"];
-}) {
-	return (
-		<div className="grid grid-cols-3 gap-2 p-3">
-			<TimeRangeInput
-				id={`start_time_${index}`}
-				label="Start"
-				type="time"
-				value={range.start_time}
-				onChange={(value) =>
-					onNestedInputChange(
-						`refresh_schedule.time_ranges.${index}.start_time`,
-						value,
-					)
-				}
-			/>
-			<TimeRangeInput
-				id={`end_time_${index}`}
-				label="End"
-				type="time"
-				value={range.end_time}
-				onChange={(value) =>
-					onNestedInputChange(
-						`refresh_schedule.time_ranges.${index}.end_time`,
-						value,
-					)
-				}
-			/>
-			<TimeRangeInput
-				id={`refresh_rate_${index}`}
-				label="Rate (s)"
-				type="number"
-				value={range.refresh_rate}
-				onChange={(value) =>
-					onNestedInputChange(
-						`refresh_schedule.time_ranges.${index}.refresh_rate`,
-						value,
-					)
-				}
-			/>
-		</div>
-	);
-}
-
-function TimeRangeInput({
-	id,
-	label,
-	type,
-	value,
-	onChange,
-}: {
-	id: string;
-	label: string;
-	type: React.HTMLInputTypeAttribute;
-	value: string | number;
-	onChange: (value: string) => void;
-}) {
-	return (
-		<div className="space-y-1">
-			<Label
-				htmlFor={id}
-				className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
-			>
-				{label}
-			</Label>
-			<Input
-				id={id}
-				type={type}
-				value={value}
-				onChange={(e) => onChange(e.target.value)}
-			/>
-		</div>
-	);
+function getModelImageExtension(model: TrmnlModel | undefined): string {
+	if (!model) return "png";
+	if (model.mime_type === "image/webp") return "webp";
+	if (model.mime_type === "image/bmp") return "bmp";
+	if (model.mime_type === "image/jpeg") return "jpg";
+	return "png";
 }
 
 function Field({
@@ -1098,7 +874,7 @@ function Field({
 	htmlFor?: string;
 	hint?: string;
 	error?: string | null;
-	children: React.ReactNode;
+	children: ReactNode;
 }) {
 	return (
 		<div className="space-y-1.5">
@@ -1114,13 +890,7 @@ function Field({
 	);
 }
 
-function MetaRow({
-	label,
-	children,
-}: {
-	label: string;
-	children: React.ReactNode;
-}) {
+function MetaRow({ label, children }: { label: string; children: ReactNode }) {
 	return (
 		<div className="flex flex-col gap-0.5">
 			<span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">

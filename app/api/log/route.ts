@@ -1,20 +1,20 @@
-import type { Selectable } from "kysely";
 import { NextResponse } from "next/server";
-import {
-	createMockDeviceIdentity,
-	findDeviceByApiKeyAndUpdateMac,
-	generateMockMacAddress,
-} from "@/app/api/device-api-key";
 import type { CustomError } from "@/lib/api/types";
 import { getCurrentUserId } from "@/lib/auth/get-user";
 import { db } from "@/lib/database/db";
-import type { DB } from "@/lib/database/db.d";
 import { checkDbConnection } from "@/lib/database/utils";
+import {
+	createDefaultRefreshSchedule,
+	DEFAULT_DEVICE_TIMEZONE,
+	DEVICE_SETUP_REFRESH_SECONDS,
+	serializeRefreshSchedule,
+} from "@/lib/device/defaults";
 import { logError, logInfo } from "@/lib/logger";
-import { generateFriendlyId } from "@/utils/helpers";
-
-const LOG_SOURCE = "api/log";
-type DeviceRow = Selectable<DB["devices"]>;
+import {
+	generateApiKey,
+	generateFriendlyId,
+	generateMockMacAddress,
+} from "@/utils/helpers";
 
 interface LogEntry {
 	creation_timestamp: number;
@@ -38,731 +38,25 @@ interface LogRequestBody {
 	logs: unknown[]; // TRMNL API format - required
 }
 
-type LogRequestHeaders = {
-	refreshRate: string | null;
-	batteryVoltage: string | null;
-	fwVersion: string | null;
-	rssi: string | null;
-};
+function parseRefreshRateHeader(refreshRate: string | null): number {
+	const parsed = refreshRate ? Number.parseInt(refreshRate, 10) : NaN;
+	return Number.isFinite(parsed) && parsed > 0
+		? parsed
+		: DEVICE_SETUP_REFRESH_SECONDS;
+}
 
-type DeviceLogState = {
-	deviceId: string;
-	deviceFound: boolean;
-	deviceStatus: "known" | "existing_mock" | "new_mock";
-};
+function nextExpectedUpdateFromRefresh(refreshRate: string | null): string {
+	return new Date(
+		Date.now() + parseRefreshRateHeader(refreshRate) * 1000,
+	).toISOString();
+}
 
-type LogRequestContext = ReturnType<typeof parseLogRequestHeaders> & {
-	currentUserId: string | null;
-};
-
-type LogDeviceResult =
-	| {
-			type: "device";
-			state: DeviceLogState;
-	  }
-	| {
-			type: "response";
-			response: Response;
-	  };
-
-const parseLogRequestHeaders = (request: Request) => ({
-	macAddress: request.headers.get("ID")?.toUpperCase(),
-	apiKey: request.headers.get("Access-Token"),
-	metrics: {
-		refreshRate: request.headers.get("Refresh-Rate"),
-		batteryVoltage: request.headers.get("Battery-Voltage"),
-		fwVersion: request.headers.get("FW-Version"),
-		rssi: request.headers.get("RSSI"),
-	},
-});
-
-const buildDeviceMetricsUpdate = (
-	device: DeviceRow,
-	{ refreshRate, batteryVoltage, fwVersion, rssi }: LogRequestHeaders,
-) => ({
-	last_update_time: new Date().toISOString(),
-	next_expected_update: new Date(
-		Date.now() +
-			(refreshRate ? Number.parseInt(refreshRate, 10) * 1000 : 3600 * 1000),
-	).toISOString(),
-	battery_voltage: batteryVoltage
-		? Number.parseFloat(batteryVoltage)
-		: device.battery_voltage,
-	firmware_version: fwVersion || device.firmware_version,
-	rssi: rssi ? Number.parseInt(rssi, 10) : device.rssi,
-	updated_at: new Date().toISOString(),
-});
-
-const updateDeviceMetrics = async (
-	deviceId: string,
-	device: DeviceRow,
-	metrics: LogRequestHeaders,
-	errorMessage = "Error updating device metrics",
-) => {
-	try {
-		await db
-			.updateTable("devices")
-			.set(buildDeviceMetricsUpdate(device, metrics))
-			.where("friendly_id", "=", deviceId)
-			.execute();
-	} catch (updateError) {
-		logError(new Error(errorMessage), {
-			source: LOG_SOURCE,
-			metadata: {
-				device_id: deviceId,
-				error: updateError,
-			},
-		});
-	}
-};
-
-const updateDeviceMacAddress = async (
-	deviceId: string,
-	macAddress: string,
-	successMessage: string,
-	errorMessage = "Error updating MAC address for device",
-) => {
-	try {
-		await db
-			.updateTable("devices")
-			.set({
-				mac_address: macAddress,
-				updated_at: new Date().toISOString(),
-			})
-			.where("friendly_id", "=", deviceId)
-			.execute();
-
-		logInfo(successMessage, {
-			source: LOG_SOURCE,
-			metadata: {
-				device_id: deviceId,
-				mac_address: macAddress,
-			},
-		});
-	} catch (updateMacError) {
-		logError(new Error(errorMessage), {
-			source: LOG_SOURCE,
-			metadata: {
-				device_id: deviceId,
-				mac_address: macAddress,
-				error: updateMacError,
-			},
-		});
-	}
-};
-
-type LogDeviceInsert = {
-	macAddress: string;
-	name: string;
-	friendlyId: string;
-	apiKey: string;
-	metrics: LogRequestHeaders;
-	userId: string;
-};
-
-const insertLogDevice = ({
-	macAddress,
-	name,
-	friendlyId,
-	apiKey,
-	metrics,
-	userId,
-}: LogDeviceInsert) =>
-	db
-		.insertInto("devices")
-		.values({
-			mac_address: macAddress,
-			name,
-			friendly_id: friendlyId,
-			api_key: apiKey,
-			refresh_schedule: JSON.stringify({
-				default_refresh_rate: metrics.refreshRate
-					? Number.parseInt(metrics.refreshRate, 10)
-					: 60,
-				time_ranges: [],
-			}),
-			last_update_time: new Date().toISOString(),
-			next_expected_update: new Date(
-				Date.now() +
-					(metrics.refreshRate
-						? Number.parseInt(metrics.refreshRate, 10) * 1000
-						: 3600 * 1000),
-			).toISOString(),
-			timezone: "UTC",
-			battery_voltage: metrics.batteryVoltage
-				? Number.parseFloat(metrics.batteryVoltage)
-				: null,
-			firmware_version: metrics.fwVersion || null,
-			rssi: metrics.rssi ? Number.parseInt(metrics.rssi, 10) : null,
-			user_id: userId,
-		})
-		.returningAll()
-		.executeTakeFirst();
-
-const logDeviceState = (
-	message: string,
-	state: DeviceLogState,
-	metrics: LogRequestHeaders,
-	metadata: Record<string, unknown> = {},
-) => {
-	logInfo(message, {
-		source: LOG_SOURCE,
-		metadata: {
-			...metadata,
-			device_id: state.deviceId,
-			refresh_rate: metrics.refreshRate,
-			battery_voltage: metrics.batteryVoltage,
-			fw_version: metrics.fwVersion,
-			rssi: metrics.rssi,
-			device_found: state.deviceFound,
-			device_status: state.deviceStatus,
-		},
+function refreshScheduleFromHeader(refreshRate: string | null): string {
+	return serializeRefreshSchedule({
+		...createDefaultRefreshSchedule(),
+		default_refresh_rate: parseRefreshRateHeader(refreshRate),
 	});
-};
-
-const deviceCompatResponse = (
-	status: number,
-	message: string,
-	body: Record<string, unknown> = {},
-) =>
-	NextResponse.json(
-		{
-			status,
-			message,
-			...body,
-		},
-		{ status: 200 },
-	);
-
-const unauthorizedRegisteredDeviceResponse = (
-	device: DeviceRow,
-	macAddress: string,
-	apiKey: string,
-) => {
-	logError("Refusing logs for device without owner or valid access token", {
-		source: LOG_SOURCE,
-		metadata: {
-			device_id: device.friendly_id,
-			mac_address: macAddress,
-			hasApiKey: Boolean(apiKey),
-		},
-	});
-
-	return deviceCompatResponse(
-		401,
-		"Valid access token required for registered device",
-	);
-};
-
-const unownedDeviceResponse = (
-	message: string,
-	metadata: Record<string, unknown>,
-) => {
-	logError(message, {
-		source: LOG_SOURCE,
-		metadata,
-	});
-
-	return deviceCompatResponse(
-		400,
-		"Device owner is required before logs can be accepted",
-	);
-};
-
-const failedUnknownDeviceResponse = () =>
-	deviceCompatResponse(500, "Failed to process logs from unknown device");
-
-const failedLogSaveResponse = () =>
-	deviceCompatResponse(500, "Failed to save logs");
-
-const internalErrorResponse = () =>
-	deviceCompatResponse(500, "Internal server error");
-
-const createKnownDeviceState = (deviceId: string): DeviceLogState => ({
-	deviceId,
-	deviceFound: true,
-	deviceStatus: "known",
-});
-
-const canUseDevice = (
-	device: DeviceRow,
-	apiKey: string,
-	currentUserId: string | null,
-) =>
-	apiKey === device.api_key ||
-	(Boolean(currentUserId) && device.user_id === currentUserId);
-
-const updateDeviceApiKey = async (deviceId: string, apiKey: string) => {
-	try {
-		await db
-			.updateTable("devices")
-			.set({
-				api_key: apiKey,
-				updated_at: new Date().toISOString(),
-			})
-			.where("friendly_id", "=", deviceId)
-			.execute();
-
-		logInfo("Updated API key for device", {
-			source: LOG_SOURCE,
-			metadata: {
-				device_id: deviceId,
-			},
-		});
-	} catch (updateError) {
-		logError(new Error("Error updating API key for device"), {
-			source: LOG_SOURCE,
-			metadata: {
-				device_id: deviceId,
-				error: updateError,
-			},
-		});
-	}
-};
-
-const findDeviceByMacAddress = (macAddress: string) =>
-	db
-		.selectFrom("devices")
-		.selectAll()
-		.where("mac_address", "=", macAddress)
-		.executeTakeFirst();
-
-const findDeviceByApiKey = (apiKey: string) =>
-	db
-		.selectFrom("devices")
-		.selectAll()
-		.where("api_key", "=", apiKey)
-		.executeTakeFirst();
-
-const resolveDeviceByMac = async (
-	context: LogRequestContext & { apiKey: string; macAddress: string },
-): Promise<LogDeviceResult | null> => {
-	const { apiKey, currentUserId, macAddress, metrics } = context;
-	const deviceByMac = await findDeviceByMacAddress(macAddress);
-
-	if (!deviceByMac) {
-		return null;
-	}
-
-	if (!canUseDevice(deviceByMac, apiKey, currentUserId)) {
-		return {
-			type: "response",
-			response: unauthorizedRegisteredDeviceResponse(
-				deviceByMac,
-				macAddress,
-				apiKey,
-			),
-		};
-	}
-
-	const state = createKnownDeviceState(deviceByMac.friendly_id);
-
-	if (apiKey !== deviceByMac.api_key) {
-		await updateDeviceApiKey(state.deviceId, apiKey);
-	}
-
-	await updateDeviceMetrics(state.deviceId, deviceByMac, metrics);
-	logDeviceState("Device authenticated by MAC address", state, metrics, {
-		mac_address: macAddress,
-	});
-
-	return { type: "device", state };
-};
-
-const createDeviceWithProvidedMac = async (
-	context: LogRequestContext & { apiKey: string; macAddress: string },
-): Promise<LogDeviceResult | null> => {
-	const { apiKey, currentUserId, macAddress, metrics } = context;
-
-	if (!currentUserId) {
-		return {
-			type: "response",
-			response: unownedDeviceResponse(
-				"Refusing to auto-provision an unowned device",
-				{
-					macAddress,
-					hasApiKey: true,
-				},
-			),
-		};
-	}
-
-	const friendlyId = generateFriendlyId(
-		macAddress,
-		new Date().toISOString().replace(/[-:Z]/g, ""),
-	);
-
-	try {
-		const newDevice = await insertLogDevice({
-			macAddress,
-			name: `TRMNL Device ${friendlyId}`,
-			friendlyId,
-			apiKey,
-			metrics,
-			userId: currentUserId,
-		});
-
-		if (!newDevice) {
-			throw new Error("Failed to create new device record");
-		}
-
-		const state = createKnownDeviceState(newDevice.friendly_id);
-		logDeviceState(
-			"Created new device with provided MAC address",
-			state,
-			metrics,
-			{
-				mac_address: macAddress,
-				has_api_key: Boolean(apiKey),
-			},
-		);
-
-		return { type: "device", state };
-	} catch (createError) {
-		const deviceError: CustomError = new Error(
-			"Error creating device with provided MAC address",
-		);
-		deviceError.originalError = createError;
-
-		logError(deviceError, {
-			source: LOG_SOURCE,
-			metadata: {
-				mac_address: macAddress,
-				has_api_key: Boolean(apiKey),
-				friendly_id: friendlyId,
-			},
-		});
-
-		return null;
-	}
-};
-
-const resolveDeviceByApiKeyAndMac = async (
-	context: LogRequestContext & { apiKey: string; macAddress: string },
-): Promise<LogDeviceResult | null> => {
-	const { apiKey, macAddress, metrics } = context;
-	const deviceByApiKey = await findDeviceByApiKeyAndUpdateMac(db, {
-		apiKey,
-		macAddress,
-		source: LOG_SOURCE,
-		successMessage: "Updated device with real MAC address",
-	});
-
-	if (!deviceByApiKey) {
-		return createDeviceWithProvidedMac(context);
-	}
-
-	const state = createKnownDeviceState(deviceByApiKey.friendly_id);
-
-	await updateDeviceMetrics(state.deviceId, deviceByApiKey, metrics);
-	logDeviceState(
-		"Device authenticated by API key and updated with MAC address",
-		state,
-		metrics,
-		{
-			mac_address: macAddress,
-			has_api_key: Boolean(apiKey),
-		},
-	);
-
-	return { type: "device", state };
-};
-
-const resolveKnownApiKeyDevice = async (
-	context: LogRequestContext & { apiKey: string },
-	device: DeviceRow,
-): Promise<LogDeviceResult> => {
-	const { apiKey, macAddress, metrics } = context;
-	const state = createKnownDeviceState(device.friendly_id);
-
-	if (macAddress && macAddress !== device.mac_address) {
-		await updateDeviceMacAddress(
-			state.deviceId,
-			macAddress,
-			"Updated device with MAC address",
-		);
-	}
-
-	await updateDeviceMetrics(state.deviceId, device, metrics);
-	logDeviceState("Device authenticated by API key", state, metrics, {
-		has_api_key: Boolean(apiKey),
-	});
-
-	return { type: "device", state };
-};
-
-const maskedApiKey = (apiKey: string) =>
-	apiKey.length > 8 ? `xxxx${apiKey.substring(apiKey.length - 4)}` : apiKey;
-
-const resolveExistingMockDevice = async (
-	context: LogRequestContext & { apiKey: string },
-	mockMacAddress: string,
-): Promise<LogDeviceResult | null> => {
-	const { macAddress, metrics } = context;
-	const existingMockDevice = await findDeviceByMacAddress(mockMacAddress);
-
-	if (!existingMockDevice) {
-		return null;
-	}
-
-	const state: DeviceLogState = {
-		deviceId: existingMockDevice.friendly_id,
-		deviceFound: true,
-		deviceStatus: "existing_mock",
-	};
-
-	if (macAddress) {
-		await updateDeviceMacAddress(
-			state.deviceId,
-			macAddress,
-			"Updated mock device with real MAC address",
-			"Error updating MAC address for mock device",
-		);
-	}
-
-	await updateDeviceMetrics(
-		state.deviceId,
-		existingMockDevice,
-		metrics,
-		"Error updating existing mock device",
-	);
-	logDeviceState(
-		"Using existing mock device for unknown logger",
-		state,
-		metrics,
-		{
-			mock_mac_address: mockMacAddress,
-		},
-	);
-
-	return { type: "device", state };
-};
-
-const createUnknownLoggerDevice = async (
-	context: LogRequestContext & { apiKey: string },
-	mockMacAddress: string,
-): Promise<LogDeviceResult> => {
-	const { apiKey, currentUserId, macAddress, metrics } = context;
-
-	if (!currentUserId) {
-		return {
-			type: "response",
-			response: unownedDeviceResponse(
-				"Refusing to auto-provision an unowned mock device",
-				{
-					hasApiKey: true,
-					mockMacAddress,
-				},
-			),
-		};
-	}
-
-	const hiddenApiKey = maskedApiKey(apiKey);
-	const mockIdentity = createMockDeviceIdentity(apiKey, macAddress);
-
-	try {
-		const newDevice = await insertLogDevice({
-			macAddress: macAddress || mockMacAddress,
-			name: `Unknown device with API ${hiddenApiKey}`,
-			friendlyId: mockIdentity.friendlyId,
-			apiKey: mockIdentity.apiKey,
-			metrics,
-			userId: currentUserId,
-		});
-
-		if (!newDevice) {
-			throw new Error("Failed to create device record");
-		}
-
-		const state: DeviceLogState = {
-			deviceId: newDevice.friendly_id,
-			deviceFound: true,
-			deviceStatus: "new_mock",
-		};
-
-		logDeviceState("Created new device for unknown logger", state, metrics, {
-			original_api_key: hiddenApiKey,
-			new_device_id: state.deviceId,
-			mock_mac_address: mockMacAddress,
-		});
-
-		return { type: "device", state };
-	} catch (createError) {
-		const deviceError: CustomError = new Error(
-			"Error creating device for unknown logger",
-		);
-		deviceError.originalError = createError;
-
-		logError(deviceError, {
-			source: LOG_SOURCE,
-			metadata: {
-				apiKey: hiddenApiKey,
-				mockMacAddress,
-				friendly_id: mockIdentity.friendlyId,
-				new_api_key: mockIdentity.apiKey,
-				device_status: "new_mock",
-			},
-		});
-
-		return {
-			type: "response",
-			response: failedUnknownDeviceResponse(),
-		};
-	}
-};
-
-const resolveUnknownApiKeyDevice = async (
-	context: LogRequestContext & { apiKey: string },
-): Promise<LogDeviceResult> => {
-	const mockMacAddress = generateMockMacAddress(context.apiKey);
-	const existingMockDevice = await resolveExistingMockDevice(
-		context,
-		mockMacAddress,
-	);
-
-	return (
-		existingMockDevice ??
-		(await createUnknownLoggerDevice(context, mockMacAddress))
-	);
-};
-
-const resolveDeviceByApiKey = async (
-	context: LogRequestContext & { apiKey: string },
-): Promise<LogDeviceResult> => {
-	const device = await findDeviceByApiKey(context.apiKey);
-
-	return device
-		? resolveKnownApiKeyDevice(context, device)
-		: resolveUnknownApiKeyDevice(context);
-};
-
-const resolveLogDevice = async (
-	context: LogRequestContext & { apiKey: string },
-): Promise<LogDeviceResult> => {
-	if (context.macAddress) {
-		const deviceByMac = await resolveDeviceByMac({
-			...context,
-			macAddress: context.macAddress,
-		});
-
-		if (deviceByMac) {
-			return deviceByMac;
-		}
-
-		const deviceByApiKeyAndMac = await resolveDeviceByApiKeyAndMac({
-			...context,
-			macAddress: context.macAddress,
-		});
-
-		if (deviceByApiKeyAndMac) {
-			return deviceByApiKeyAndMac;
-		}
-	}
-
-	return resolveDeviceByApiKey(context);
-};
-
-const toLogEntry = (log: unknown) => {
-	if (typeof log === "object" && log !== null && "creation_timestamp" in log) {
-		const logEntry = log as LogEntry;
-		return {
-			...logEntry,
-			timestamp: logEntry.creation_timestamp
-				? new Date(logEntry.creation_timestamp * 1000).toISOString()
-				: new Date().toISOString(),
-		};
-	}
-
-	const now = Math.floor(Date.now() / 1000);
-	return {
-		creation_timestamp: now,
-		message: String(log),
-		timestamp: new Date().toISOString(),
-	};
-};
-
-const readLogsArray = async (request: Request) => {
-	const requestBody: LogRequestBody = await request.json();
-	return Array.isArray(requestBody.logs) ? requestBody.logs : null;
-};
-
-const logProcessingStart = (
-	logsArray: unknown[],
-	state: DeviceLogState,
-	metrics: LogRequestHeaders,
-) => {
-	logInfo("Processing logs array", {
-		source: LOG_SOURCE,
-		metadata: {
-			logs_count: logsArray.length,
-			refresh_rate: metrics.refreshRate,
-			battery_voltage: metrics.batteryVoltage,
-			fw_version: metrics.fwVersion,
-			rssi: metrics.rssi,
-			device_id: state.deviceId,
-			device_found: state.deviceFound,
-			device_status: state.deviceStatus,
-		},
-	});
-};
-
-const saveLogs = async (
-	logsArray: unknown[],
-	state: DeviceLogState,
-	metrics: LogRequestHeaders,
-) => {
-	const logData: LogData = {
-		logs_array: logsArray.map(toLogEntry),
-	};
-
-	console.log("📦 Processed log data:", JSON.stringify(logData, null, 2));
-
-	try {
-		await db
-			.insertInto("logs")
-			.values({
-				friendly_id: state.deviceId,
-				log_data: JSON.stringify(logData),
-			})
-			.execute();
-	} catch (insertError) {
-		const dbError: CustomError = new Error(
-			"Error inserting log with device ID",
-		);
-		dbError.originalError = insertError;
-		console.error(insertError);
-		logError(dbError, {
-			source: LOG_SOURCE,
-			metadata: {
-				device_id: state.deviceId,
-				refresh_rate: metrics.refreshRate,
-				battery_voltage: metrics.batteryVoltage,
-				fw_version: metrics.fwVersion,
-				rssi: metrics.rssi,
-				device_found: state.deviceFound,
-				device_status: state.deviceStatus,
-			},
-		});
-
-		return failedLogSaveResponse();
-	}
-
-	logInfo("Log saved successfully", {
-		source: LOG_SOURCE,
-		metadata: {
-			device_id: state.deviceId,
-			logs_count: logsArray.length,
-			refresh_rate: metrics.refreshRate,
-			battery_voltage: metrics.batteryVoltage,
-			fw_version: metrics.fwVersion,
-			rssi: metrics.rssi,
-			device_found: state.deviceFound,
-			device_status: state.deviceStatus,
-		},
-	});
-
-	return null;
-};
+}
 
 export async function GET(request: Request) {
 	logInfo("Log API GET Request received (unexpected)", {
@@ -787,8 +81,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+	// Log request details
 	logInfo("Log API Request", {
-		source: LOG_SOURCE,
+		source: "api/log",
 		metadata: {
 			url: request.url,
 			method: request.method,
@@ -799,8 +94,10 @@ export async function POST(request: Request) {
 	});
 
 	try {
-		const { macAddress, apiKey, metrics } = parseLogRequestHeaders(request);
+		const macAddress = request.headers.get("ID")?.toUpperCase();
+		const apiKey = request.headers.get("Access-Token");
 
+		// TRMNL API requires Access-Token header
 		if (!apiKey) {
 			return NextResponse.json(
 				{
@@ -810,7 +107,12 @@ export async function POST(request: Request) {
 			);
 		}
 
+		const refreshRate = request.headers.get("Refresh-Rate");
+		const batteryVoltage = request.headers.get("Battery-Voltage");
+		const fwVersion = request.headers.get("FW-Version");
+		const rssi = request.headers.get("RSSI");
 		const { ready } = await checkDbConnection();
+
 		if (!ready) {
 			console.warn(
 				"Database client not initialized, using noDB mode, skipping log processing",
@@ -818,40 +120,730 @@ export async function POST(request: Request) {
 			logInfo(
 				"Database client not initialized, using noDB mode, skipping log processing",
 				{
-					source: LOG_SOURCE,
+					source: "api/log",
 					metadata: {
 						macAddress: macAddress || null,
 						hasApiKey: Boolean(apiKey),
-						refreshRate: metrics.refreshRate || null,
-						batteryVoltage: metrics.batteryVoltage || null,
-						fwVersion: metrics.fwVersion || null,
-						rssi: metrics.rssi || null,
+						refreshRate: refreshRate || null,
+						batteryVoltage: batteryVoltage || null,
+						fwVersion: fwVersion || null,
+						rssi: rssi || null,
 					},
 				},
 			);
 			return NextResponse.json(
 				{
-					status: 200,
-					message: "Log received",
+					status: 503,
+					message: "Database not available",
 				},
-				{ status: 200 },
+				{ status: 503 },
 			);
 		}
 
+		// Initialize device variables
+		let deviceId = "";
+		let deviceFound = false;
+		let deviceStatus: "known" | "existing_mock" | "new_mock" = "known";
 		const currentUserId = await getCurrentUserId();
-		const resolvedDevice = await resolveLogDevice({
-			macAddress,
-			apiKey,
-			metrics,
-			currentUserId,
-		});
 
-		if (resolvedDevice.type === "response") {
-			return resolvedDevice.response;
+		// First, try to find the device by MAC address if provided
+		if (macAddress) {
+			const deviceByMac = await db
+				.selectFrom("devices")
+				.selectAll()
+				.where("mac_address", "=", macAddress)
+				.executeTakeFirst();
+
+			if (deviceByMac) {
+				const canUseDeviceByMac =
+					apiKey === deviceByMac.api_key ||
+					(Boolean(currentUserId) && deviceByMac.user_id === currentUserId);
+
+				if (!canUseDeviceByMac) {
+					logError(
+						"Refusing logs for device without owner or valid access token",
+						{
+							source: "api/log",
+							metadata: {
+								device_id: deviceByMac.friendly_id,
+								mac_address: macAddress,
+								hasApiKey: Boolean(apiKey),
+							},
+						},
+					);
+					return NextResponse.json(
+						{
+							status: 401,
+							message: "Valid access token required for registered device",
+						},
+						{ status: 401 },
+					);
+				}
+
+				// Device found by MAC address
+				deviceId = deviceByMac.friendly_id;
+				deviceFound = true;
+				deviceStatus = "known";
+
+				// If API key is provided and different from the stored one, update it
+				if (apiKey && apiKey !== deviceByMac.api_key) {
+					try {
+						await db
+							.updateTable("devices")
+							.set({
+								api_key: apiKey,
+								updated_at: new Date().toISOString(),
+							})
+							.where("friendly_id", "=", deviceId)
+							.execute();
+
+						logInfo("Updated API key for device", {
+							source: "api/log",
+							metadata: {
+								device_id: deviceId,
+							},
+						});
+					} catch (updateError) {
+						logError(new Error("Error updating API key for device"), {
+							source: "api/log",
+							metadata: {
+								device_id: deviceId,
+								error: updateError,
+							},
+						});
+					}
+				}
+
+				// Update device metrics
+				try {
+					await db
+						.updateTable("devices")
+						.set({
+							last_update_time: new Date().toISOString(),
+							next_expected_update: nextExpectedUpdateFromRefresh(refreshRate),
+							battery_voltage: batteryVoltage
+								? Number.parseFloat(batteryVoltage)
+								: deviceByMac.battery_voltage,
+							firmware_version: fwVersion || deviceByMac.firmware_version,
+							rssi: rssi ? Number.parseInt(rssi, 10) : deviceByMac.rssi,
+							updated_at: new Date().toISOString(),
+						})
+						.where("friendly_id", "=", deviceId)
+						.execute();
+				} catch (updateError) {
+					logError(new Error("Error updating device metrics"), {
+						source: "api/log",
+						metadata: {
+							device_id: deviceId,
+							error: updateError,
+						},
+					});
+				}
+
+				logInfo("Device authenticated by MAC address", {
+					source: "api/log",
+					metadata: {
+						mac_address: macAddress,
+						device_id: deviceId,
+						refresh_rate: refreshRate,
+						battery_voltage: batteryVoltage,
+						fw_version: fwVersion,
+						rssi: rssi,
+						device_found: deviceFound,
+						device_status: deviceStatus,
+					},
+				});
+			} else if (apiKey) {
+				// MAC address not found but API key provided
+				// First check if the API key exists in the database
+				const deviceByApiKey = await db
+					.selectFrom("devices")
+					.selectAll()
+					.where("api_key", "=", apiKey)
+					.executeTakeFirst();
+
+				if (deviceByApiKey) {
+					// Device found by API key, update its MAC address
+					try {
+						await db
+							.updateTable("devices")
+							.set({
+								mac_address: macAddress,
+								updated_at: new Date().toISOString(),
+							})
+							.where("friendly_id", "=", deviceByApiKey.friendly_id)
+							.execute();
+
+						logInfo("Updated device with real MAC address", {
+							source: "api/log",
+							metadata: {
+								device_id: deviceByApiKey.friendly_id,
+								mac_address: macAddress,
+								has_api_key: Boolean(apiKey),
+							},
+						});
+					} catch (updateError) {
+						logError(new Error("Error updating MAC address for device"), {
+							source: "api/log",
+							metadata: {
+								device_id: deviceByApiKey.friendly_id,
+								mac_address: macAddress,
+								has_api_key: Boolean(apiKey),
+								error: updateError,
+							},
+						});
+					}
+
+					// Use the existing device
+					deviceId = deviceByApiKey.friendly_id;
+					deviceFound = true;
+					deviceStatus = "known";
+
+					// Update device metrics
+					try {
+						await db
+							.updateTable("devices")
+							.set({
+								last_update_time: new Date().toISOString(),
+								next_expected_update:
+									nextExpectedUpdateFromRefresh(refreshRate),
+								battery_voltage: batteryVoltage
+									? Number.parseFloat(batteryVoltage)
+									: deviceByApiKey.battery_voltage,
+								firmware_version: fwVersion || deviceByApiKey.firmware_version,
+								rssi: rssi ? Number.parseInt(rssi, 10) : deviceByApiKey.rssi,
+								updated_at: new Date().toISOString(),
+							})
+							.where("friendly_id", "=", deviceId)
+							.execute();
+					} catch (metricsUpdateError) {
+						logError(new Error("Error updating device metrics"), {
+							source: "api/log",
+							metadata: {
+								device_id: deviceId,
+								error: metricsUpdateError,
+							},
+						});
+					}
+
+					logInfo(
+						"Device authenticated by API key and updated with MAC address",
+						{
+							source: "api/log",
+							metadata: {
+								mac_address: macAddress,
+								has_api_key: Boolean(apiKey),
+								device_id: deviceId,
+								refresh_rate: refreshRate,
+								battery_voltage: batteryVoltage,
+								fw_version: fwVersion,
+								rssi: rssi,
+								device_found: deviceFound,
+								device_status: deviceStatus,
+							},
+						},
+					);
+				} else {
+					// API key not found, create a new device with the provided MAC address and API key
+					if (!currentUserId) {
+						logError("Refusing to auto-provision an unowned device", {
+							source: "api/log",
+							metadata: {
+								macAddress,
+								hasApiKey: true,
+							},
+						});
+						return NextResponse.json(
+							{
+								status: 400,
+								message: "Device owner is required before logs can be accepted",
+							},
+							{ status: 400 },
+						);
+					}
+
+					const friendly_id = generateFriendlyId(
+						macAddress,
+						new Date().toISOString().replace(/[-:Z]/g, ""),
+					);
+
+					try {
+						const newDevice = await db
+							.insertInto("devices")
+							.values({
+								mac_address: macAddress,
+								name: `TRMNL Device ${friendly_id}`,
+								friendly_id: friendly_id,
+								api_key: apiKey,
+								refresh_schedule: refreshScheduleFromHeader(refreshRate),
+								last_update_time: new Date().toISOString(),
+								next_expected_update:
+									nextExpectedUpdateFromRefresh(refreshRate),
+								timezone: DEFAULT_DEVICE_TIMEZONE,
+								battery_voltage: batteryVoltage
+									? Number.parseFloat(batteryVoltage)
+									: null,
+								firmware_version: fwVersion || null,
+								rssi: rssi ? Number.parseInt(rssi, 10) : null,
+								user_id: currentUserId,
+							})
+							.returningAll()
+							.executeTakeFirst();
+
+						if (!newDevice) {
+							throw new Error("Failed to create new device record");
+						}
+
+						deviceId = newDevice.friendly_id;
+						deviceFound = true;
+						deviceStatus = "known";
+
+						logInfo("Created new device with provided MAC address", {
+							source: "api/log",
+							metadata: {
+								mac_address: macAddress,
+								has_api_key: Boolean(apiKey),
+								device_id: deviceId,
+								refresh_rate: refreshRate,
+								battery_voltage: batteryVoltage,
+								fw_version: fwVersion,
+								rssi: rssi,
+								device_found: deviceFound,
+								device_status: deviceStatus,
+							},
+						});
+					} catch (createError) {
+						const deviceError: CustomError = new Error(
+							"Error creating device with provided MAC address",
+						);
+						deviceError.originalError = createError;
+
+						logError(deviceError, {
+							source: "api/log",
+							metadata: {
+								mac_address: macAddress,
+								has_api_key: Boolean(apiKey),
+								friendly_id,
+							},
+						});
+
+						// Fall back to API key lookup
+						deviceFound = false;
+					}
+				}
+			}
 		}
 
-		const logsArray = await readLogsArray(request);
-		if (!logsArray) {
+		// If device not found by MAC address, try API key
+		if (!deviceFound && apiKey) {
+			const device = await db
+				.selectFrom("devices")
+				.selectAll()
+				.where("api_key", "=", apiKey)
+				.executeTakeFirst();
+
+			if (device) {
+				// Use the found device
+				deviceId = device.friendly_id;
+				deviceFound = true;
+				deviceStatus = "known";
+
+				// If MAC address is provided, update the device with the real MAC address
+				if (macAddress && macAddress !== device.mac_address) {
+					try {
+						await db
+							.updateTable("devices")
+							.set({
+								mac_address: macAddress,
+								updated_at: new Date().toISOString(),
+							})
+							.where("friendly_id", "=", deviceId)
+							.execute();
+
+						logInfo("Updated device with MAC address", {
+							source: "api/log",
+							metadata: {
+								device_id: deviceId,
+								mac_address: macAddress,
+							},
+						});
+					} catch (updateMacError) {
+						logError(new Error("Error updating MAC address for device"), {
+							source: "api/log",
+							metadata: {
+								device_id: deviceId,
+								error: updateMacError,
+							},
+						});
+					}
+				}
+
+				// Update device metrics
+				try {
+					await db
+						.updateTable("devices")
+						.set({
+							last_update_time: new Date().toISOString(),
+							next_expected_update: nextExpectedUpdateFromRefresh(refreshRate),
+							battery_voltage: batteryVoltage
+								? Number.parseFloat(batteryVoltage)
+								: device.battery_voltage,
+							firmware_version: fwVersion || device.firmware_version,
+							rssi: rssi ? Number.parseInt(rssi, 10) : device.rssi,
+							updated_at: new Date().toISOString(),
+						})
+						.where("friendly_id", "=", deviceId)
+						.execute();
+				} catch (updateError) {
+					logError(new Error("Error updating device metrics"), {
+						source: "api/log",
+						metadata: {
+							device_id: deviceId,
+							error: updateError,
+						},
+					});
+				}
+
+				logInfo("Device authenticated by API key", {
+					source: "api/log",
+					metadata: {
+						has_api_key: Boolean(apiKey),
+						device_id: deviceId,
+						refresh_rate: refreshRate,
+						battery_voltage: batteryVoltage,
+						fw_version: fwVersion,
+						rssi: rssi,
+						device_found: deviceFound,
+						device_status: deviceStatus,
+					},
+				});
+			} else {
+				// Device not found by API key, first check if this API key exists elsewhere
+				// This could happen if the device was registered with a different MAC address
+				const existingDeviceWithApiKey = await db
+					.selectFrom("devices")
+					.selectAll()
+					.where("api_key", "=", apiKey)
+					.executeTakeFirst();
+
+				if (existingDeviceWithApiKey) {
+					// Device found with this API key but different MAC address
+					deviceId = existingDeviceWithApiKey.friendly_id;
+					deviceFound = true;
+					deviceStatus = "known";
+
+					// If MAC address is provided, update the device with the real MAC address
+					if (
+						macAddress &&
+						macAddress !== existingDeviceWithApiKey.mac_address
+					) {
+						try {
+							await db
+								.updateTable("devices")
+								.set({
+									mac_address: macAddress,
+									updated_at: new Date().toISOString(),
+								})
+								.where("friendly_id", "=", deviceId)
+								.execute();
+
+							logInfo("Updated device with MAC address", {
+								source: "api/log",
+								metadata: {
+									device_id: deviceId,
+									mac_address: macAddress,
+								},
+							});
+						} catch (updateMacError) {
+							logError(new Error("Error updating MAC address for device"), {
+								source: "api/log",
+								metadata: {
+									device_id: deviceId,
+									mac_address: macAddress,
+									error: updateMacError,
+								},
+							});
+						}
+					}
+
+					// Update device metrics
+					try {
+						await db
+							.updateTable("devices")
+							.set({
+								last_update_time: new Date().toISOString(),
+								next_expected_update:
+									nextExpectedUpdateFromRefresh(refreshRate),
+								battery_voltage: batteryVoltage
+									? Number.parseFloat(batteryVoltage)
+									: existingDeviceWithApiKey.battery_voltage,
+								firmware_version:
+									fwVersion || existingDeviceWithApiKey.firmware_version,
+								rssi: rssi
+									? Number.parseInt(rssi, 10)
+									: existingDeviceWithApiKey.rssi,
+								updated_at: new Date().toISOString(),
+							})
+							.where("friendly_id", "=", deviceId)
+							.execute();
+					} catch (updateError) {
+						logError(new Error("Error updating device metrics"), {
+							source: "api/log",
+							metadata: {
+								device_id: deviceId,
+								error: updateError,
+							},
+						});
+					}
+
+					logInfo("Device authenticated by API key (different MAC)", {
+						source: "api/log",
+						metadata: {
+							has_api_key: Boolean(apiKey),
+							device_id: deviceId,
+							mac_address: macAddress,
+							refresh_rate: refreshRate,
+							battery_voltage: batteryVoltage,
+							fw_version: fwVersion,
+							rssi: rssi,
+							device_found: deviceFound,
+							device_status: deviceStatus,
+						},
+					});
+				} else {
+					// Check if we already have a device with a mock MAC address for this API key
+					const mockMacAddress = generateMockMacAddress(apiKey);
+
+					// Check if we already have a device with this mock MAC address
+					const existingMockDevice = await db
+						.selectFrom("devices")
+						.selectAll()
+						.where("mac_address", "=", mockMacAddress)
+						.executeTakeFirst();
+
+					if (existingMockDevice) {
+						// Use the existing mock device
+						deviceId = existingMockDevice.friendly_id;
+						deviceFound = true;
+						deviceStatus = "existing_mock";
+
+						// If real MAC address is provided, update the mock device with the real MAC address
+						if (macAddress) {
+							try {
+								await db
+									.updateTable("devices")
+									.set({
+										mac_address: macAddress,
+										updated_at: new Date().toISOString(),
+									})
+									.where("friendly_id", "=", deviceId)
+									.execute();
+
+								logInfo("Updated mock device with real MAC address", {
+									source: "api/log",
+									metadata: {
+										device_id: deviceId,
+										mac_address: macAddress,
+									},
+								});
+							} catch (updateMacError) {
+								logError(
+									new Error("Error updating MAC address for mock device"),
+									{
+										source: "api/log",
+										metadata: {
+											device_id: deviceId,
+											error: updateMacError,
+										},
+									},
+								);
+							}
+						}
+
+						// Update the device with the latest metrics
+						try {
+							await db
+								.updateTable("devices")
+								.set({
+									last_update_time: new Date().toISOString(),
+									next_expected_update:
+										nextExpectedUpdateFromRefresh(refreshRate),
+									battery_voltage: batteryVoltage
+										? Number.parseFloat(batteryVoltage)
+										: existingMockDevice.battery_voltage,
+									firmware_version:
+										fwVersion || existingMockDevice.firmware_version,
+									rssi: rssi
+										? Number.parseInt(rssi, 10)
+										: existingMockDevice.rssi,
+									updated_at: new Date().toISOString(),
+								})
+								.where("friendly_id", "=", deviceId)
+								.execute();
+						} catch (updateError) {
+							logError(new Error("Error updating existing mock device"), {
+								source: "api/log",
+								metadata: {
+									device_id: deviceId,
+									error: updateError,
+									device_found: deviceFound,
+									device_status: deviceStatus,
+								},
+							});
+						}
+
+						logInfo("Using existing mock device for unknown logger", {
+							source: "api/log",
+							metadata: {
+								device_id: deviceId,
+								mock_mac_address: mockMacAddress,
+								refresh_rate: refreshRate,
+								battery_voltage: batteryVoltage,
+								fw_version: fwVersion,
+								rssi: rssi,
+								device_found: deviceFound,
+								device_status: deviceStatus,
+							},
+						});
+					} else {
+						// No existing mock device, create a new one
+						if (!currentUserId) {
+							logError("Refusing to auto-provision an unowned mock device", {
+								source: "api/log",
+								metadata: {
+									hasApiKey: true,
+									mockMacAddress,
+								},
+							});
+							return NextResponse.json(
+								{
+									status: 400,
+									message:
+										"Device owner is required before logs can be accepted",
+								},
+								{ status: 400 },
+							);
+						}
+
+						deviceStatus = "new_mock";
+
+						// Create a masked API key from the provided one
+						let maskedApiKey = apiKey;
+						if (apiKey.length > 8) {
+							maskedApiKey = `xxxx${apiKey.substring(apiKey.length - 4)}`;
+						}
+
+						// Generate unique IDs for the new device
+						const friendly_id = generateFriendlyId(
+							mockMacAddress,
+							new Date().toISOString().replace(/[-:Z]/g, ""),
+						);
+						const new_api_key = macAddress
+							? apiKey
+							: generateApiKey(
+									mockMacAddress,
+									new Date().toISOString().replace(/[-:Z]/g, ""),
+								);
+
+						try {
+							const newDevice = await db
+								.insertInto("devices")
+								.values({
+									mac_address: macAddress || mockMacAddress,
+									name: `Unknown device with API ${maskedApiKey}`,
+									friendly_id: friendly_id,
+									api_key: new_api_key,
+									refresh_schedule: refreshScheduleFromHeader(refreshRate),
+									last_update_time: new Date().toISOString(),
+									next_expected_update:
+										nextExpectedUpdateFromRefresh(refreshRate),
+									timezone: DEFAULT_DEVICE_TIMEZONE,
+									battery_voltage: batteryVoltage
+										? Number.parseFloat(batteryVoltage)
+										: null,
+									firmware_version: fwVersion || null,
+									rssi: rssi ? Number.parseInt(rssi, 10) : null,
+									user_id: currentUserId,
+								})
+								.returningAll()
+								.executeTakeFirst();
+
+							if (!newDevice) {
+								throw new Error("Failed to create device record");
+							}
+
+							// Use the newly created device
+							deviceId = newDevice.friendly_id;
+							deviceFound = true;
+
+							logInfo("Created new device for unknown logger", {
+								source: "api/log",
+								metadata: {
+									original_api_key: maskedApiKey,
+									new_device_id: deviceId,
+									mock_mac_address: mockMacAddress,
+									refresh_rate: refreshRate,
+									battery_voltage: batteryVoltage,
+									fw_version: fwVersion,
+									rssi: rssi,
+									device_found: deviceFound,
+									device_status: deviceStatus,
+								},
+							});
+						} catch (createError) {
+							// Create an error object with the error details
+							const deviceError: CustomError = new Error(
+								"Error creating device for unknown logger",
+							);
+							deviceError.originalError = createError;
+
+							logError(deviceError, {
+								source: "api/log",
+								metadata: {
+									apiKey: maskedApiKey,
+									mockMacAddress,
+									friendly_id,
+									new_api_key,
+									device_status: deviceStatus,
+								},
+							});
+
+							return NextResponse.json(
+								{
+									status: 500,
+									message: "Failed to process logs from unknown device",
+								},
+								{ status: 500 },
+							);
+						}
+					}
+				}
+			}
+		}
+
+		// If we still don't have a device, return an error
+		if (!deviceFound) {
+			logError(new Error("No device found or created"), {
+				source: "api/log",
+				metadata: {
+					mac_address: macAddress,
+					has_api_key: Boolean(apiKey),
+				},
+			});
+
+			return NextResponse.json(
+				{
+					status: 400,
+					message: "No device found or created",
+				},
+				{ status: 400 },
+			);
+		}
+
+		const requestBody: LogRequestBody = await request.json();
+
+		// TRMNL API format: { "logs": [] }
+		if (!requestBody.logs || !Array.isArray(requestBody.logs)) {
 			return NextResponse.json(
 				{
 					error: "Invalid request body. Expected { 'logs': [] }",
@@ -860,18 +852,115 @@ export async function POST(request: Request) {
 			);
 		}
 
-		const { state } = resolvedDevice;
-		logProcessingStart(logsArray, state, metrics);
-		const saveErrorResponse = await saveLogs(logsArray, state, metrics);
-		if (saveErrorResponse) {
-			return saveErrorResponse;
+		const logsArray = requestBody.logs;
+
+		logInfo("Processing logs array", {
+			source: "api/log",
+			metadata: {
+				logs_count: logsArray.length,
+				refresh_rate: refreshRate,
+				battery_voltage: batteryVoltage,
+				fw_version: fwVersion,
+				rssi: rssi,
+				device_id: deviceId,
+				device_found: deviceFound,
+				device_status: deviceStatus,
+			},
+		});
+
+		// Process log data - convert to internal format
+		const logData: LogData = {
+			logs_array: logsArray.map((log: unknown) => {
+				if (
+					typeof log === "object" &&
+					log !== null &&
+					"creation_timestamp" in log
+				) {
+					const logEntry = log as LogEntry;
+					return {
+						...logEntry,
+						timestamp: logEntry.creation_timestamp
+							? new Date(logEntry.creation_timestamp * 1000).toISOString()
+							: new Date().toISOString(),
+					};
+				}
+				// For simple string logs or other types
+				const now = Math.floor(Date.now() / 1000);
+				return {
+					creation_timestamp: now,
+					message: String(log),
+					timestamp: new Date().toISOString(),
+				};
+			}),
+		};
+
+		console.log("📦 Processed log data:", JSON.stringify(logData, null, 2));
+
+		// Insert log with the device ID
+		try {
+			await db
+				.insertInto("logs")
+				.values({
+					friendly_id: deviceId,
+					log_data: JSON.stringify(logData),
+				})
+				.execute();
+		} catch (insertError) {
+			// Create an error object with the insert error details
+			const dbError: CustomError = new Error(
+				"Error inserting log with device ID",
+			);
+			dbError.originalError = insertError;
+			console.error(insertError);
+			logError(dbError, {
+				source: "api/log",
+				metadata: {
+					device_id: deviceId,
+					refresh_rate: refreshRate,
+					battery_voltage: batteryVoltage,
+					fw_version: fwVersion,
+					rssi: rssi,
+					device_found: deviceFound,
+					device_status: deviceStatus,
+				},
+			});
+
+			return NextResponse.json(
+				{
+					status: 500,
+					message: "Failed to save logs",
+				},
+				{ status: 500 },
+			);
 		}
 
+		logInfo("Log saved successfully", {
+			source: "api/log",
+			metadata: {
+				device_id: deviceId,
+				logs_count: logsArray.length,
+				refresh_rate: refreshRate,
+				battery_voltage: batteryVoltage,
+				fw_version: fwVersion,
+				rssi: rssi,
+				device_found: deviceFound,
+				device_status: deviceStatus,
+			},
+		});
+
+		// TRMNL API returns 204 No Content on success
 		return new NextResponse(null, { status: 204 });
 	} catch (error) {
+		// The error object already contains the stack trace
 		logError(error as Error, {
-			source: LOG_SOURCE,
+			source: "api/log",
 		});
-		return internalErrorResponse();
+		return NextResponse.json(
+			{
+				status: 500,
+				message: "Internal server error",
+			},
+			{ status: 500 },
+		);
 	}
 }

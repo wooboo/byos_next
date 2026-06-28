@@ -94,6 +94,13 @@ export async function getLatestFirmware(): Promise<FirmwareRelease | null> {
 			publishedAt: data.published_at || new Date().toISOString(),
 		};
 
+		// Don't offer an update the device can't download: variant-partitioned
+		// buckets 404 the flat FW{version}.bin path, reboot-looping devices.
+		const reachable = await fetch(release.downloadUrl, { method: "HEAD" })
+			.then((r) => r.ok)
+			.catch(() => false);
+		if (!reachable) return null;
+
 		// Update cache
 		cachedRelease = release;
 		cacheTime = now;
@@ -103,4 +110,12 @@ export async function getLatestFirmware(): Promise<FirmwareRelease | null> {
 		console.error("Error fetching firmware release:", error);
 		return cachedRelease; // Return stale cache if available
 	}
+}
+
+/**
+ * Clear the firmware cache (useful for testing)
+ */
+export function clearFirmwareCache(): void {
+	cachedRelease = null;
+	cacheTime = 0;
 }

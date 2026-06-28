@@ -10,13 +10,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-	canAddGridSize,
-	GRID_SELECTOR_CELL_SIZE,
-	getGridCellFillStyle,
-	getGridSizeFromPointer,
-	MAX_GRID_SIZE,
-} from "./add-grid-size-helpers";
+
+const maxGridSize = 17;
 
 // make google doc style boxes to add grid size, from 4x4 to 17x17, disable adding if the size is already in the list or too small
 
@@ -30,16 +25,8 @@ export default function AddGridSize({
 	const [hoveredSize, setHoveredSize] = useState<string | null>(null);
 	const [open, setOpen] = useState(false);
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const canvasSize = MAX_GRID_SIZE * GRID_SELECTOR_CELL_SIZE;
-	const addHoveredSize = () => {
-		if (!canAddGridSize(hoveredSize, availableGridSizes)) {
-			return;
-		}
-
-		onAddSize(hoveredSize);
-		toast.success(`Added grid size: ${hoveredSize}`);
-		setOpen(false); // Close dropdown when size is selected
-	};
+	const cellSize = 8; // 2px for cell + gap
+	const canvasSize = maxGridSize * cellSize;
 
 	// Draw the grid on canvas
 	const renderCanvas = useCallback(() => {
@@ -57,23 +44,21 @@ export default function AddGridSize({
 			ctx.clearRect(0, 0, canvasSize, canvasSize);
 
 			// Draw all cells
-			for (let rowIdx = 1; rowIdx <= MAX_GRID_SIZE; rowIdx++) {
-				for (let colIdx = 1; colIdx <= MAX_GRID_SIZE; colIdx++) {
+			for (let rowIdx = 1; rowIdx <= maxGridSize; rowIdx++) {
+				for (let colIdx = 1; colIdx <= maxGridSize; colIdx++) {
 					const size = `${colIdx}x${rowIdx}`;
-					const x = (colIdx - 1) * GRID_SELECTOR_CELL_SIZE;
-					const y = (rowIdx - 1) * GRID_SELECTOR_CELL_SIZE;
+					const isDisabled =
+						availableGridSizes.includes(size) || (colIdx <= 4 && rowIdx <= 4);
 
-					ctx.fillStyle = getGridCellFillStyle(
-						size,
-						hoveredSize,
-						availableGridSizes,
-					);
-					ctx.fillRect(
-						x,
-						y,
-						GRID_SELECTOR_CELL_SIZE - 1,
-						GRID_SELECTOR_CELL_SIZE - 1,
-					);
+					const x = (colIdx - 1) * cellSize;
+					const y = (rowIdx - 1) * cellSize;
+
+					// Fill cell background
+					ctx.fillStyle = isDisabled ? "rgba(229, 231, 235, 0.5)" : "#e5e7eb";
+					if (size === hoveredSize && !isDisabled) {
+						ctx.fillStyle = "#3b82f6"; // blue-500
+					}
+					ctx.fillRect(x, y, cellSize - 1, cellSize - 1);
 				}
 			}
 		});
@@ -104,19 +89,44 @@ export default function AddGridSize({
 		if (!canvas) return;
 
 		const rect = canvas.getBoundingClientRect();
-		setHoveredSize(getGridSizeFromPointer(e.clientX, e.clientY, rect));
+		const x = Math.floor((e.clientX - rect.left) / cellSize) + 1;
+		const y = Math.floor((e.clientY - rect.top) / cellSize) + 1;
+
+		if (x >= 1 && x <= maxGridSize && y >= 1 && y <= maxGridSize) {
+			const size = `${x}x${y}`;
+			setHoveredSize(size);
+		} else {
+			setHoveredSize(null);
+		}
 	};
 
 	const handleCanvasClick = () => {
 		const canvas = canvasRef.current;
 		if (!canvas || !hoveredSize) return;
 
-		addHoveredSize();
+		const [colIdx, rowIdx] = hoveredSize.split("x").map(Number);
+		const isDisabled =
+			availableGridSizes.includes(hoveredSize) || (colIdx <= 4 && rowIdx <= 4);
+
+		if (!isDisabled) {
+			onAddSize(hoveredSize);
+			toast.success(`Added grid size: ${hoveredSize}`);
+			setOpen(false); // Close dropdown when size is selected
+		}
 	};
 
 	const handleCanvasKeyDown = (e: React.KeyboardEvent<HTMLCanvasElement>) => {
 		if ((e.key === "Enter" || e.key === " ") && hoveredSize) {
-			addHoveredSize();
+			const [colIdx, rowIdx] = hoveredSize.split("x").map(Number);
+			const isDisabled =
+				availableGridSizes.includes(hoveredSize) ||
+				(colIdx <= 4 && rowIdx <= 4);
+
+			if (!isDisabled) {
+				onAddSize(hoveredSize);
+				toast.success(`Added grid size: ${hoveredSize}`);
+				setOpen(false); // Close dropdown when size is selected
+			}
 		}
 	};
 

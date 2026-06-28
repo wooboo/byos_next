@@ -3,15 +3,10 @@
 import { ArrowLeft, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { fetchPlaylistWithItems } from "@/app/actions/playlist";
-import {
-	createScreenIdFromRecipe,
-	promptScreenName,
-} from "@/components/common/screen-from-recipe";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { Mixup, Recipe } from "@/lib/types";
+import type { Recipe } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { formatPlaylistDuration } from "./duration-format";
 import { PlaylistFilmstrip } from "./playlist-filmstrip";
 import {
 	type FrameData,
@@ -26,40 +21,14 @@ interface PlaylistBuilderProps {
 		items?: FrameData[];
 	};
 	recipes: Recipe[];
-	mixups: Mixup[];
-	screens: { id: string; name: string; recipe_name: string }[];
 	onSave: (data: { id?: string; name: string; items: FrameData[] }) => void;
 	onCancel: () => void;
 	isSaving?: boolean;
 }
 
-function recipeNameById(recipes: Recipe[], recipeId: string) {
-	return recipes.find((recipe) => recipe.id === recipeId)?.name ?? "New screen";
-}
-
-async function promoteRecipePatchToScreen(
-	patch: Partial<FrameData>,
-	recipes: Recipe[],
-): Promise<Partial<FrameData> | null> {
-	if (patch.screen_type !== "recipe") return patch;
-
-	const recipeId = patch.screen_id;
-	if (!recipeId) return patch;
-
-	const name = promptScreenName(recipeNameById(recipes, recipeId));
-	if (name === null) return null;
-
-	const screenId = await createScreenIdFromRecipe(recipeId, name);
-	if (screenId === null) return null;
-
-	return { ...patch, screen_type: "screen", screen_id: screenId };
-}
-
 export function PlaylistBuilder({
 	playlist,
 	recipes,
-	mixups,
-	screens,
 	onSave,
 	onCancel,
 	isSaving = false,
@@ -70,42 +39,15 @@ export function PlaylistBuilder({
 	const [isLoading, setIsLoading] = useState(false);
 
 	const screenOptions = useMemo(
-		() => [
-			{
-				label: "Recipes",
-				options: recipes.map((r) => ({
-					id: r.id,
-					name: r.name,
-					type: "recipe" as const,
-				})),
-			},
-			{
-				label: "Screens",
-				options: screens.map((s) => ({
-					id: s.id,
-					name: s.name,
-					type: "screen" as const,
-				})),
-			},
-			{
-				label: "Mixups",
-				options: mixups.map((m) => ({
-					id: m.id,
-					name: m.name,
-					type: "mixup" as const,
-				})),
-			},
-		],
-		[recipes, mixups, screens],
+		() => recipes.map((r) => ({ id: r.slug, name: r.name })),
+		[recipes],
 	);
 
 	const nameByScreenId = useMemo(() => {
 		const map = new Map<string, string>();
-		for (const r of recipes) map.set(r.id, r.name);
-		for (const s of screens) map.set(s.id, s.name);
-		for (const m of mixups) map.set(m.id, m.name);
+		for (const r of recipes) map.set(r.slug, r.name);
 		return map;
-	}, [recipes, mixups, screens]);
+	}, [recipes]);
 
 	// Hydrate items if editing and we don't have them yet
 	useEffect(() => {
@@ -118,7 +60,6 @@ export function PlaylistBuilder({
 					setItems(
 						result.items.map((item) => ({
 							id: item.id,
-							screen_type: item.screen_type ?? "recipe",
 							screen_id: item.screen_id,
 							duration: item.duration,
 							order_index: item.order_index,
@@ -142,11 +83,10 @@ export function PlaylistBuilder({
 	}, [items.length, activeIndex]);
 
 	const handleAdd = () => {
-		const defaultId = screens[0]?.id || recipes[0]?.id || "simple-text";
+		const defaultSlug = recipes[0]?.slug || "simple-text";
 		const newItem: FrameData = {
 			id: `temp-${Date.now()}`,
-			screen_id: defaultId,
-			screen_type: screens[0]?.id ? "screen" : "recipe",
+			screen_id: defaultSlug,
 			duration: 30,
 			order_index: items.length,
 			start_time: undefined,
@@ -157,14 +97,9 @@ export function PlaylistBuilder({
 		setActiveIndex(items.length);
 	};
 
-	const handleUpdate = async (id: string, patch: Partial<FrameData>) => {
-		const resolvedPatch = await promoteRecipePatchToScreen(patch, recipes);
-		if (!resolvedPatch) return;
-
+	const handleUpdate = (id: string, patch: Partial<FrameData>) => {
 		setItems((current) =>
-			current.map((item) =>
-				item.id === id ? { ...item, ...resolvedPatch } : item,
-			),
+			current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
 		);
 	};
 
@@ -200,16 +135,12 @@ export function PlaylistBuilder({
 	const previewFrames = items.map((item) => ({
 		id: item.id,
 		screen_id: item.screen_id,
-		screen_type: item.screen_type,
 		duration: item.duration,
 		label: nameByScreenId.get(item.screen_id) || item.screen_id,
 	}));
 
 	const totalSeconds = items.reduce((sum, item) => sum + item.duration, 0);
-	const totalLabel = formatPlaylistDuration(totalSeconds, {
-		suffix: "loop",
-		suffixZero: true,
-	});
+	const totalLabel = formatLoop(totalSeconds);
 
 	const activeItem = items[activeIndex];
 
@@ -306,4 +237,13 @@ export function PlaylistBuilder({
 			/>
 		</div>
 	);
+}
+
+function formatLoop(seconds: number): string {
+	if (seconds <= 0) return "0s loop";
+	const m = Math.floor(seconds / 60);
+	const s = seconds % 60;
+	if (m === 0) return `${s}s loop`;
+	if (s === 0) return `${m}m loop`;
+	return `${m}m ${s}s loop`;
 }

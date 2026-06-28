@@ -590,58 +590,6 @@ function sanitizeRtlText(text: string): string {
 	return text;
 }
 
-function createWikipediaSummaryHeaders(): Headers {
-	const headers = new Headers({
-		Accept: "application/json",
-		"Api-User-Agent":
-			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-	});
-
-	// Add Authorization header with bearer token if WIKIPEDIA_ACCESS_TOKEN is available
-	const accessToken = process.env.WIKIPEDIA_ACCESS_TOKEN;
-	if (accessToken) {
-		headers.set("Authorization", `Bearer ${accessToken}`);
-	}
-
-	return headers;
-}
-
-async function fetchWikipediaSummaryArticle(
-	articleTitle: string,
-): Promise<WikipediaData> {
-	const encodedTitle = encodeURIComponent(articleTitle);
-	const response = await fetchWithRetry(
-		`https://en.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`,
-		{
-			headers: createWikipediaSummaryHeaders(),
-			next: { revalidate: 0 },
-		},
-	);
-
-	if (!response.ok) {
-		throw new Error(`Wikipedia API responded with status: ${response.status}`);
-	}
-
-	const data = await response.json();
-
-	// Sanitize any potential RTL characters
-	data.title = sanitizeRtlText(data.title);
-	data.extract = sanitizeRtlText(data.extract);
-	if (data.description) {
-		data.description = sanitizeRtlText(data.description);
-	}
-
-	return {
-		title: data.title,
-		extract: data.extract,
-		thumbnail: data.thumbnail,
-		content_urls: data.content_urls,
-		description: data.description,
-		type: data.type,
-		pageid: data.pageid,
-	};
-}
-
 /**
  * Internal function to fetch and process Wikipedia data
  * Always attempts to fetch fresh data and refuel reservoir
@@ -785,7 +733,34 @@ async function getFallbackArticle(): Promise<WikipediaData> {
 
 	// Fetch the fallback article using the REST API for more complete data
 	try {
-		const fallbackData = await fetchWikipediaSummaryArticle(fallbackArticle);
+		const encodedTitle = encodeURIComponent(fallbackArticle);
+		const headers = new Headers({
+			Accept: "application/json",
+			"Api-User-Agent":
+				"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		});
+
+		// Add Authorization header with bearer token if WIKIPEDIA_ACCESS_TOKEN is available
+		const accessToken = process.env.WIKIPEDIA_ACCESS_TOKEN;
+		if (accessToken) {
+			headers.set("Authorization", `Bearer ${accessToken}`);
+		}
+
+		const response = await fetchWithRetry(
+			`https://en.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`,
+			{
+				headers,
+				next: { revalidate: 0 },
+			},
+		);
+
+		if (!response.ok) {
+			throw new Error(
+				`Wikipedia API responded with status: ${response.status}`,
+			);
+		}
+
+		const fallbackData = await response.json();
 
 		// Check if the fallback article is a disambiguation page
 		if (
@@ -801,7 +776,22 @@ async function getFallbackArticle(): Promise<WikipediaData> {
 			throw new Error("Fallback article is a disambiguation page");
 		}
 
-		return fallbackData;
+		// Sanitize any potential RTL characters
+		fallbackData.title = sanitizeRtlText(fallbackData.title);
+		fallbackData.extract = sanitizeRtlText(fallbackData.extract);
+		if (fallbackData.description) {
+			fallbackData.description = sanitizeRtlText(fallbackData.description);
+		}
+
+		return {
+			title: fallbackData.title,
+			extract: fallbackData.extract,
+			thumbnail: fallbackData.thumbnail,
+			content_urls: fallbackData.content_urls,
+			description: fallbackData.description,
+			type: fallbackData.type,
+			pageid: fallbackData.pageid,
+		};
 	} catch (fallbackError) {
 		console.error("Fallback article fetch failed:", fallbackError);
 
@@ -809,9 +799,34 @@ async function getFallbackArticle(): Promise<WikipediaData> {
 		try {
 			console.log("Attempting direct fallback fetch...");
 			const directFallbackArticle = "Electronic_paper"; // Most reliable fallback
-			const directFallbackData = await fetchWikipediaSummaryArticle(
-				directFallbackArticle,
+			const encodedTitle = encodeURIComponent(directFallbackArticle);
+			const headers = new Headers({
+				Accept: "application/json",
+				"Api-User-Agent":
+					"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			});
+
+			// Add Authorization header with bearer token if WIKIPEDIA_ACCESS_TOKEN is available
+			const accessToken = process.env.WIKIPEDIA_ACCESS_TOKEN;
+			if (accessToken) {
+				headers.set("Authorization", `Bearer ${accessToken}`);
+			}
+
+			const response = await fetchWithRetry(
+				`https://en.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`,
+				{
+					headers,
+					next: { revalidate: 0 },
+				},
 			);
+
+			if (!response.ok) {
+				throw new Error(
+					`Wikipedia API responded with status: ${response.status}`,
+				);
+			}
+
+			const directFallbackData = await response.json();
 
 			// Check if even this direct fallback is a disambiguation page (very unlikely)
 			if (
@@ -827,7 +842,24 @@ async function getFallbackArticle(): Promise<WikipediaData> {
 				return DEFAULT_FALLBACK_DATA;
 			}
 
-			return directFallbackData;
+			// Sanitize any potential RTL characters
+			directFallbackData.title = sanitizeRtlText(directFallbackData.title);
+			directFallbackData.extract = sanitizeRtlText(directFallbackData.extract);
+			if (directFallbackData.description) {
+				directFallbackData.description = sanitizeRtlText(
+					directFallbackData.description,
+				);
+			}
+
+			return {
+				title: directFallbackData.title,
+				extract: directFallbackData.extract,
+				thumbnail: directFallbackData.thumbnail,
+				content_urls: directFallbackData.content_urls,
+				description: directFallbackData.description,
+				type: directFallbackData.type,
+				pageid: directFallbackData.pageid,
+			};
 		} catch (directFallbackError) {
 			console.error("All fetch attempts failed:", directFallbackError);
 		}
@@ -886,107 +918,6 @@ const getCachedWikipediaData = unstable_cache(
 	},
 );
 
-function getImmediateReservoirArticle(): WikipediaData | null {
-	if (!shouldUseReservoir()) {
-		return null;
-	}
-
-	const immediateArticle = getFromReservoir();
-	if (immediateArticle) {
-		console.log(
-			"Got immediate article from reservoir, but will still attempt API refuel",
-		);
-	}
-
-	return immediateArticle;
-}
-
-function fetchCachedWikipediaDataWithTimeout(): Promise<WikipediaData> {
-	console.log(
-		"Attempting to fetch cached Wikipedia data (refueling reservoir)",
-	);
-
-	return Promise.race([
-		getCachedWikipediaData(),
-		// If the cache operation takes too long (4 seconds), proceed to fallback
-		new Promise<WikipediaData>((_, reject) => {
-			setTimeout(() => reject(new Error("Cache operation timeout")), 4000);
-		}),
-	]);
-}
-
-function isWikipediaFetchTimeout(error: unknown): boolean {
-	return (
-		error instanceof Error &&
-		(error.name === "AbortError" ||
-			(error as DOMException).code === 20 ||
-			error.message.includes("abort") ||
-			error.message.includes("timeout"))
-	);
-}
-
-function logWikipediaFetchError(error: unknown): void {
-	if (isWikipediaFetchTimeout(error)) {
-		console.warn(
-			"Wikipedia data fetch timed out, using reservoir if available",
-		);
-		return;
-	}
-
-	console.error("Error fetching Wikipedia data:", {
-		errorType: error instanceof Error ? error.constructor.name : typeof error,
-		message: error instanceof Error ? error.message : String(error),
-		stack: error instanceof Error ? error.stack : undefined,
-		cause: error instanceof Error && error.cause ? error.cause : undefined,
-	});
-}
-
-async function getWikipediaDataAfterCacheFailure(
-	immediateArticle: WikipediaData | null,
-): Promise<WikipediaData> {
-	// If we have an immediate article from reservoir, use it
-	if (immediateArticle) {
-		console.log("Using immediate article from reservoir due to API failure");
-		return immediateArticle;
-	}
-
-	// Try to get from reservoir as fallback
-	const reservoirArticle = getFromReservoir();
-	if (reservoirArticle) {
-		console.log("Cache failed, using reservoir as fallback");
-		return reservoirArticle;
-	}
-
-	try {
-		// One final attempt with uncached direct fetch with short timeout
-		console.log("Attempting direct uncached fetch as final fallback");
-		// This is already configured with retry and timeout logic in fetchWithRetry
-		return await fetchWikipediaData();
-	} catch (fetchError) {
-		console.error("All Wikipedia data fetch attempts failed:", {
-			errorType:
-				fetchError instanceof Error
-					? fetchError.constructor.name
-					: typeof fetchError,
-			message:
-				fetchError instanceof Error ? fetchError.message : String(fetchError),
-		});
-	}
-
-	// Final reservoir check
-	const finalReservoirArticle = getFromReservoir();
-	if (finalReservoirArticle) {
-		console.log("All API attempts failed, using reservoir as last resort");
-		return finalReservoirArticle;
-	}
-
-	// When all attempts fail, return default fallback data
-	console.log(
-		"Returning DEFAULT_FALLBACK_DATA after all fetch attempts failed",
-	);
-	return DEFAULT_FALLBACK_DATA;
-}
-
 /**
  * Main export function with reservoir cache integration
  * Always attempts to refuel reservoir unless in timeout situation
@@ -995,18 +926,95 @@ export default async function getData(): Promise<WikipediaData> {
 	console.log("Wikipedia getData function called");
 
 	// Get a quick article from reservoir if available (for immediate response)
-	const immediateArticle = getImmediateReservoirArticle();
+	let immediateArticle: WikipediaData | null = null;
+	if (shouldUseReservoir()) {
+		immediateArticle = getFromReservoir();
+		if (immediateArticle) {
+			console.log(
+				"Got immediate article from reservoir, but will still attempt API refuel",
+			);
+		}
+	}
 
 	// Always attempt to refuel the reservoir unless we're in a timeout situation
 	try {
-		const freshArticle = await fetchCachedWikipediaDataWithTimeout();
+		console.log(
+			"Attempting to fetch cached Wikipedia data (refueling reservoir)",
+		);
+		const freshArticle = await Promise.race([
+			getCachedWikipediaData(),
+			// If the cache operation takes too long (4 seconds), proceed to fallback
+			new Promise<WikipediaData>((_, reject) => {
+				setTimeout(() => reject(new Error("Cache operation timeout")), 4000);
+			}),
+		]);
 
 		// If we got a fresh article, return it (reservoir was already updated in getWikipediaArticle)
 		console.log("Successfully fetched fresh article, returning it");
 		return freshArticle;
 	} catch (error) {
 		// Log the error but don't expose internal details
-		logWikipediaFetchError(error);
-		return getWikipediaDataAfterCacheFailure(immediateArticle);
+		const isTimeout =
+			error instanceof Error &&
+			(error.name === "AbortError" ||
+				(error as DOMException).code === 20 ||
+				error.message.includes("abort") ||
+				error.message.includes("timeout"));
+
+		if (isTimeout) {
+			console.warn(
+				"Wikipedia data fetch timed out, using reservoir if available",
+			);
+		} else {
+			console.error("Error fetching Wikipedia data:", {
+				errorType:
+					error instanceof Error ? error.constructor.name : typeof error,
+				message: error instanceof Error ? error.message : String(error),
+				stack: error instanceof Error ? error.stack : undefined,
+				cause: error instanceof Error && error.cause ? error.cause : undefined,
+			});
+		}
+
+		// If we have an immediate article from reservoir, use it
+		if (immediateArticle) {
+			console.log("Using immediate article from reservoir due to API failure");
+			return immediateArticle;
+		}
+
+		// Try to get from reservoir as fallback
+		const reservoirArticle = getFromReservoir();
+		if (reservoirArticle) {
+			console.log("Cache failed, using reservoir as fallback");
+			return reservoirArticle;
+		}
+
+		try {
+			// One final attempt with uncached direct fetch with short timeout
+			console.log("Attempting direct uncached fetch as final fallback");
+			// This is already configured with retry and timeout logic in fetchWithRetry
+			return await fetchWikipediaData();
+		} catch (fetchError) {
+			console.error("All Wikipedia data fetch attempts failed:", {
+				errorType:
+					fetchError instanceof Error
+						? fetchError.constructor.name
+						: typeof fetchError,
+				message:
+					fetchError instanceof Error ? fetchError.message : String(fetchError),
+			});
+
+			// Final reservoir check
+			const finalReservoirArticle = getFromReservoir();
+			if (finalReservoirArticle) {
+				console.log("All API attempts failed, using reservoir as last resort");
+				return finalReservoirArticle;
+			}
+
+			// When all attempts fail, return default fallback data
+			console.log(
+				"Returning DEFAULT_FALLBACK_DATA after all fetch attempts failed",
+			);
+			return DEFAULT_FALLBACK_DATA;
+		}
 	}
 }

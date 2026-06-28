@@ -16,23 +16,34 @@ import {
 	WifiOff,
 	X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchDeviceLogsWithFilters } from "@/app/actions/device";
-import {
-	EmptyLogsTableRow,
-	LogsLevelTabs,
-	LogsTableHeader,
-	LogsTableSkeleton,
-	shouldShowGroupedLogValue,
-	useLogsUrlState,
-	useScrollIntoViewAfterLoad,
-} from "@/components/logs/log-viewer-helpers";
-import { LogsPagination } from "@/components/logs/logs-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import {
+	Pagination,
+	PaginationContent,
+	PaginationEllipsis,
+	PaginationItem,
+	PaginationLink,
+	PaginationNext,
+	PaginationPrevious,
+} from "@/components/ui/pagination";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSearchWithDebounce } from "@/hooks/useSearchWithDebounce";
 import type { Log } from "@/lib/types";
 import { formatDate, getLogType } from "@/utils/helpers";
 
@@ -47,19 +58,15 @@ export default function DeviceLogsViewer({
 	friendlyId,
 	paramPrefix = "",
 }: DeviceLogsViewerProps) {
-	const {
-		router,
-		pathname,
-		searchParams,
-		scrollRef,
-		searchInputRef,
-		page,
-		searchQuery,
-		createQueryString,
-		handleSearchChange,
-		handlePageChange,
-		clearFilters,
-	} = useLogsUrlState({ paramPrefix, preserveActiveTab: true });
+	const router = useRouter();
+	const pathname = usePathname() ?? "/";
+	const searchParams = useSearchParams();
+	const scrollRef = useRef<HTMLDivElement>(null);
+	const searchInputRef = useRef<HTMLInputElement>(null);
+
+	// Get URL params with defaults
+	const page = Number(searchParams?.get(`${paramPrefix}page`) || "1");
+	const searchQuery = searchParams?.get(`${paramPrefix}search`) || "";
 	const typeFilter = searchParams?.get(`${paramPrefix}type`) || "all";
 
 	// State
@@ -68,6 +75,49 @@ export default function DeviceLogsViewer({
 	const [isLoading, setIsLoading] = useState(true);
 	const [logTypes, setLogTypes] = useState<string[]>([]);
 	const [activeTab, setActiveTab] = useState<string>("all");
+
+	// Create a memoized function to update URL params
+	const createQueryString = useCallback(
+		(params: Record<string, string | number | null>) => {
+			const newSearchParams = new URLSearchParams(searchParams?.toString());
+
+			// Preserve the activeTab parameter
+			const activeTab = newSearchParams.get("activeTab");
+
+			// Add prefix to all parameters except activeTab
+			for (const [key, value] of Object.entries(params)) {
+				const prefixedKey = key === "activeTab" ? key : `${paramPrefix}${key}`;
+
+				if (value === null) {
+					newSearchParams.delete(prefixedKey);
+				} else {
+					newSearchParams.set(prefixedKey, String(value));
+				}
+			}
+
+			// Ensure activeTab is preserved
+			if (activeTab) {
+				newSearchParams.set("activeTab", activeTab);
+			}
+
+			return newSearchParams.toString();
+		},
+		[searchParams, paramPrefix],
+	);
+
+	// Use the custom hook for debounced search
+	const debouncedSearch = useSearchWithDebounce(
+		searchQuery,
+		page,
+		createQueryString,
+		pathname,
+		router,
+	);
+
+	// Handle search input change
+	const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		debouncedSearch(e.target.value);
+	};
 
 	// Handle type filter change
 	const handleTypeChange = (value: string) => {
@@ -78,6 +128,20 @@ export default function DeviceLogsViewer({
 		router.push(`${pathname}?${queryString}`, { scroll: false });
 	};
 
+	// Handle pagination
+	const handlePageChange = (newPage: number) => {
+		const queryString = createQueryString({ page: newPage });
+		router.push(`${pathname}?${queryString}`, { scroll: false });
+	};
+
+	// Clear all filters
+	const clearFilters = () => {
+		router.push(pathname, { scroll: false });
+		if (searchInputRef.current) {
+			searchInputRef.current.value = "";
+		}
+	};
+
 	// Fetch logs data
 	useEffect(() => {
 		const loadLogs = async () => {
@@ -86,7 +150,8 @@ export default function DeviceLogsViewer({
 				const { logs, total, uniqueTypes } = await fetchDeviceLogsWithFilters({
 					page,
 					perPage: ITEMS_PER_PAGE,
-					search: typeFilter !== "all" ? typeFilter : searchQuery,
+					search: searchQuery,
+					type: typeFilter,
 					friendlyId,
 				});
 
@@ -106,7 +171,17 @@ export default function DeviceLogsViewer({
 		loadLogs();
 	}, [page, searchQuery, typeFilter, friendlyId]);
 
-	useScrollIntoViewAfterLoad(scrollRef, isLoading);
+	// Maintain scroll position
+	useEffect(() => {
+		if (scrollRef.current && !isLoading) {
+			scrollRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+		}
+	}, [isLoading]);
+
+	// Calculate pagination values
+	const totalPages = Math.ceil(totalLogs / ITEMS_PER_PAGE);
+	const showingFrom = (page - 1) * ITEMS_PER_PAGE + 1;
+	const showingTo = Math.min(page * ITEMS_PER_PAGE, totalLogs);
 
 	// Check if any filters are active
 	const hasActiveFilters = searchQuery || typeFilter !== "all";
@@ -137,6 +212,33 @@ export default function DeviceLogsViewer({
 			10: "grid-cols-10",
 		};
 		return gridColsMap[count] || "grid-cols-3";
+	};
+
+	// Generate page numbers for pagination
+	const getPageNumbers = () => {
+		const pages: (number | "ellipsis")[] = [];
+		if (totalPages <= 5) {
+			for (let i = 1; i <= totalPages; i++) pages.push(i);
+		} else if (page <= 3) {
+			for (let i = 1; i <= Math.min(5, totalPages); i++) pages.push(i);
+			if (totalPages > 5) {
+				pages.push("ellipsis");
+				pages.push(totalPages);
+			}
+		} else if (page >= totalPages - 2) {
+			pages.push(1);
+			pages.push("ellipsis");
+			for (let i = totalPages - 4; i <= totalPages; i++) {
+				if (i > 1) pages.push(i);
+			}
+		} else {
+			pages.push(1);
+			pages.push("ellipsis");
+			for (let i = page - 1; i <= page + 1; i++) pages.push(i);
+			pages.push("ellipsis");
+			pages.push(totalPages);
+		}
+		return pages;
 	};
 
 	return (
@@ -188,41 +290,94 @@ export default function DeviceLogsViewer({
 				</div>
 			)}
 
-			<LogsLevelTabs
+			{/* Tabs for log types */}
+			<Tabs
 				value={activeTab}
-				onValueChange={handleTypeChange}
-				listClassName={`grid ${getGridColsClass(1 + (logTypes?.length || 3))}`}
-				availableLevels={logTypes}
-			/>
+				onValueChange={(value) => handleTypeChange(value)}
+			>
+				<TabsList
+					className={`grid ${getGridColsClass(1 + (logTypes?.length || 3))}`}
+				>
+					<TabsTrigger value="all">All</TabsTrigger>
+					{logTypes?.includes("error") && (
+						<TabsTrigger value="error" className="text-red-500">
+							Error
+						</TabsTrigger>
+					)}
+					{logTypes?.includes("warning") && (
+						<TabsTrigger value="warning" className="text-amber-500">
+							Warning
+						</TabsTrigger>
+					)}
+					{logTypes?.includes("info") && (
+						<TabsTrigger value="info" className="text-primary">
+							Info
+						</TabsTrigger>
+					)}
+				</TabsList>
+			</Tabs>
 
 			{/* Logs table */}
 			<Card className="overflow-hidden p-0">
 				<Table>
-					<LogsTableHeader headers={["Time", "Type", "Message"]} />
+					<TableHeader>
+						<TableRow className="bg-muted/50">
+							<TableHead className="px-4 py-3">Time</TableHead>
+							<TableHead className="px-4 py-3">Type</TableHead>
+							<TableHead className="px-4 py-3">Message</TableHead>
+						</TableRow>
+					</TableHeader>
 					<TableBody>
 						{isLoading ? (
-							<LogsTableSkeleton cellWidths={["w-24", "w-16", "w-full"]} />
+							Array.from({ length: 5 }).map((_, i) => (
+								<TableRow key={i}>
+									<TableCell className="px-4 py-3">
+										<Skeleton className="h-4 w-24" />
+									</TableCell>
+									<TableCell className="px-4 py-3">
+										<Skeleton className="h-4 w-16" />
+									</TableCell>
+									<TableCell className="px-4 py-3">
+										<Skeleton className="h-4 w-full" />
+									</TableCell>
+								</TableRow>
+							))
 						) : logs.length === 0 ? (
-							<EmptyLogsTableRow colSpan={4} />
+							<TableRow>
+								<TableCell
+									colSpan={4}
+									className="px-4 py-8 text-center text-muted-foreground"
+								>
+									No logs found matching your criteria
+								</TableCell>
+							</TableRow>
 						) : (
 							logs.map((log, index) => {
 								const prevLog = index > 0 ? logs[index - 1] : null;
+								// Check if we should show time based on time difference with previous log
+								const shouldTimeBeShown =
+									index === 0 ||
+									(prevLog &&
+										Math.abs(
+											new Date(log.created_at || "").getTime() -
+												new Date(prevLog.created_at || "").getTime(),
+										) /
+											1000 >=
+											10);
+								// Check if we should show type based on type difference with previous log or time difference
+								const shouldTypeBeShown =
+									index === 0 ||
+									(prevLog && getLogType(prevLog) !== getLogType(log)) ||
+									(prevLog &&
+										Math.abs(
+											new Date(log.created_at || "").getTime() -
+												new Date(prevLog.created_at || "").getTime(),
+										) /
+											1000 >=
+											10);
+
+								// Determine log type
 								const logType = getLogType(log);
-								const shouldTimeBeShown = shouldShowGroupedLogValue({
-									index,
-									current: log,
-									previous: prevLog,
-									thresholdSeconds: 10,
-									getCreatedAt: (currentLog) => currentLog.created_at,
-								});
-								const shouldTypeBeShown = shouldShowGroupedLogValue({
-									index,
-									current: log,
-									previous: prevLog,
-									thresholdSeconds: 10,
-									getCreatedAt: (currentLog) => currentLog.created_at,
-									getValue: getLogType,
-								});
 								const typeColorClass = getLogTypeColorClass(logType);
 
 								return (
@@ -558,12 +713,59 @@ export default function DeviceLogsViewer({
 
 			{/* Pagination */}
 			{!isLoading && logs.length > 0 && (
-				<LogsPagination
-					page={page}
-					perPage={ITEMS_PER_PAGE}
-					totalLogs={totalLogs}
-					onPageChange={handlePageChange}
-				/>
+				<div className="flex flex-col items-center justify-between gap-4 md:flex-row">
+					<div className="text-sm text-muted-foreground">
+						Showing <span className="font-medium">{showingFrom}</span> to{" "}
+						<span className="font-medium">{showingTo}</span> of{" "}
+						<span className="font-medium">{totalLogs}</span> logs
+					</div>
+
+					<Pagination>
+						<PaginationContent>
+							<PaginationItem>
+								<PaginationPrevious
+									onClick={() => page > 1 && handlePageChange(page - 1)}
+									className={
+										page <= 1
+											? "pointer-events-none opacity-50"
+											: "cursor-pointer"
+									}
+								/>
+							</PaginationItem>
+
+							{getPageNumbers().map((pageNum, i) =>
+								pageNum === "ellipsis" ? (
+									<PaginationItem key={`ellipsis-${i}`}>
+										<PaginationEllipsis />
+									</PaginationItem>
+								) : (
+									<PaginationItem key={pageNum}>
+										<PaginationLink
+											isActive={page === pageNum}
+											onClick={() => handlePageChange(pageNum)}
+											className="cursor-pointer"
+										>
+											{pageNum}
+										</PaginationLink>
+									</PaginationItem>
+								),
+							)}
+
+							<PaginationItem>
+								<PaginationNext
+									onClick={() =>
+										page < totalPages && handlePageChange(page + 1)
+									}
+									className={
+										page >= totalPages
+											? "pointer-events-none opacity-50"
+											: "cursor-pointer"
+									}
+								/>
+							</PaginationItem>
+						</PaginationContent>
+					</Pagination>
+				</div>
 			)}
 		</div>
 	);

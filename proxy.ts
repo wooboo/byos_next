@@ -2,25 +2,44 @@ import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 
-// Paths that don't require authentication
+const PUBLIC_API_PATHS = [
+	"/api/auth",
+	"/api/bitmap",
+	"/api/categories",
+	"/api/display",
+	"/api/ips",
+	"/api/log",
+	"/api/models",
+	"/api/palettes",
+	"/api/setup",
+];
+
+// Paths that don't require authentication.
+// Includes metadata routes (manifest, social card) and branding assets used as
+// favicons/app icons, which browsers and crawlers fetch without a session.
 const PUBLIC_PATHS = [
-	"/api",
 	"/_next",
 	"/favicon.ico",
+	"/manifest.webmanifest",
+	"/opengraph-image",
+	"/twitter-image",
+	"/icon",
+	"/apple-icon",
+	"/trmnl-icons",
 	"/sign-in",
 	"/sign-up",
 	"/recover",
+	"/setup",
 ];
-
-function isPublicPath(pathname: string) {
-	return PUBLIC_PATHS.some((path) => pathname.startsWith(path));
-}
 
 export async function proxy(request: NextRequest) {
 	const { pathname } = request.nextUrl;
 
 	// Skip auth for public paths
-	if (isPublicPath(pathname)) {
+	if (
+		PUBLIC_PATHS.some((path) => pathname.startsWith(path)) ||
+		PUBLIC_API_PATHS.some((path) => pathname.startsWith(path))
+	) {
 		return NextResponse.next();
 	}
 

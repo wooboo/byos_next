@@ -217,3 +217,22 @@ export async function fetchTrmnlRecipesPage(
 		};
 	}
 }
+
+export async function fetchTrmnlRecipes(): Promise<TrmnlRecipe[]> {
+	if (!isExternalCatalogEnabled()) return [];
+	const all: TrmnlRecipe[] = [];
+	let page = 1;
+
+	while (true) {
+		const result = await fetchTrmnlRecipesPage(page);
+		if (result.error) {
+			throw new Error(result.error);
+		}
+		all.push(...result.recipes);
+
+		if (!result.nextPage) break;
+		page = result.nextPage;
+	}
+
+	return uniqueTrmnlRecipes(all);
+}
