@@ -1,15 +1,14 @@
 "use client";
 
 import { Film, Plus } from "lucide-react";
-import { CreateActionTile } from "@/components/common/create-action-tile";
-import type { Mixup, Playlist, PlaylistItem, Recipe } from "@/lib/types";
+import type { Playlist, PlaylistItem, Recipe } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { PlaylistReelCard } from "./playlist-reel-card";
 
 interface PlaylistListProps {
 	playlists: Playlist[];
 	playlistItems: PlaylistItem[];
 	recipes: Recipe[];
-	mixups: Mixup[];
 	onEditPlaylist?: (playlist: Playlist) => void;
 	onDeletePlaylist?: (playlistId: string) => void;
 	onCreatePlaylist?: () => void;
@@ -20,7 +19,6 @@ export function PlaylistList({
 	playlists,
 	playlistItems,
 	recipes,
-	mixups,
 	onEditPlaylist,
 	onDeletePlaylist,
 	onCreatePlaylist,
@@ -38,26 +36,33 @@ export function PlaylistList({
 
 	const getRecipeName = (screenId: string) => {
 		const recipe = recipes.find((r) => r.slug === screenId);
-		if (recipe) return recipe.name;
-		const mixup = mixups.find((m) => m.id === screenId);
-		return mixup?.name || screenId;
+		return recipe?.name || screenId;
 	};
 
 	if (playlists.length === 0) {
 		return (
-			<CreateActionTile
+			<button
+				type="button"
 				onClick={onCreatePlaylist}
-				icon={<Film className="h-7 w-7" />}
-				title="No playlists yet"
-				description="Create a reel of screens that rotate on your TRMNL devices."
-				actionLabel={
-					<>
-						<Plus className="h-4 w-4" />
-						Create your first playlist
-					</>
-				}
-				className="w-full px-6 py-16 text-base [&_p]:text-sm"
-			/>
+				className={cn(
+					"flex w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed bg-muted/20 px-6 py-16 text-center",
+					"transition-colors hover:border-primary hover:bg-primary/5",
+				)}
+			>
+				<div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+					<Film className="h-7 w-7" />
+				</div>
+				<div>
+					<div className="text-base font-semibold">No playlists yet</div>
+					<p className="mt-1 text-sm text-muted-foreground">
+						Create a reel of screens that rotate on your TRMNL devices.
+					</p>
+				</div>
+				<div className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+					<Plus className="h-4 w-4" />
+					Create your first playlist
+				</div>
+			</button>
 		);
 	}
 
@@ -86,14 +91,24 @@ export function PlaylistList({
 				);
 			})}
 			{onCreatePlaylist && (
-				<CreateActionTile
+				<button
+					type="button"
 					onClick={onCreatePlaylist}
-					icon={<Plus className="h-6 w-6" />}
-					title="New playlist"
-					description="Start a new reel from scratch"
-					className="min-h-[320px] p-6 text-sm [&_p]:mt-0.5 [&_p]:text-xs"
-					iconClassName="h-12 w-12"
-				/>
+					className={cn(
+						"flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed bg-muted/20 p-6",
+						"transition-colors hover:border-primary hover:bg-primary/5",
+					)}
+				>
+					<div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+						<Plus className="h-6 w-6" />
+					</div>
+					<div className="text-center">
+						<div className="text-sm font-semibold">New playlist</div>
+						<p className="mt-0.5 text-xs text-muted-foreground">
+							Start a new reel from scratch
+						</p>
+					</div>
+				</button>
 			)}
 		</div>
 	);

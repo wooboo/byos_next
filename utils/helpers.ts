@@ -51,6 +51,7 @@ export function formatDate(dateString: string | null): string {
 			hour12: false,
 		};
 		timeText = date.toLocaleString("en-US", options);
+		return timeText;
 	} else {
 		timeText = date.toLocaleString("en-US", {
 			month: "2-digit",
@@ -59,6 +60,7 @@ export function formatDate(dateString: string | null): string {
 			minute: "2-digit",
 			hour12: false,
 		});
+		return timeText;
 	}
 
 	return diffMs < 0 ? `in ${timeText}` : `${timeText} ago`;
@@ -85,9 +87,27 @@ export function getLogType(log: Log): "error" | "warning" | "info" {
 	return "info";
 }
 
+// Custom debounce function implementation
+export function debounce<T extends (...args: unknown[]) => unknown>(
+	func: T,
+	wait: number,
+): (...args: Parameters<T>) => void {
+	let timeout: ReturnType<typeof setTimeout> | null = null;
+
+	return (...args: Parameters<T>) => {
+		const later = () => {
+			timeout = null;
+			func(...args);
+		};
+
+		if (timeout) clearTimeout(timeout);
+		timeout = setTimeout(later, wait);
+	};
+}
+
 // Add validation functions for API key and friendly ID
 export const isValidApiKey = (key: string): boolean => {
-	const regex = /^[a-zA-Z0-9]{8,60}$/; // Alphanumeric, 8-60 characters
+	const regex = /^[a-zA-Z0-9]{20,60}$/; // Alphanumeric, 20-60 characters
 	return regex.test(key);
 };
 
@@ -126,6 +146,23 @@ export function generateApiKey(macAddress: string, salt?: string): string {
 	);
 }
 
+export function generateMockMacAddress(apiKey: string): string {
+	const hash = crypto.createHash("sha256").update(apiKey).digest("hex");
+	const macPart = hash.substring(hash.length - 6).toUpperCase();
+	return `A1:B2:C3:${macPart.substring(0, 2)}:${macPart.substring(2, 4)}:${macPart.substring(4, 6)}`;
+}
+
+export function generateRandomApiKey(length = 22): string {
+	const characters =
+		"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+	let result = "";
+	const bytes = crypto.randomBytes(length);
+	for (const byte of bytes) {
+		result += characters[byte % characters.length];
+	}
+	return result;
+}
+
 export function generateFriendlyId(macAddress: string, salt?: string): string {
 	const normalizedMacAddress = macAddress.toUpperCase().replace(/[:-]/g, ""); // Normalize MAC
 	const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -137,95 +174,83 @@ export function generateFriendlyId(macAddress: string, salt?: string): string {
 	);
 }
 
-const timezoneLabelOverrides = new Map<string, string>([
-	["UTC", "UTC"],
-	["Europe/London", "London (GMT/BST)"],
-	["Europe/Paris", "Paris (CET/CEST)"],
-	["Europe/Berlin", "Berlin (CET/CEST)"],
-	["Europe/Madrid", "Madrid (CET/CEST)"],
-	["Europe/Rome", "Rome (CET/CEST)"],
-	["Europe/Amsterdam", "Amsterdam (CET/CEST)"],
-	["Europe/Athens", "Athens (EET/EEST)"],
-	["Europe/Moscow", "Moscow (MSK)"],
-	["America/New_York", "New York (EST/EDT)"],
-	["America/Chicago", "Chicago (CST/CDT)"],
-	["America/Denver", "Denver (MST/MDT)"],
-	["America/Los_Angeles", "Los Angeles (PST/PDT)"],
-	["America/Toronto", "Toronto (EST/EDT)"],
-	["America/Vancouver", "Vancouver (PST)"],
-	["Asia/Tokyo", "Tokyo (JST)"],
-	["Asia/Shanghai", "Shanghai (CST)"],
-	["Asia/Singapore", "Singapore (SGT)"],
-	["Asia/Dubai", "Dubai (GST)"],
-	["Asia/Hong_Kong", "Hong Kong (HKT)"],
-	["Australia/Sydney", "Sydney (AEST/AEDT)"],
-	["Australia/Melbourne", "Melbourne (AEST/AEDT)"],
-	["Australia/Perth", "Perth (AWST)"],
-	["Pacific/Auckland", "Auckland (NZST/NZDT)"],
-]);
+// Common IANA timezones grouped by region
+export const timezones = [
+	// Europe
+	{ value: "Europe/London", label: "London (GMT/BST)", region: "Europe" },
+	{ value: "Europe/Paris", label: "Paris (CET/CEST)", region: "Europe" },
+	{ value: "Europe/Berlin", label: "Berlin (CET/CEST)", region: "Europe" },
+	{ value: "Europe/Madrid", label: "Madrid (CET/CEST)", region: "Europe" },
+	{ value: "Europe/Rome", label: "Rome (CET/CEST)", region: "Europe" },
+	{
+		value: "Europe/Amsterdam",
+		label: "Amsterdam (CET/CEST)",
+		region: "Europe",
+	},
+	{ value: "Europe/Athens", label: "Athens (EET/EEST)", region: "Europe" },
+	{ value: "Europe/Moscow", label: "Moscow (MSK)", region: "Europe" },
 
-const timezoneRegionOrder = [
-	"UTC",
-	"Africa",
-	"America",
-	"Antarctica",
-	"Arctic",
-	"Asia",
-	"Atlantic",
-	"Australia",
-	"Europe",
-	"Indian",
-	"Pacific",
-] as const;
+	// North America
+	{
+		value: "America/New_York",
+		label: "New York (EST/EDT)",
+		region: "North America",
+	},
+	{
+		value: "America/Chicago",
+		label: "Chicago (CST/CDT)",
+		region: "North America",
+	},
+	{
+		value: "America/Denver",
+		label: "Denver (MST/MDT)",
+		region: "North America",
+	},
+	{
+		value: "America/Los_Angeles",
+		label: "Los Angeles (PST/PDT)",
+		region: "North America",
+	},
+	{
+		value: "America/Toronto",
+		label: "Toronto (EST/EDT)",
+		region: "North America",
+	},
+	{
+		value: "America/Vancouver",
+		label: "Vancouver (PST/PDT)",
+		region: "North America",
+	},
 
-const getSupportedTimeZones = () => {
-	const intlWithSupportedValues = Intl as typeof Intl & {
-		supportedValuesOf?: (key: "timeZone") => string[];
-	};
-	return intlWithSupportedValues.supportedValuesOf?.("timeZone") ?? [];
-};
+	// Asia
+	{ value: "Asia/Tokyo", label: "Tokyo (JST)", region: "Asia" },
+	{ value: "Asia/Shanghai", label: "Shanghai (CST)", region: "Asia" },
+	{ value: "Asia/Singapore", label: "Singapore (SGT)", region: "Asia" },
+	{ value: "Asia/Dubai", label: "Dubai (GST)", region: "Asia" },
+	{ value: "Asia/Hong_Kong", label: "Hong Kong (HKT)", region: "Asia" },
 
-const getTimezoneRegion = (timezone: string) =>
-	timezone.split("/")[0] || "Other";
-
-const getTimezoneLabel = (timezone: string) => {
-	const override = timezoneLabelOverrides.get(timezone);
-	if (override) return override;
-	const parts = timezone.split("/");
-	const city = (parts[parts.length - 1] || timezone).replace(/_/g, " ");
-	return `${city} (${timezone})`;
-};
-
-const compareTimezones = (
-	a: { label: string; region: string },
-	b: { label: string; region: string },
-) => {
-	const regionA = timezoneRegionOrder.indexOf(
-		a.region as (typeof timezoneRegionOrder)[number],
-	);
-	const regionB = timezoneRegionOrder.indexOf(
-		b.region as (typeof timezoneRegionOrder)[number],
-	);
-	const safeRegionA = regionA === -1 ? timezoneRegionOrder.length : regionA;
-	const safeRegionB = regionB === -1 ? timezoneRegionOrder.length : regionB;
-	if (safeRegionA !== safeRegionB) return safeRegionA - safeRegionB;
-	return a.label.localeCompare(b.label);
-};
-
-// Full IANA timezone list grouped by region.
-export const timezones = Array.from(
-	new Set([
-		"UTC",
-		...getSupportedTimeZones(),
-		...timezoneLabelOverrides.keys(),
-	]),
-)
-	.map((value) => ({
-		value,
-		label: getTimezoneLabel(value),
-		region: getTimezoneRegion(value),
-	}))
-	.sort(compareTimezones);
+	// Australia & Pacific
+	{
+		value: "Australia/Sydney",
+		label: "Sydney (AEST/AEDT)",
+		region: "Australia & Pacific",
+	},
+	{
+		value: "Australia/Melbourne",
+		label: "Melbourne (AEST/AEDT)",
+		region: "Australia & Pacific",
+	},
+	{
+		value: "Australia/Perth",
+		label: "Perth (AWST)",
+		region: "Australia & Pacific",
+	},
+	{
+		value: "Pacific/Auckland",
+		label: "Auckland (NZST/NZDT)",
+		region: "Australia & Pacific",
+	},
+];
 
 // Format timezone for display
 export const formatTimezone = (timezone: string): string => {

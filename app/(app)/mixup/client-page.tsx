@@ -26,22 +26,14 @@ type MixupRecipe = {
 	description?: string;
 };
 
-type MixupScreen = {
-	id: string;
-	title: string;
-	description?: string;
-};
-
 interface MixupClientPageProps {
 	initialMixups: Mixup[];
 	recipes: MixupRecipe[];
-	screens: MixupScreen[];
 }
 
 export default function MixupClientPage({
 	initialMixups,
 	recipes,
-	screens,
 }: MixupClientPageProps) {
 	const router = useRouter();
 	const [mixups, setMixups] = useState(initialMixups);
@@ -135,7 +127,6 @@ export default function MixupClientPage({
 		return (
 			<MixupBuilder
 				recipes={recipes}
-				screens={screens}
 				initialData={editingData}
 				onSave={handleSaveMixup}
 				onCancel={handleCancel}

@@ -28,7 +28,6 @@ const TRUSTED_ARGS = [
 	"--disable-accelerated-2d-canvas",
 	"--disable-web-security",
 	"--disable-features=IsolateOrigins,site-per-process",
-	"--ignore-certificate-errors",
 ];
 
 type Resolved =
@@ -57,7 +56,7 @@ async function resolveChrome(): Promise<Resolved> {
 	try {
 		return {
 			mode: "launch",
-			executablePath: puppeteer.executablePath("chrome"),
+			executablePath: await puppeteer.executablePath("chrome"),
 		};
 	} catch {
 		const chromium = (await import("@sparticuz/chromium-min")).default;
@@ -77,18 +76,11 @@ async function openBrowser(profile: ChromeProfile): Promise<Browser> {
 		// Profile args are ignored; the remote operator is responsible for
 		// running an appropriately-sandboxed browser per intended use.
 		return "browserURL" in resolved
-			? puppeteer.connect({
-					acceptInsecureCerts: true,
-					browserURL: resolved.browserURL,
-				})
-			: puppeteer.connect({
-					acceptInsecureCerts: true,
-					browserWSEndpoint: resolved.browserWSEndpoint,
-				});
+			? puppeteer.connect({ browserURL: resolved.browserURL })
+			: puppeteer.connect({ browserWSEndpoint: resolved.browserWSEndpoint });
 	}
 	const args = profile === "trusted" ? TRUSTED_ARGS : SANDBOXED_ARGS;
 	return puppeteer.launch({
-		acceptInsecureCerts: true,
 		headless: true,
 		executablePath: resolved.executablePath,
 		args,

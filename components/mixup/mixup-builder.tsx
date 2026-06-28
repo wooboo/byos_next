@@ -1,38 +1,17 @@
 "use client";
 
-import {
-	ArrowLeft,
-	Check,
-	ChevronsUpDown,
-	LayoutGrid,
-	Save,
-} from "lucide-react";
+import { ArrowLeft, LayoutGrid, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
-import {
-	createScreenIdFromRecipe,
-	promptScreenName,
-} from "@/components/common/screen-from-recipe";
-import {
-	ScreenPreviewControls,
-	screenPreviewSummary,
-	useScreenPreviewControls,
-} from "@/components/preview/screen-preview-controls";
 import { Button } from "@/components/ui/button";
-import {
-	Command,
-	CommandEmpty,
-	CommandGroup,
-	CommandInput,
-	CommandItem,
-	CommandList,
-} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/ui/popover";
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import {
 	buildAssignments,
 	LAYOUT_OPTIONS,
@@ -49,19 +28,6 @@ type MixupRecipe = {
 	description?: string;
 };
 
-type MixupScreen = {
-	id: string;
-	title: string;
-	description?: string;
-};
-
-type ContentOption = MixupRecipe | MixupScreen;
-type SelectedContentOption = {
-	title: string;
-	description?: string;
-	previewUrl: string;
-};
-
 export type MixupBuilderData = {
 	id?: string;
 	name: string;
@@ -71,92 +37,13 @@ export type MixupBuilderData = {
 
 interface MixupBuilderProps {
 	recipes: MixupRecipe[];
-	screens: MixupScreen[];
 	initialData?: MixupBuilderData;
 	onSave?: (data: MixupBuilderData) => void;
 	onCancel?: () => void;
 	isSaving?: boolean;
 }
 
-export function removeSlotAssignment(
-	assignments: Record<string, string>,
-	slotId: string,
-) {
-	const next = { ...assignments };
-	delete next[slotId];
-	return next;
-}
-
-export function recipeTitleById(recipes: MixupRecipe[], recipeId: string) {
-	return (
-		recipes.find((recipe) => recipe.id === recipeId)?.title ?? "New screen"
-	);
-}
-
-export function normalizeContentRef(ref: string) {
-	if (ref.startsWith("screen:") || ref.startsWith("recipe:")) return ref;
-	return `recipe:${ref}`;
-}
-
-function ContentCommandGroup({
-	heading,
-	kind,
-	options,
-	selectedId,
-	onSelect,
-}: {
-	heading: string;
-	kind: "recipe" | "screen";
-	options: ContentOption[];
-	selectedId?: string;
-	onSelect: (value: string) => void;
-}) {
-	return (
-		<CommandGroup heading={heading}>
-			{options.map((option) => {
-				const value = `${kind}:${option.id}`;
-				return (
-					<CommandItem
-						key={value}
-						value={`${kind} ${option.title}`}
-						onSelect={() => onSelect(value)}
-					>
-						<Check
-							className={cn(
-								"mr-2 h-4 w-4",
-								selectedId === value ? "opacity-100" : "opacity-0",
-							)}
-						/>
-						{option.title}
-					</CommandItem>
-				);
-			})}
-		</CommandGroup>
-	);
-}
-
-export async function createScreenValueFromRecipe(
-	recipeId: string,
-	name: string,
-) {
-	const screenId = await createScreenIdFromRecipe(recipeId, name);
-	return screenId ? `screen:${screenId}` : null;
-}
-
-export async function promoteRecipeValueToScreen(
-	value: string,
-	recipes: MixupRecipe[],
-) {
-	if (!value.startsWith("recipe:")) return value;
-
-	const recipeId = value.slice("recipe:".length);
-	const name = promptScreenName(recipeTitleById(recipes, recipeId));
-	if (name === null) return null;
-
-	return createScreenValueFromRecipe(recipeId, name);
-}
-
-export const spanLabel = (slot: LayoutSlot) => {
+const spanLabel = (slot: LayoutSlot) => {
 	const spanSize = (slot.colSpan ?? 1) * (slot.rowSpan ?? 1);
 	return spanSize > 1 ? `${spanSize} quarters` : "1 quarter";
 };
@@ -214,26 +101,19 @@ const LayoutTile = ({
 
 export function MixupBuilder({
 	recipes,
-	screens,
 	initialData,
 	onSave,
 	onCancel,
 	isSaving = false,
 }: MixupBuilderProps) {
-	const optionMap = useMemo(() => {
-		const map = new Map<string, SelectedContentOption>();
-		for (const recipe of recipes)
-			map.set(`recipe:${recipe.id}`, {
-				...recipe,
-				previewUrl: `/api/bitmap/${recipe.id}.bmp`,
-			});
-		for (const screen of screens)
-			map.set(`screen:${screen.id}`, {
-				...screen,
-				previewUrl: `/api/bitmap/screen/${screen.id}.bmp`,
-			});
-		return map;
-	}, [recipes, screens]);
+	const recipeMap = useMemo(
+		() =>
+			recipes.reduce<Record<string, MixupRecipe>>((acc, recipe) => {
+				acc[recipe.id] = recipe;
+				return acc;
+			}, {}),
+		[recipes],
+	);
 
 	const [name, setName] = useState(initialData?.name ?? "");
 	const [layoutId, setLayoutId] = useState<MixupLayoutId | string>(
@@ -244,7 +124,6 @@ export function MixupBuilder({
 		return buildAssignments(LAYOUT_OPTIONS[0], recipes);
 	});
 	const [activeSlot, setActiveSlot] = useState<string | null>(null);
-	const preview = useScreenPreviewControls();
 
 	useEffect(() => {
 		if (initialData) {
@@ -272,16 +151,13 @@ export function MixupBuilder({
 		setAssignments((prev) => buildAssignments(nextLayout, recipes, prev));
 	};
 
-	const handleContentChange = async (slotId: string, value: string | null) => {
-		if (!value) {
-			setAssignments((prev) => removeSlotAssignment(prev, slotId));
-			return;
-		}
-
-		const resolvedValue = await promoteRecipeValueToScreen(value, recipes);
-		if (!resolvedValue) return;
-
-		setAssignments((prev) => ({ ...prev, [slotId]: resolvedValue }));
+	const handleRecipeChange = (slotId: string, recipeId: string | null) => {
+		setAssignments((prev) => {
+			const next = { ...prev };
+			if (recipeId) next[slotId] = recipeId;
+			else delete next[slotId];
+			return next;
+		});
 	};
 
 	const handleSave = () => {
@@ -361,26 +237,9 @@ export function MixupBuilder({
 							<span className="capitalize">{layoutId.replace(/-/g, " ")}</span>
 						</span>
 					</div>
-					<ScreenPreviewControls
-						format={preview.format}
-						onFormatChange={preview.setFormat}
-						sizeIndex={preview.sizeIndex}
-						onSizeIndexChange={preview.setSizeIndex}
-						paletteIndex={preview.paletteIndex}
-						onPaletteIndexChange={preview.setPaletteIndex}
-						isPortrait={preview.isPortrait}
-						onPortraitChange={preview.setIsPortrait}
-						formats={["bmp"]}
-						className="border-b bg-muted/20"
-					/>
 					<div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,theme(colors.muted/40),transparent_70%)] p-6">
 						<div className="w-full max-w-[640px]">
-							<DeviceFrame
-								size="lg"
-								portrait={preview.isPortrait}
-								screenWidth={preview.width}
-								screenHeight={preview.height}
-							>
+							<DeviceFrame size="lg">
 								<div
 									className="grid h-full w-full"
 									style={{
@@ -390,20 +249,8 @@ export function MixupBuilder({
 								>
 									{currentLayout.slots.map((slot) => {
 										const selectedId = assignments[slot.id];
-										const recipe = selectedId
-											? optionMap.get(normalizeContentRef(selectedId))
-											: null;
+										const recipe = selectedId ? recipeMap[selectedId] : null;
 										const isActive = activeSlot === slot.id;
-										const previewParams = new URLSearchParams({
-											width: String(slot.width),
-											height: String(slot.height),
-											grayscale: String(preview.grayscale),
-										});
-										if (preview.paletteId) {
-											previewParams.set("palette", preview.paletteId);
-											previewParams.set("palette_preview", "observed");
-										}
-										const previewUrl = `${recipe?.previewUrl}?${previewParams}`;
 
 										return (
 											<button
@@ -423,9 +270,12 @@ export function MixupBuilder({
 											>
 												{recipe ? (
 													<picture>
-														<source srcSet={previewUrl} type="image/bmp" />
+														<source
+															srcSet={`/api/bitmap/${recipe.slug}.bmp?width=${slot.width}&height=${slot.height}`}
+															type="image/bmp"
+														/>
 														<img
-															src={previewUrl}
+															src={`/api/bitmap/${recipe.slug}.bmp`}
 															alt={`${recipe.title} preview`}
 															className="absolute inset-0 h-full w-full object-cover"
 															style={{ imageRendering: "pixelated" }}
@@ -445,18 +295,6 @@ export function MixupBuilder({
 								</div>
 							</DeviceFrame>
 						</div>
-					</div>
-					<div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
-						<span>Mixup BMP pipeline</span>
-						<span className="tabular-nums">
-							{screenPreviewSummary({
-								format: "bmp",
-								width: preview.width,
-								height: preview.height,
-								grayscale: preview.grayscale,
-								paletteLabel: preview.paletteLabel,
-							})}
-						</span>
 					</div>
 				</section>
 
@@ -495,80 +333,59 @@ export function MixupBuilder({
 						<div className="divide-y">
 							{currentLayout.slots.map((slot, index) => {
 								const selectedId = assignments[slot.id];
-								const recipe = selectedId
-									? optionMap.get(normalizeContentRef(selectedId))
-									: null;
+								const recipe = selectedId ? recipeMap[selectedId] : null;
 								const isActive = activeSlot === slot.id;
 
 								return (
 									<div
 										key={slot.id}
 										className={cn(
-											"flex w-full items-center gap-3 px-4 py-3 text-left transition-colors",
-											isActive ? "bg-primary/5" : "bg-card",
+											"flex w-full items-start gap-3 px-4 py-3 transition-colors",
+											isActive ? "bg-primary/5" : "hover:bg-muted/40",
 										)}
 									>
 										<button
 											type="button"
 											onClick={() => setActiveSlot(slot.id)}
-											className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background text-[11px] font-semibold tabular-nums text-muted-foreground transition-colors hover:bg-muted"
-											aria-label={`Select ${slot.label}`}
 											aria-pressed={isActive}
+											aria-label={`Activate ${slot.label}`}
+											className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background text-[11px] font-semibold tabular-nums text-muted-foreground hover:bg-muted"
 										>
 											{index + 1}
 										</button>
 										<div className="min-w-0 flex-1">
-											<div className="flex items-center justify-between gap-2 text-xs">
+											<button
+												type="button"
+												onClick={() => setActiveSlot(slot.id)}
+												className="flex w-full items-center justify-between gap-2 text-left text-xs"
+											>
 												<span className="font-semibold">{slot.label}</span>
 												<span className="text-[10px] text-muted-foreground">
 													{spanLabel(slot)}
 												</span>
-											</div>
+											</button>
 											<div className="mt-1.5">
-												<Popover>
-													<PopoverTrigger asChild>
-														<Button
-															variant="outline"
-															className="h-8 w-full justify-between text-xs"
-															onClick={(e) => e.stopPropagation()}
-														>
-															<span className="truncate">
-																{recipe?.title || "Choose content"}
-															</span>
-															<ChevronsUpDown className="ml-2 h-3.5 w-3.5 opacity-50" />
-														</Button>
-													</PopoverTrigger>
-													<PopoverContent
-														className="w-[--radix-popover-trigger-width] p-0"
-														align="start"
-														onClick={(e) => e.stopPropagation()}
-													>
-														<Command>
-															<CommandInput placeholder="Search content…" />
-															<CommandList>
-																<CommandEmpty>No results found.</CommandEmpty>
-																<ContentCommandGroup
-																	heading="Recipes"
-																	kind="recipe"
-																	options={recipes}
-																	selectedId={selectedId}
-																	onSelect={(value) =>
-																		handleContentChange(slot.id, value)
-																	}
-																/>
-																<ContentCommandGroup
-																	heading="Screens"
-																	kind="screen"
-																	options={screens}
-																	selectedId={selectedId}
-																	onSelect={(value) =>
-																		handleContentChange(slot.id, value)
-																	}
-																/>
-															</CommandList>
-														</Command>
-													</PopoverContent>
-												</Popover>
+												<Select
+													value={selectedId ?? "none"}
+													onValueChange={(value) =>
+														handleRecipeChange(
+															slot.id,
+															value === "none" ? null : value,
+														)
+													}
+												>
+													<SelectTrigger className="h-8 w-full text-xs">
+														<SelectValue placeholder="Choose recipe" />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="none">No recipe</SelectItem>
+														{recipes.map((option) => (
+															<SelectItem key={option.id} value={option.id}>
+																{option.title}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
 												{recipe?.description && (
 													<p className="mt-1 truncate text-[11px] text-muted-foreground">
 														{recipe.description}

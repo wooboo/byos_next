@@ -1,10 +1,8 @@
 "use server";
 
-import type { SelectQueryBuilder } from "kysely";
 import { auth } from "@/lib/auth/auth";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { db } from "@/lib/database/db";
-import type { DB } from "@/lib/database/db.d";
 import { checkDbConnection } from "@/lib/database/utils";
 import type { SystemLog } from "@/lib/types";
 
@@ -22,153 +20,13 @@ type FetchSystemLogsResult = {
 	uniqueSources: string[];
 };
 
-type SystemLogsQuery<O> = SelectQueryBuilder<DB, "system_logs", O>;
-type BaseSystemLogFilters = Pick<FetchSystemLogsParams, "level" | "source">;
-type SystemLogSearchFilter = Pick<FetchSystemLogsParams, "search">;
-type SystemLogDeviceFilters = Pick<
-	FetchDeviceSystemLogsParams,
-	"apiKey" | "deviceId" | "friendlyId" | "macAddress"
->;
-
-const EMPTY_SYSTEM_LOGS_RESULT: FetchSystemLogsResult = {
-	logs: [],
-	total: 0,
-	uniqueSources: [],
-};
-
-async function canReadSystemLogs(): Promise<boolean> {
+export async function canReadSystemLogs(): Promise<boolean> {
 	if (!auth) {
 		return true;
 	}
 
 	const user = await getCurrentUser();
 	return user?.role === "admin";
-}
-
-async function canFetchSystemLogs(): Promise<boolean> {
-	const { ready } = await checkDbConnection();
-
-	if (!ready) {
-		console.warn("Database client not initialized");
-		return false;
-	}
-
-	return canReadSystemLogs();
-}
-
-function applyBaseSystemLogFilters<O>(
-	query: SystemLogsQuery<O>,
-	{ level, source }: BaseSystemLogFilters,
-): SystemLogsQuery<O> {
-	let filteredQuery = query;
-
-	if (level) {
-		filteredQuery = filteredQuery.where("level", "=", level);
-	}
-
-	if (source) {
-		filteredQuery = filteredQuery.where("source", "=", source);
-	}
-
-	return filteredQuery;
-}
-
-function applySearchFilter<O>(
-	query: SystemLogsQuery<O>,
-	{ search }: SystemLogSearchFilter,
-): SystemLogsQuery<O> {
-	if (!search) return query;
-
-	return query.where((eb) =>
-		eb.or([
-			eb("message", "ilike", `%${search}%`),
-			eb("metadata", "ilike", `%${search}%`),
-		]),
-	);
-}
-
-function applyDeviceFilters<O>(
-	query: SystemLogsQuery<O>,
-	{
-		apiKey,
-		deviceId,
-		friendlyId,
-		macAddress,
-		search,
-	}: SystemLogDeviceFilters & SystemLogSearchFilter,
-): SystemLogsQuery<O> {
-	return query.where((eb) => {
-		const ors = [];
-
-		if (search) {
-			ors.push(eb("message", "ilike", `%${search}%`));
-			ors.push(eb("metadata", "ilike", `%${search}%`));
-		}
-
-		if (deviceId) {
-			ors.push(eb("metadata", "ilike", `%"device_id":${deviceId}%`));
-			ors.push(eb("metadata", "ilike", `%"id":${deviceId}%`));
-		}
-
-		if (friendlyId) {
-			ors.push(eb("metadata", "ilike", `%"friendly_id":"${friendlyId}"%`));
-		}
-
-		if (macAddress) {
-			ors.push(eb("metadata", "ilike", `%"mac_address":"${macAddress}"%`));
-		}
-
-		if (apiKey) {
-			ors.push(eb("metadata", "ilike", `%"api_key":"${apiKey}"%`));
-		}
-
-		return ors.length > 0 ? eb.or(ors) : eb.and([]);
-	});
-}
-
-async function fetchUniqueSystemLogSources(): Promise<string[]> {
-	const uniqueSourcesResult = await db
-		.selectFrom("system_logs")
-		.select("source")
-		.distinct()
-		.orderBy("source", "asc")
-		.execute();
-
-	return uniqueSourcesResult
-		.map((item) => item.source)
-		.filter(Boolean) as string[];
-}
-
-function baseSystemLogQuery() {
-	return db.selectFrom("system_logs").selectAll();
-}
-
-function systemLogCountQuery() {
-	return db
-		.selectFrom("system_logs")
-		.select((eb) => eb.fn.countAll().as("count"));
-}
-
-async function executeSystemLogsQuery<O extends Record<string, unknown>>(
-	query: SystemLogsQuery<O>,
-	countQuery: SystemLogsQuery<{ count: string | number | bigint }>,
-	page: number,
-	perPage: number,
-): Promise<FetchSystemLogsResult> {
-	const offset = (page - 1) * perPage;
-	const logs = await query
-		.orderBy("created_at", "desc")
-		.limit(perPage)
-		.offset(offset)
-		.execute();
-	const countResult = await countQuery.executeTakeFirst();
-	const uniqueSources = await fetchUniqueSystemLogSources();
-
-	return {
-		logs: logs as unknown as SystemLog[],
-		total: Number(countResult?.count || 0),
-		uniqueSources,
-	};
 }
 
 export async function fetchSystemLogs({
@@ -178,21 +36,89 @@ export async function fetchSystemLogs({
 	level,
 	source,
 }: FetchSystemLogsParams): Promise<FetchSystemLogsResult> {
-	if (!(await canFetchSystemLogs())) {
-		return EMPTY_SYSTEM_LOGS_RESULT;
+	const { ready } = await checkDbConnection();
+
+	if (!ready) {
+		console.warn("Database client not initialized");
+		return { logs: [], total: 0, uniqueSources: [] };
 	}
 
-	const filters = { level, search, source };
-	const query = applySearchFilter(
-		applyBaseSystemLogFilters(baseSystemLogQuery(), filters),
-		filters,
-	);
-	const countQuery = applySearchFilter(
-		applyBaseSystemLogFilters(systemLogCountQuery(), filters),
-		filters,
-	);
+	if (!(await canReadSystemLogs())) {
+		return { logs: [], total: 0, uniqueSources: [] };
+	}
 
-	return executeSystemLogsQuery(query, countQuery, page, perPage);
+	// Calculate pagination
+	const offset = (page - 1) * perPage;
+
+	// Start building the query
+	let query = db.selectFrom("system_logs").selectAll();
+
+	// Apply filters
+	if (level) {
+		query = query.where("level", "=", level);
+	}
+
+	if (source) {
+		query = query.where("source", "=", source);
+	}
+
+	if (search) {
+		query = query.where((eb) =>
+			eb.or([
+				eb("message", "ilike", `%${search}%`),
+				eb("metadata", "ilike", `%${search}%`),
+			]),
+		);
+	}
+
+	// Get paginated results
+	const logs = await query
+		.orderBy("created_at", "desc")
+		.limit(perPage)
+		.offset(offset)
+		.execute();
+
+	// Get total count
+	let countQuery = db
+		.selectFrom("system_logs")
+		.select((eb) => eb.fn.countAll().as("count"));
+
+	if (level) {
+		countQuery = countQuery.where("level", "=", level);
+	}
+
+	if (source) {
+		countQuery = countQuery.where("source", "=", source);
+	}
+
+	if (search) {
+		countQuery = countQuery.where((eb) =>
+			eb.or([
+				eb("message", "ilike", `%${search}%`),
+				eb("metadata", "ilike", `%${search}%`),
+			]),
+		);
+	}
+
+	const countResult = await countQuery.executeTakeFirst();
+
+	// Get unique sources for the filter dropdown
+	const uniqueSourcesResult = await db
+		.selectFrom("system_logs")
+		.select("source")
+		.distinct()
+		.orderBy("source", "asc")
+		.execute();
+
+	const uniqueSources = uniqueSourcesResult
+		.map((item) => item.source)
+		.filter(Boolean) as string[];
+
+	return {
+		logs: logs as unknown as SystemLog[],
+		total: Number(countResult?.count || 0),
+		uniqueSources,
+	};
 }
 
 /**
@@ -221,27 +147,133 @@ export async function fetchDeviceSystemLogs({
 	macAddress,
 	apiKey,
 }: FetchDeviceSystemLogsParams): Promise<FetchSystemLogsResult> {
-	if (!(await canFetchSystemLogs())) {
-		return EMPTY_SYSTEM_LOGS_RESULT;
+	const { ready } = await checkDbConnection();
+
+	if (!ready) {
+		console.warn("Database client not initialized");
+		return { logs: [], total: 0, uniqueSources: [] };
 	}
 
-	const filters = {
-		apiKey,
-		deviceId,
-		friendlyId,
-		level,
-		macAddress,
-		search,
-		source,
-	};
-	const query = applyDeviceFilters(
-		applyBaseSystemLogFilters(baseSystemLogQuery(), filters),
-		filters,
-	);
-	const countQuery = applyDeviceFilters(
-		applyBaseSystemLogFilters(systemLogCountQuery(), filters),
-		filters,
-	);
+	if (!(await canReadSystemLogs())) {
+		return { logs: [], total: 0, uniqueSources: [] };
+	}
 
-	return executeSystemLogsQuery(query, countQuery, page, perPage);
+	// Calculate pagination
+	const offset = (page - 1) * perPage;
+
+	// Start building the query
+	let query = db.selectFrom("system_logs").selectAll();
+
+	// Apply filters
+	if (level) {
+		query = query.where("level", "=", level);
+	}
+
+	if (source) {
+		query = query.where("source", "=", source);
+	}
+
+	query = query.where((eb) => {
+		// We need to handle expression builder correctly
+		const ors = [];
+
+		if (search) {
+			ors.push(eb("message", "ilike", `%${search}%`));
+			ors.push(eb("metadata", "ilike", `%${search}%`));
+		}
+
+		if (deviceId) {
+			ors.push(eb("metadata", "ilike", `%"device_id":${deviceId}%`));
+			ors.push(eb("metadata", "ilike", `%"id":${deviceId}%`));
+		}
+
+		if (friendlyId) {
+			ors.push(eb("metadata", "ilike", `%"friendly_id":"${friendlyId}"%`));
+		}
+
+		if (macAddress) {
+			ors.push(eb("metadata", "ilike", `%"mac_address":"${macAddress}"%`));
+		}
+
+		if (apiKey) {
+			ors.push(eb("metadata", "ilike", `%"api_key":"${apiKey}"%`));
+		}
+
+		if (ors.length > 0) {
+			return eb.or(ors);
+		}
+
+		return eb.and([]); // No conditions added to this group if nothing matched
+	});
+
+	// Get paginated results
+	const logs = await query
+		.orderBy("created_at", "desc")
+		.limit(perPage)
+		.offset(offset)
+		.execute();
+
+	// Get total count
+	let countQuery = db
+		.selectFrom("system_logs")
+		.select((eb) => eb.fn.countAll().as("count"));
+
+	if (level) {
+		countQuery = countQuery.where("level", "=", level);
+	}
+
+	if (source) {
+		countQuery = countQuery.where("source", "=", source);
+	}
+
+	countQuery = countQuery.where((eb) => {
+		const ors = [];
+
+		if (search) {
+			ors.push(eb("message", "ilike", `%${search}%`));
+			ors.push(eb("metadata", "ilike", `%${search}%`));
+		}
+
+		if (deviceId) {
+			ors.push(eb("metadata", "ilike", `%"device_id":${deviceId}%`));
+			ors.push(eb("metadata", "ilike", `%"id":${deviceId}%`));
+		}
+
+		if (friendlyId) {
+			ors.push(eb("metadata", "ilike", `%"friendly_id":"${friendlyId}"%`));
+		}
+
+		if (macAddress) {
+			ors.push(eb("metadata", "ilike", `%"mac_address":"${macAddress}"%`));
+		}
+
+		if (apiKey) {
+			ors.push(eb("metadata", "ilike", `%"api_key":"${apiKey}"%`));
+		}
+
+		if (ors.length > 0) {
+			return eb.or(ors);
+		}
+		return eb.and([]);
+	});
+
+	const countResult = await countQuery.executeTakeFirst();
+
+	// Get unique sources for the filter dropdown
+	const uniqueSourcesResult = await db
+		.selectFrom("system_logs")
+		.select("source")
+		.distinct()
+		.orderBy("source", "asc")
+		.execute();
+
+	const uniqueSources = uniqueSourcesResult
+		.map((item) => item.source)
+		.filter(Boolean) as string[];
+
+	return {
+		logs: logs as unknown as SystemLog[],
+		total: Number(countResult?.count || 0),
+		uniqueSources,
+	};
 }

@@ -1,5 +1,10 @@
 import React from "react";
 import { extractFontFamily } from "@/lib/fonts";
+import {
+	DEFAULT_IMAGE_HEIGHT,
+	DEFAULT_IMAGE_WIDTH,
+} from "@/lib/recipes/constants";
+import { getRendererType } from "@/lib/recipes/render/rasterize";
 import { cn } from "@/lib/utils";
 import {
 	getResetStyles,
@@ -9,26 +14,16 @@ import {
 } from "./pre-satori-tailwind";
 
 interface PreSatoriProps {
-	useDoubling?: boolean;
 	width?: number;
 	height?: number;
 	children: React.ReactNode;
 }
-export const getRendererType = (): "takumi" | "satori" | "browser" => {
-	const renderer = process.env.REACT_RENDERER?.toLowerCase();
-	if (renderer === "browser") return "browser";
-	return renderer === "satori" ? "satori" : "takumi";
-};
 
 export const PreSatori: React.FC<PreSatoriProps> = ({
-	useDoubling = false,
-	width = 800,
-	height = 480,
+	width = DEFAULT_IMAGE_WIDTH,
+	height = DEFAULT_IMAGE_HEIGHT,
 	children,
 }) => {
-	const rendererType = getRendererType();
-	const effectiveUseDoubling = useDoubling && rendererType !== "browser";
-
 	// Define a helper to recursively transform children.
 	const transform = (child: React.ReactNode): React.ReactNode => {
 		if (React.isValidElement(child)) {
@@ -43,10 +38,7 @@ export const PreSatori: React.FC<PreSatoriProps> = ({
 				children?: React.ReactNode;
 				[key: string]: unknown;
 			};
-			const fontFamily = extractFontFamily(
-				className,
-				style as Record<string, unknown>,
-			);
+			const fontFamily = extractFontFamily(className);
 			const newStyle: React.CSSProperties = {
 				...style,
 				fontSmooth: "always",
@@ -54,7 +46,7 @@ export const PreSatori: React.FC<PreSatoriProps> = ({
 			};
 
 			// Special handling for display properties
-			if (rendererType === "satori") {
+			if (getRendererType() === "satori") {
 				if (
 					style?.display !== "flex" &&
 					style?.display !== "contents" &&
@@ -67,12 +59,15 @@ export const PreSatori: React.FC<PreSatoriProps> = ({
 			// Process className for dither patterns, gap classes, and responsive breakpoints
 			const responsiveClass = processResponsive(className, width);
 			// Check if element should be hidden - don't render it at all
-			if (responsiveClass.includes("hidden") && rendererType === "satori") {
+			if (
+				responsiveClass.includes("hidden") &&
+				getRendererType() === "satori"
+			) {
 				return null;
 			}
 			let afterGapClass = responsiveClass;
 			let gapStyle = {};
-			if (rendererType === "satori") {
+			if (getRendererType() === "satori") {
 				({ style: gapStyle, className: afterGapClass } =
 					processGap(responsiveClass));
 			}
@@ -112,8 +107,6 @@ export const PreSatori: React.FC<PreSatoriProps> = ({
 				display: "flex",
 				width: `${width}px`,
 				height: `${height}px`,
-				transformOrigin: "top left",
-				...(effectiveUseDoubling ? { transform: "scale(2)" } : {}),
 			}}
 		>
 			{React.Children.map(children, (child) => transform(child))}

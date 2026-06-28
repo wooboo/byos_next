@@ -1,4 +1,3 @@
-import { createContext, Script } from "node:vm";
 import yaml from "js-yaml";
 import {
 	type Context,
@@ -11,10 +10,10 @@ import {
 	type TopLevelToken,
 } from "liquidjs";
 import { db } from "@/lib/database/db";
-import { withExplicitUserScope, withUserScope } from "@/lib/database/scoped-db";
+import { withExplicitUserScope } from "@/lib/database/scoped-db";
 import { checkDbConnection } from "@/lib/database/utils";
-import { logger } from "@/lib/recipes/logger";
-import type { RecipeParamDefinitions } from "@/lib/recipes/params";
+import { logger } from "./logger";
+import type { RecipeParamDefinitions } from "./zod-form";
 
 const TRMNL_CSS_URL = "https://trmnl.com/css/latest/plugins.css";
 const TRMNL_JS_URL = "https://trmnl.com/js/latest/plugins.js";
@@ -38,37 +37,6 @@ type LiquidRenderResult = {
 	html: string;
 	settings: SettingsYml;
 };
-
-type TrmnlContext = {
-	plugin_settings: {
-		custom_fields_values: Record<string, unknown>;
-	};
-	env: {
-		firmware_version: string;
-		time_zone: string;
-	};
-	user: {
-		name: string;
-		locale: string;
-	};
-};
-
-const BLOCKED_POLLING_HOSTS = new Set(["localhost", "0.0.0.0", "::", "::1"]);
-
-const BLOCKED_POLLING_HOST_SUFFIXES = [".localhost", ".internal", ".local"];
-
-const IPV4_LITERAL_PATTERN = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-
-const BLOCKED_IPV4_FIRST_OCTETS = new Set([0, 10, 127]);
-
-const BLOCKED_IPV4_SECOND_OCTET_RANGES: Record<number, [number, number][]> = {
-	100: [[64, 127]],
-	169: [[254, 254]],
-	172: [[16, 31]],
-	192: [[168, 168]],
-};
-
-const BLOCKED_IPV6_PREFIXES = ["fc", "fd", "fe8", "fe9", "fea", "feb"];
 
 /**
  * Custom liquidjs block tag for TRMNL's {% template name %}...{% endtemplate %}.
@@ -119,19 +87,24 @@ async function fetchRecipeFiles(
 		return null;
 	}
 
-	const runQuery = (conn: typeof db) => {
-		return conn
+	const runQuery = (conn: typeof db, sharedOnly = false) => {
+		let query = conn
 			.selectFrom("recipe_files")
 			.innerJoin("recipes", "recipes.id", "recipe_files.recipe_id")
 			.select(["recipe_files.filename", "recipe_files.content"])
 			.where("recipes.slug", "=", slug)
-			.where("recipes.type", "=", "liquid")
-			.execute();
+			.where("recipes.type", "=", "liquid");
+
+		if (sharedOnly) {
+			query = query.where("recipes.user_id", "is", null);
+		}
+
+		return query.execute();
 	};
 
 	const files = userId
 		? await withExplicitUserScope(userId, runQuery)
-		: await withUserScope((scopedDb) => runQuery(scopedDb));
+		: await runQuery(db, true);
 
 	if (!files || files.length === 0) {
 		return null;
@@ -192,70 +165,66 @@ function extractCustomFieldDefaults(
 	return defaults;
 }
 
-function parsePollingUrl(raw: string): URL | null {
-	try {
-		return new URL(raw);
-	} catch {
-		return null;
-	}
-}
-
-function hasSafePollingProtocol(url: URL): boolean {
-	return url.protocol === "http:" || url.protocol === "https:";
-}
-
-function isBlockedPollingHostname(host: string): boolean {
-	return (
-		BLOCKED_POLLING_HOSTS.has(host) ||
-		BLOCKED_POLLING_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix))
-	);
-}
-
-function isBlockedIpv4PollingHost(host: string): boolean {
-	const v4 = host.match(IPV4_LITERAL_PATTERN);
-	if (!v4) {
-		return false;
-	}
-
-	const [a, b] = [Number(v4[1]), Number(v4[2])];
-
-	// 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12,
-	// 192.168.0.0/16, 100.64.0.0/10 (CGNAT), 0.0.0.0/8
-	if (BLOCKED_IPV4_FIRST_OCTETS.has(a)) {
-		return true;
-	}
-
-	const ranges = BLOCKED_IPV4_SECOND_OCTET_RANGES[a] ?? [];
-	return ranges.some(([min, max]) => b >= min && b <= max);
-}
-
-function isBlockedIpv6PollingHost(host: string): boolean {
-	if (!host.includes(":")) {
-		return false;
-	}
-
-	// URL.hostname strips brackets. Block unique-local (fc00::/7) and
-	// link-local (fe80::/10).
-	return BLOCKED_IPV6_PREFIXES.some((prefix) => host.startsWith(prefix));
-}
-
 /**
  * Block private/link-local/loopback ranges to prevent SSRF against
  * internal services (cloud metadata, RDS proxies, localhost admin).
  * Only http/https schemes allowed.
  */
 function isSafePollingUrl(raw: string): boolean {
-	const parsed = parsePollingUrl(raw);
-	if (!parsed || !hasSafePollingProtocol(parsed)) {
+	let parsed: URL;
+	try {
+		parsed = new URL(raw);
+	} catch {
 		return false;
 	}
-
+	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+		return false;
+	}
 	const host = parsed.hostname.toLowerCase();
-	return (
-		!isBlockedPollingHostname(host) &&
-		!isBlockedIpv4PollingHost(host) &&
-		!isBlockedIpv6PollingHost(host)
-	);
+	if (
+		host === "localhost" ||
+		host === "0.0.0.0" ||
+		host === "::" ||
+		host === "::1" ||
+		host.endsWith(".localhost") ||
+		host.endsWith(".internal") ||
+		host.endsWith(".local")
+	) {
+		return false;
+	}
+	// IPv4 literal checks
+	const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+	if (v4) {
+		const [a, b] = [Number(v4[1]), Number(v4[2])];
+		// 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12,
+		// 192.168.0.0/16, 100.64.0.0/10 (CGNAT), 0.0.0.0/8
+		if (
+			a === 0 ||
+			a === 10 ||
+			a === 127 ||
+			(a === 169 && b === 254) ||
+			(a === 172 && b >= 16 && b <= 31) ||
+			(a === 192 && b === 168) ||
+			(a === 100 && b >= 64 && b <= 127)
+		) {
+			return false;
+		}
+	}
+	// IPv6: URL.hostname strips brackets, so detect by presence of a colon.
+	// Block unique-local (fc00::/7) and link-local (fe80::/10).
+	if (host.includes(":")) {
+		if (
+			host.startsWith("fc") ||
+			host.startsWith("fd") ||
+			host.startsWith("fe8") ||
+			host.startsWith("fe9") ||
+			host.startsWith("fea") ||
+			host.startsWith("feb")
+		) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /**
@@ -308,39 +277,6 @@ async function fetchPollingData(
 	}
 
 	return data;
-}
-
-function firstPollingPayload(
-	pollingData: Record<string, unknown>,
-): Record<string, unknown> {
-	const first = pollingData.IDX_0;
-	return first && typeof first === "object" && !Array.isArray(first)
-		? (first as Record<string, unknown>)
-		: {};
-}
-
-function runTransform(
-	transformSource: string,
-	input: Record<string, unknown>,
-): Record<string, unknown> {
-	try {
-		const sandbox = createContext({
-			input,
-			JSON,
-			Math,
-		});
-		const script = new Script(`
-${transformSource}
-typeof transform === "function" ? transform(input) : {};
-`);
-		const result = script.runInContext(sandbox, { timeout: 1000 });
-		return result && typeof result === "object" && !Array.isArray(result)
-			? (result as Record<string, unknown>)
-			: {};
-	} catch (error) {
-		logger.error("Error executing liquid transform.js:", error);
-		return {};
-	}
 }
 
 /**
@@ -516,20 +452,6 @@ export async function renderLiquidRecipe(
 		...customFieldOverrides,
 	};
 
-	const trmnlContext: TrmnlContext = {
-		plugin_settings: {
-			custom_fields_values: customFieldValues,
-		},
-		env: {
-			firmware_version: "1.0.0",
-			time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-		},
-		user: {
-			name: "BYOS User",
-			locale: "en",
-		},
-	};
-
 	// Resolve polling URL through Liquid so templates with {% for %} / {% assign %}
 	// are expanded into actual URLs before fetching
 	let pollingData: Record<string, unknown> = {};
@@ -549,17 +471,8 @@ export async function renderLiquidRecipe(
 		}
 	}
 
-	const transformSource = findTemplateFile(files, "transform.js");
-	const transformedData = transformSource
-		? runTransform(transformSource, {
-				...firstPollingPayload(pollingData),
-				...pollingData,
-				trmnl: trmnlContext,
-			})
-		: {};
-
 	// Find the main template
-	const fullTemplate = findTemplateFile(files, "full.liquid");
+	let fullTemplate = findTemplateFile(files, "full.liquid");
 	if (!fullTemplate) {
 		logger.error(`No full.liquid template found for recipe: ${slug}`);
 		return null;
@@ -591,6 +504,7 @@ export async function renderLiquidRecipe(
 	const sharedTemplate = findTemplateFile(files, "shared.liquid");
 	if (sharedTemplate) {
 		templates.shared = sharedTemplate;
+		fullTemplate = `${sharedTemplate}\n${fullTemplate}`;
 
 		// Extract named template blocks from shared.liquid as partials
 		const blockRegex =
@@ -617,10 +531,20 @@ export async function renderLiquidRecipe(
 
 	// Build template context
 	const context: Record<string, unknown> = {
-		trmnl: trmnlContext,
-		...firstPollingPayload(pollingData),
+		trmnl: {
+			plugin_settings: {
+				custom_fields_values: customFieldValues,
+			},
+			env: {
+				firmware_version: "1.0.0",
+				time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+			},
+			user: {
+				name: "BYOS User",
+				locale: "en",
+			},
+		},
 		...pollingData,
-		...transformedData,
 	};
 
 	try {

@@ -3,6 +3,7 @@
 import {
 	Ban,
 	CheckCircle,
+	MoreHorizontal,
 	Plus,
 	RefreshCw,
 	Shield,
@@ -12,15 +13,16 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import {
-	AdminResourceTable,
-	AdminRowActions,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-} from "@/components/admin/admin-resource-table";
 import { PageTemplate } from "@/components/common/page-template";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -29,6 +31,13 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -38,7 +47,14 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { TableCell, TableRow } from "@/components/ui/table";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
 import { authClient } from "@/lib/auth/auth-client";
 
 interface User {
@@ -211,87 +227,125 @@ export default function AdminUsersClientPage() {
 				</div>
 			}
 		>
-			<AdminResourceTable
-				title="Users"
-				description={
-					<>
+			<Card>
+				<CardHeader>
+					<CardTitle>Users</CardTitle>
+					<CardDescription>
 						{users.length} user{users.length !== 1 ? "s" : ""} registered
-					</>
-				}
-				headers={["Name", "Email", "Role", "Status", "Created"]}
-				colSpan={6}
-				loading={loading}
-				empty={users.length === 0}
-				loadingLabel="Loading users..."
-				emptyLabel="No users found"
-			>
-				{users.map((user) => (
-					<TableRow key={user.id}>
-						<TableCell className="font-medium">{user.name}</TableCell>
-						<TableCell>{user.email}</TableCell>
-						<TableCell>
-							<Badge variant={user.role === "admin" ? "default" : "secondary"}>
-								{user.role}
-							</Badge>
-						</TableCell>
-						<TableCell>
-							{user.banned ? (
-								<Badge variant="destructive">Banned</Badge>
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Name</TableHead>
+								<TableHead>Email</TableHead>
+								<TableHead>Role</TableHead>
+								<TableHead>Status</TableHead>
+								<TableHead>Created</TableHead>
+								<TableHead className="w-[70px]" />
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{loading ? (
+								<TableRow>
+									<TableCell colSpan={6} className="text-center py-8">
+										Loading users...
+									</TableCell>
+								</TableRow>
+							) : users.length === 0 ? (
+								<TableRow>
+									<TableCell colSpan={6} className="text-center py-8">
+										No users found
+									</TableCell>
+								</TableRow>
 							) : (
-								<Badge variant="outline">
-									<CheckCircle className="mr-1 size-3" />
-									Active
-								</Badge>
+								users.map((user) => (
+									<TableRow key={user.id}>
+										<TableCell className="font-medium">{user.name}</TableCell>
+										<TableCell>{user.email}</TableCell>
+										<TableCell>
+											<Badge
+												variant={
+													user.role === "admin" ? "default" : "secondary"
+												}
+											>
+												{user.role}
+											</Badge>
+										</TableCell>
+										<TableCell>
+											{user.banned ? (
+												<Badge variant="destructive">Banned</Badge>
+											) : (
+												<Badge variant="outline">
+													<CheckCircle className="mr-1 size-3" />
+													Active
+												</Badge>
+											)}
+										</TableCell>
+										<TableCell>
+											{new Date(user.createdAt).toLocaleDateString()}
+										</TableCell>
+										<TableCell>
+											<DropdownMenu>
+												<DropdownMenuTrigger asChild>
+													<Button variant="ghost" size="icon">
+														<MoreHorizontal className="size-4" />
+													</Button>
+												</DropdownMenuTrigger>
+												<DropdownMenuContent align="end">
+													{user.role !== "admin" ? (
+														<DropdownMenuItem
+															onClick={() => handleSetRole(user.id, "admin")}
+														>
+															<Shield className="mr-2 size-4" />
+															Make admin
+														</DropdownMenuItem>
+													) : (
+														<DropdownMenuItem
+															onClick={() => handleSetRole(user.id, "user")}
+														>
+															<ShieldOff className="mr-2 size-4" />
+															Remove admin
+														</DropdownMenuItem>
+													)}
+													<DropdownMenuSeparator />
+													{user.banned ? (
+														<DropdownMenuItem
+															onClick={() => handleUnbanUser(user.id)}
+														>
+															<CheckCircle className="mr-2 size-4" />
+															Unban user
+														</DropdownMenuItem>
+													) : (
+														<DropdownMenuItem
+															onClick={() => handleBanUser(user.id)}
+														>
+															<Ban className="mr-2 size-4" />
+															Ban user
+														</DropdownMenuItem>
+													)}
+													<DropdownMenuSeparator />
+													<DropdownMenuItem
+														className="text-destructive"
+														onClick={() => {
+															setSelectedUser(user);
+															setDeleteDialogOpen(true);
+														}}
+													>
+														<Trash2 className="mr-2 size-4" />
+														Delete user
+													</DropdownMenuItem>
+												</DropdownMenuContent>
+											</DropdownMenu>
+										</TableCell>
+									</TableRow>
+								))
 							)}
-						</TableCell>
-						<TableCell>
-							{new Date(user.createdAt).toLocaleDateString()}
-						</TableCell>
-						<TableCell>
-							<AdminRowActions>
-								{user.role !== "admin" ? (
-									<DropdownMenuItem
-										onClick={() => handleSetRole(user.id, "admin")}
-									>
-										<Shield className="mr-2 size-4" />
-										Make admin
-									</DropdownMenuItem>
-								) : (
-									<DropdownMenuItem
-										onClick={() => handleSetRole(user.id, "user")}
-									>
-										<ShieldOff className="mr-2 size-4" />
-										Remove admin
-									</DropdownMenuItem>
-								)}
-								<DropdownMenuSeparator />
-								{user.banned ? (
-									<DropdownMenuItem onClick={() => handleUnbanUser(user.id)}>
-										<CheckCircle className="mr-2 size-4" />
-										Unban user
-									</DropdownMenuItem>
-								) : (
-									<DropdownMenuItem onClick={() => handleBanUser(user.id)}>
-										<Ban className="mr-2 size-4" />
-										Ban user
-									</DropdownMenuItem>
-								)}
-								<DropdownMenuSeparator />
-								<DropdownMenuItem
-									className="text-destructive"
-									onClick={() => {
-										setSelectedUser(user);
-										setDeleteDialogOpen(true);
-									}}
-								>
-									<Trash2 className="mr-2 size-4" />
-									Delete user
-								</DropdownMenuItem>
-							</AdminRowActions>
-						</TableCell>
-					</TableRow>
-				))}
-			</AdminResourceTable>
+						</TableBody>
+					</Table>
+				</CardContent>
+			</Card>
 
 			{/* Create User Dialog */}
 			<Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>

@@ -1,4 +1,4 @@
-import { registryResponse } from "@/lib/trmnl/registry";
+import { getRegistry } from "@/lib/trmnl/registry";
 
 /**
  * GET /api/palettes
@@ -8,5 +8,16 @@ import { registryResponse } from "@/lib/trmnl/registry";
  * Set TRMNL_PROXY_LIVE=true to always proxy upstream.
  */
 export async function GET() {
-	return registryResponse("palettes");
+	try {
+		const data = await getRegistry("palettes");
+		return Response.json(data);
+	} catch (error) {
+		return Response.json(
+			{
+				error: "Failed to load palettes registry",
+				message: error instanceof Error ? error.message : "Unknown error",
+			},
+			{ status: 502 },
+		);
+	}
 }

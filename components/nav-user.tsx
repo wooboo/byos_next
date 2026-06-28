@@ -8,6 +8,7 @@ import {
 	Monitor,
 	Settings,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -38,46 +39,23 @@ interface NavUserProps {
 	};
 }
 
-export function getUserInitials(user: NavUserProps["user"]) {
-	if (user.name) {
-		const parts = user.name.split(" ");
-		if (parts.length >= 2) {
-			return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-		}
-		return user.name[0].toUpperCase();
-	}
-	if (user.email) {
-		return user.email[0].toUpperCase();
-	}
-	return "U";
-}
-
-function UserSummary({
-	emailClassName,
-	user,
-}: {
-	emailClassName: string;
-	user: NavUserProps["user"];
-}) {
-	return (
-		<>
-			<Avatar className="h-8 w-8 rounded-lg">
-				{user.image && <AvatarImage src={user.image} alt={user.name} />}
-				<AvatarFallback className="rounded-lg">
-					{getUserInitials(user)}
-				</AvatarFallback>
-			</Avatar>
-			<div className="grid flex-1 text-left text-sm leading-tight">
-				<span className="truncate font-medium">{user.name}</span>
-				<span className={emailClassName}>{user.email}</span>
-			</div>
-		</>
-	);
-}
-
 export function NavUser({ user }: NavUserProps) {
 	const { isMobile } = useSidebar();
 	const router = useRouter();
+
+	const getUserInitials = () => {
+		if (user.name) {
+			const parts = user.name.split(" ");
+			if (parts.length >= 2) {
+				return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+			}
+			return user.name[0].toUpperCase();
+		}
+		if (user.email) {
+			return user.email[0].toUpperCase();
+		}
+		return "U";
+	};
 
 	const handleSignOut = async () => {
 		await authClient.signOut();
@@ -94,10 +72,18 @@ export function NavUser({ user }: NavUserProps) {
 							size="lg"
 							className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
 						>
-							<UserSummary
-								user={user}
-								emailClassName="truncate text-xs text-sidebar-foreground/70"
-							/>
+							<Avatar className="h-8 w-8 rounded-lg">
+								{user.image && <AvatarImage src={user.image} alt={user.name} />}
+								<AvatarFallback className="rounded-lg">
+									{getUserInitials()}
+								</AvatarFallback>
+							</Avatar>
+							<div className="grid flex-1 text-left text-sm leading-tight">
+								<span className="truncate font-medium">{user.name}</span>
+								<span className="truncate text-xs text-sidebar-foreground/70">
+									{user.email}
+								</span>
+							</div>
 							<ChevronsUpDown className="ml-auto size-4" />
 						</SidebarMenuButton>
 					</DropdownMenuTrigger>
@@ -109,10 +95,20 @@ export function NavUser({ user }: NavUserProps) {
 					>
 						<DropdownMenuLabel className="p-0 font-normal">
 							<div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-								<UserSummary
-									user={user}
-									emailClassName="truncate text-xs text-muted-foreground"
-								/>
+								<Avatar className="h-8 w-8 rounded-lg">
+									{user.image && (
+										<AvatarImage src={user.image} alt={user.name} />
+									)}
+									<AvatarFallback className="rounded-lg">
+										{getUserInitials()}
+									</AvatarFallback>
+								</Avatar>
+								<div className="grid flex-1 text-left text-sm leading-tight">
+									<span className="truncate font-medium">{user.name}</span>
+									<span className="truncate text-xs text-muted-foreground">
+										{user.email}
+									</span>
+								</div>
 							</div>
 						</DropdownMenuLabel>
 						<DropdownMenuSeparator />
@@ -161,6 +157,28 @@ export function NavUser({ user }: NavUserProps) {
 						</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
+			</SidebarMenuItem>
+		</SidebarMenu>
+	);
+}
+
+// Fallback for when auth is disabled or no user
+export function NavUserFallback() {
+	return (
+		<SidebarMenu>
+			<SidebarMenuItem>
+				<div className="flex items-center gap-2 px-2 py-1.5">
+					<Image
+						src="/trmnl-glyphs/trmnl-glyph--brand.svg"
+						alt="TRMNL"
+						width={24}
+						height={24}
+						className="opacity-50"
+					/>
+					<span className="text-xs text-muted-foreground font-mono">
+						v{packageJson.version}
+					</span>
+				</div>
 			</SidebarMenuItem>
 		</SidebarMenu>
 	);

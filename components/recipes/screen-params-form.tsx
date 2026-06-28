@@ -6,17 +6,15 @@ import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import type {
 	RecipeParamDefinition,
 	RecipeParamDefinitions,
-} from "@/lib/recipes/recipe-renderer";
+} from "@/lib/recipes/zod-form";
+
+type UpdateResult =
+	| { success: true }
+	| { success: false; error?: string; fieldErrors?: Record<string, string> };
 
 type Props = {
 	slug: string;
@@ -25,13 +23,12 @@ type Props = {
 	updateAction: (
 		slug: string,
 		params: Record<string, unknown>,
-		definitions?: RecipeParamDefinitions,
-	) => Promise<{ success: boolean; error?: string }>;
+	) => Promise<UpdateResult>;
 };
 
 type FormStatus = "idle" | "success" | "error";
 
-export const buildInitialState = (
+const buildInitialState = (
 	schema: RecipeParamDefinitions,
 	initialValues: Record<string, unknown>,
 ) => {
@@ -44,6 +41,8 @@ export const buildInitialState = (
 		}
 		if (definition.default !== undefined) {
 			state[key] = definition.default;
+		} else if (definition.type === "boolean") {
+			state[key] = false;
 		} else {
 			state[key] = "";
 		}
@@ -51,134 +50,58 @@ export const buildInitialState = (
 	return state;
 };
 
-export function coerceFieldValue(
-	definition: Pick<RecipeParamDefinition, "type">,
-	value: string,
-) {
-	if (definition.type !== "number") return value;
-	return Number.isNaN(Number(value)) ? "" : Number(value);
-}
-
-export function hasScreenParams(paramsSchema: RecipeParamDefinitions) {
-	return Object.keys(paramsSchema || {}).length > 0;
-}
-
-export function isScreenParamsDirty(
-	values: Record<string, unknown>,
-	initial: Record<string, unknown>,
-) {
-	return JSON.stringify(values) !== JSON.stringify(initial);
-}
-
-export async function submitScreenParams({
-	slug,
-	values,
-	paramsSchema,
-	updateAction,
-}: Pick<Props, "slug" | "paramsSchema" | "updateAction"> & {
-	values: Record<string, unknown>;
-}) {
-	const result = await updateAction(slug, values, paramsSchema);
-	if (!result.success) {
-		return {
-			formStatus: "error" as const,
-			statusMessage: result.error ?? "Unable to save configuration",
-		};
-	}
-
-	return {
-		formStatus: "success" as const,
-		statusMessage: "Saved",
-	};
-}
-
-export function resetScreenParamsForm(initial: Record<string, unknown>) {
-	return {
-		values: initial,
-		formStatus: "idle" as const,
-		statusMessage: "",
-	};
-}
-
-export function applySubmittedScreenParamsResult({
-	result,
-	setFormStatus,
-	setStatusMessage,
-}: {
-	result: Awaited<ReturnType<typeof submitScreenParams>>;
-	setFormStatus: (status: FormStatus) => void;
-	setStatusMessage: (message: string) => void;
-}) {
-	setFormStatus(result.formStatus);
-	setStatusMessage(result.statusMessage);
-}
-
-export function applyResetScreenParamsForm({
-	initial,
-	setValues,
-	setFormStatus,
-	setStatusMessage,
-}: {
-	initial: Record<string, unknown>;
-	setValues: (values: Record<string, unknown>) => void;
-	setFormStatus: (status: FormStatus) => void;
-	setStatusMessage: (message: string) => void;
-}) {
-	const nextState = resetScreenParamsForm(initial);
-	setValues(nextState.values);
-	setFormStatus(nextState.formStatus);
-	setStatusMessage(nextState.statusMessage);
-}
-
-export function updateScreenParamsValue(
-	previous: Record<string, unknown>,
-	field: string,
-	value: unknown,
-) {
-	return { ...previous, [field]: value };
-}
-
-export const renderField = (
+const renderField = (
 	key: string,
 	definition: RecipeParamDefinition,
 	value: unknown,
 	onChange: (key: string, value: unknown) => void,
 ) => {
-	if (key === "orientationFilter") {
-		const normalizedValue = typeof value === "string" ? value : "any";
-		return (
-			<Select
-				value={normalizedValue}
-				onValueChange={(nextValue) => onChange(key, nextValue)}
-			>
-				<SelectTrigger className="h-9 w-full">
-					<SelectValue placeholder="any" />
-				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value="any">Any</SelectItem>
-					<SelectItem value="portrait">Portrait</SelectItem>
-					<SelectItem value="landscape">Landscape</SelectItem>
-				</SelectContent>
-			</Select>
-		);
-	}
-
-	const commonProps = {
-		id: key,
-		name: key,
-		value: typeof value === "string" || typeof value === "number" ? value : "",
-		onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-			const nextValue = coerceFieldValue(definition, event.target.value);
-			onChange(key, nextValue);
-		},
-		placeholder: definition.placeholder,
-	};
-
 	switch (definition.type) {
+		case "boolean":
+			return (
+				<Switch
+					id={key}
+					name={key}
+					checked={value === true}
+					onCheckedChange={(checked) => onChange(key, checked)}
+				/>
+			);
 		case "number":
-			return <Input type="number" {...commonProps} />;
+			return (
+				<Input
+					type="number"
+					id={key}
+					name={key}
+					value={
+						typeof value === "string" || typeof value === "number" ? value : ""
+					}
+					placeholder={definition.placeholder}
+					onChange={(event: ChangeEvent<HTMLInputElement>) => {
+						const raw = event.target.value;
+						if (raw === "") {
+							onChange(key, "");
+							return;
+						}
+						const parsed = Number(raw);
+						onChange(key, Number.isNaN(parsed) ? "" : parsed);
+					}}
+				/>
+			);
 		default:
-			return <Input type="text" {...commonProps} />;
+			return (
+				<Input
+					type="text"
+					id={key}
+					name={key}
+					value={
+						typeof value === "string" || typeof value === "number" ? value : ""
+					}
+					placeholder={definition.placeholder}
+					onChange={(event: ChangeEvent<HTMLInputElement>) =>
+						onChange(key, event.target.value)
+					}
+				/>
+			);
 	}
 };
 
@@ -190,6 +113,7 @@ export function ScreenParamsForm({
 }: Props) {
 	const [formStatus, setFormStatus] = useState<FormStatus>("idle");
 	const [statusMessage, setStatusMessage] = useState<string>("");
+	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 	const [isPending, startTransition] = useTransition();
 	const [values, setValues] = useState<Record<string, unknown>>(() =>
 		buildInitialState(paramsSchema, initialValues),
@@ -199,12 +123,12 @@ export function ScreenParamsForm({
 	);
 
 	const hasParams = useMemo(
-		() => hasScreenParams(paramsSchema),
+		() => Object.keys(paramsSchema || {}).length > 0,
 		[paramsSchema],
 	);
 
 	const isDirty = useMemo(
-		() => isScreenParamsDirty(values, initial),
+		() => JSON.stringify(values) !== JSON.stringify(initial),
 		[values, initial],
 	);
 
@@ -212,29 +136,26 @@ export function ScreenParamsForm({
 		event.preventDefault();
 		setFormStatus("idle");
 		setStatusMessage("");
+		setFieldErrors({});
 
 		startTransition(async () => {
-			const result = await submitScreenParams({
-				slug,
-				values,
-				paramsSchema,
-				updateAction,
-			});
-			applySubmittedScreenParamsResult({
-				result,
-				setFormStatus,
-				setStatusMessage,
-			});
+			const result = await updateAction(slug, values);
+			if (!result.success) {
+				setFormStatus("error");
+				setStatusMessage(result.error ?? "Unable to save configuration");
+				if (result.fieldErrors) setFieldErrors(result.fieldErrors);
+				return;
+			}
+			setFormStatus("success");
+			setStatusMessage("Saved");
 		});
 	};
 
 	const handleReset = () => {
-		applyResetScreenParamsForm({
-			initial,
-			setValues,
-			setFormStatus,
-			setStatusMessage,
-		});
+		setValues(initial);
+		setFormStatus("idle");
+		setStatusMessage("");
+		setFieldErrors({});
 	};
 
 	if (!hasParams) return null;
@@ -294,23 +215,31 @@ export function ScreenParamsForm({
 				</div>
 			</div>
 			<div className="grid gap-4 p-4 sm:grid-cols-2">
-				{entries.map(([key, definition]) => (
-					<div key={key} className="flex flex-col gap-1.5">
-						<div className="flex items-baseline justify-between gap-2">
-							<Label htmlFor={key} className="text-xs font-semibold">
-								{definition.label}
-							</Label>
-							{definition.description && (
-								<span className="truncate text-[11px] text-muted-foreground">
-									{definition.description}
+				{entries.map(([key, definition]) => {
+					const fieldError = fieldErrors[key];
+					return (
+						<div key={key} className="flex flex-col gap-1.5">
+							<div className="flex items-baseline justify-between gap-2">
+								<Label htmlFor={key} className="text-xs font-semibold">
+									{definition.label}
+								</Label>
+								{definition.description && (
+									<span className="truncate text-[11px] text-muted-foreground">
+										{definition.description}
+									</span>
+								)}
+							</div>
+							{renderField(key, definition, values[key], (field, val) =>
+								setValues((prev) => ({ ...prev, [field]: val })),
+							)}
+							{fieldError && (
+								<span className="text-[11px] text-destructive">
+									{fieldError}
 								</span>
 							)}
 						</div>
-						{renderField(key, definition, values[key], (field, val) =>
-							setValues((prev) => updateScreenParamsValue(prev, field, val)),
-						)}
-					</div>
-				))}
+					);
+				})}
 			</div>
 		</form>
 	);

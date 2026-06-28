@@ -1,14 +1,22 @@
 "use server";
 
-import crypto from "crypto";
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { getCurrentUserId } from "@/lib/auth/get-user";
+import { BYOS_MONO_USER_ID, getCurrentUserId } from "@/lib/auth/get-user";
 import { db } from "@/lib/database/db";
 import { withUserScope } from "@/lib/database/scoped-db";
 import { checkDbConnection } from "@/lib/database/utils";
+import {
+	createDefaultRefreshSchedule,
+	DEFAULT_DEVICE_SCREEN,
+	DEFAULT_DEVICE_TIMEZONE,
+	DEVICE_SLEEP_REFRESH_SECONDS,
+	serializeRefreshSchedule,
+} from "@/lib/device/defaults";
+import {
+	hashClaimCode,
+	normalizeClaimCode,
+} from "@/lib/device/pending-device-claims";
 import type { Device, Log } from "@/lib/types";
-import { generateFriendlyId } from "@/utils/helpers";
+import { generateFriendlyId, generateMockMacAddress } from "@/utils/helpers";
 
 /**
  * Fetch a single device by friendly_id
@@ -72,6 +80,7 @@ export type FetchDeviceLogsParams = {
 	page: number;
 	perPage: number;
 	search?: string;
+	type?: string;
 	friendlyId?: string;
 };
 
@@ -99,6 +108,7 @@ export async function fetchDeviceLogsWithFilters({
 	page,
 	perPage,
 	search,
+	type,
 	friendlyId,
 }: FetchDeviceLogsParams): Promise<FetchDeviceLogsResult> {
 	const { ready } = await checkDbConnection();
@@ -125,6 +135,30 @@ export async function fetchDeviceLogsWithFilters({
 	if (search) {
 		query = query.where("log_data", "ilike", `%${search}%`);
 	}
+	if (type && type !== "all") {
+		if (type === "error") {
+			query = query.where((eb) =>
+				eb.or([
+					eb("log_data", "ilike", "%error%"),
+					eb("log_data", "ilike", "%fail%"),
+				]),
+			);
+		} else if (type === "warning") {
+			query = query.where("log_data", "ilike", "%warn%");
+		} else if (type === "info") {
+			query = query.where((eb) =>
+				eb.and([
+					eb.not(
+						eb.or([
+							eb("log_data", "ilike", "%error%"),
+							eb("log_data", "ilike", "%fail%"),
+						]),
+					),
+					eb.not(eb("log_data", "ilike", "%warn%")),
+				]),
+			);
+		}
+	}
 
 	// Get paginated results
 	const logs = await query
@@ -141,6 +175,30 @@ export async function fetchDeviceLogsWithFilters({
 
 	if (search) {
 		countQuery = countQuery.where("log_data", "ilike", `%${search}%`);
+	}
+	if (type && type !== "all") {
+		if (type === "error") {
+			countQuery = countQuery.where((eb) =>
+				eb.or([
+					eb("log_data", "ilike", "%error%"),
+					eb("log_data", "ilike", "%fail%"),
+				]),
+			);
+		} else if (type === "warning") {
+			countQuery = countQuery.where("log_data", "ilike", "%warn%");
+		} else if (type === "info") {
+			countQuery = countQuery.where((eb) =>
+				eb.and([
+					eb.not(
+						eb.or([
+							eb("log_data", "ilike", "%error%"),
+							eb("log_data", "ilike", "%fail%"),
+						]),
+					),
+					eb.not(eb("log_data", "ilike", "%warn%")),
+				]),
+			);
+		}
 	}
 
 	const countResult = await countQuery.executeTakeFirst();
@@ -180,79 +238,8 @@ export async function fetchDeviceLogsWithFilters({
 /**
  * Update a device
  */
-type UpdateDeviceInput = Partial<Device> & { id: number };
-
-const DEVICE_UPDATE_FIELDS_BEFORE_REFRESH = [
-	"name",
-	"mac_address",
-	"api_key",
-	"friendly_id",
-	"timezone",
-	"model",
-	"palette_id",
-] as const satisfies readonly (keyof Device)[];
-
-const DEVICE_UPDATE_FIELDS_AFTER_REFRESH = [
-	"screen",
-	"screen_id",
-	"screen_type",
-	"playlist_id",
-	"mixup_id",
-	"display_mode",
-	"battery_voltage",
-	"firmware_version",
-	"rssi",
-	"screen_width",
-	"screen_height",
-	"screen_orientation",
-	"grayscale",
-] as const satisfies readonly (keyof Device)[];
-
-type DeviceUpdateField =
-	| (typeof DEVICE_UPDATE_FIELDS_BEFORE_REFRESH)[number]
-	| (typeof DEVICE_UPDATE_FIELDS_AFTER_REFRESH)[number];
-
-function setDefinedDeviceUpdateField(
-	updateData: Record<string, unknown>,
-	device: UpdateDeviceInput,
-	field: DeviceUpdateField,
-) {
-	const value = device[field];
-	if (value !== undefined) {
-		updateData[field] = value;
-	}
-}
-
-function setRefreshScheduleUpdate(
-	updateData: Record<string, unknown>,
-	device: UpdateDeviceInput,
-) {
-	if (device.refresh_schedule !== undefined) {
-		updateData.refresh_schedule = device.refresh_schedule
-			? JSON.stringify(device.refresh_schedule)
-			: null;
-	}
-}
-
-function buildDeviceUpdateData(
-	device: UpdateDeviceInput,
-): Record<string, unknown> {
-	const updateData: Record<string, unknown> = {};
-
-	for (const field of DEVICE_UPDATE_FIELDS_BEFORE_REFRESH) {
-		setDefinedDeviceUpdateField(updateData, device, field);
-	}
-	setRefreshScheduleUpdate(updateData, device);
-	for (const field of DEVICE_UPDATE_FIELDS_AFTER_REFRESH) {
-		setDefinedDeviceUpdateField(updateData, device, field);
-	}
-	updateData.updated_at = new Date().toISOString();
-
-	return updateData;
-}
-
 export async function updateDevice(
-	device: UpdateDeviceInput,
+	device: Partial<Device> & { id: number },
 ): Promise<{ success: boolean; error?: string }> {
 	const { ready } = await checkDbConnection();
 
@@ -261,7 +248,46 @@ export async function updateDevice(
 		return { success: false, error: "Database client not initialized" };
 	}
 
-	const updateData = buildDeviceUpdateData(device);
+	// Prepare the update data
+	// We construct object with optional properties explicitly
+	const updateData: Record<string, unknown> = {};
+
+	if (device.name !== undefined) updateData.name = device.name;
+	if (device.mac_address !== undefined)
+		updateData.mac_address = device.mac_address;
+	if (device.api_key !== undefined) updateData.api_key = device.api_key;
+	if (device.friendly_id !== undefined)
+		updateData.friendly_id = device.friendly_id;
+	if (device.timezone !== undefined) updateData.timezone = device.timezone;
+	if (device.refresh_schedule !== undefined)
+		updateData.refresh_schedule = device.refresh_schedule
+			? JSON.stringify(device.refresh_schedule)
+			: null;
+	if (device.screen !== undefined) updateData.screen = device.screen;
+	if (device.playlist_id !== undefined)
+		updateData.playlist_id = device.playlist_id;
+	if (device.mixup_id !== undefined) updateData.mixup_id = device.mixup_id;
+	if (device.display_mode !== undefined)
+		updateData.display_mode = device.display_mode;
+	if (device.battery_voltage !== undefined)
+		updateData.battery_voltage = device.battery_voltage;
+	if (device.firmware_version !== undefined)
+		updateData.firmware_version = device.firmware_version;
+	if (device.rssi !== undefined) updateData.rssi = device.rssi;
+	if (device.screen_width !== undefined)
+		updateData.screen_width = device.screen_width;
+	if (device.screen_height !== undefined)
+		updateData.screen_height = device.screen_height;
+	if (device.screen_orientation !== undefined)
+		updateData.screen_orientation = device.screen_orientation;
+	if (device.grayscale !== undefined) updateData.grayscale = device.grayscale;
+	if (device.model !== undefined) updateData.model = device.model || null;
+	if (device.palette_id !== undefined)
+		updateData.palette_id = device.palette_id || null;
+	if (device.temperature_profile !== undefined)
+		updateData.temperature_profile = device.temperature_profile;
+
+	updateData.updated_at = new Date().toISOString();
 
 	try {
 		await withUserScope((scopedDb) =>
@@ -280,28 +306,6 @@ export async function updateDevice(
 			error: error instanceof Error ? error.message : String(error),
 		};
 	}
-}
-
-/**
- * Delete a device owned by the current user.
- */
-export async function deleteDevice(friendlyId: string): Promise<void> {
-	const { ready } = await checkDbConnection();
-
-	if (!ready) {
-		throw new Error("Database client not initialized");
-	}
-
-	await withUserScope((scopedDb) =>
-		scopedDb
-			.deleteFrom("devices")
-			.where("friendly_id", "=", friendlyId)
-			.execute(),
-	);
-
-	revalidatePath("/");
-	revalidatePath(`/device/${friendlyId}`);
-	redirect("/");
 }
 
 /**
@@ -352,17 +356,7 @@ export async function addUserDevice(input: {
 		}
 
 		// Generate a placeholder MAC from the API key (will be replaced on /api/setup)
-		const hash = crypto.createHash("sha256").update(apiKey).digest("hex");
-		const mockMac = [
-			hash.slice(0, 2),
-			hash.slice(2, 4),
-			hash.slice(4, 6),
-			hash.slice(6, 8),
-			hash.slice(8, 10),
-			hash.slice(10, 12),
-		]
-			.join(":")
-			.toUpperCase();
+		const mockMac = generateMockMacAddress(apiKey);
 
 		const timestamp = new Date().toISOString().replace(/[-:Z]/g, "");
 		const friendlyId = generateFriendlyId(mockMac, timestamp);
@@ -377,21 +371,14 @@ export async function addUserDevice(input: {
 					friendly_id: friendlyId,
 					api_key: apiKey,
 					user_id: userId,
-					refresh_schedule: JSON.stringify({
-						default_refresh_rate: 60,
-						time_ranges: [
-							{
-								start_time: "00:00",
-								end_time: "07:00",
-								refresh_rate: 3600,
-							},
-						],
-					}),
+					refresh_schedule: serializeRefreshSchedule(
+						createDefaultRefreshSchedule(),
+					),
 					last_update_time: new Date().toISOString(),
 					next_expected_update: new Date(
-						Date.now() + 3600 * 1000,
+						Date.now() + DEVICE_SLEEP_REFRESH_SECONDS * 1000,
 					).toISOString(),
-					timezone: "Europe/London",
+					timezone: DEFAULT_DEVICE_TIMEZONE,
 				})
 				.execute(),
 		);
@@ -399,6 +386,120 @@ export async function addUserDevice(input: {
 		return { success: true, apiKey, friendlyId };
 	} catch (error) {
 		console.error("Error adding device:", error);
+		return {
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
+}
+
+/**
+ * Claim a device that is showing a claim code on its /api/display screen.
+ */
+export async function claimDeviceByCode(input: {
+	claimCode: string;
+	name?: string;
+}): Promise<{
+	success: boolean;
+	friendlyId?: string;
+	error?: string;
+}> {
+	const { ready } = await checkDbConnection();
+	if (!ready) {
+		return { success: false, error: "Database not available" };
+	}
+
+	const userId = await getCurrentUserId();
+	if (!userId) {
+		return { success: false, error: "You must be signed in to claim a device" };
+	}
+
+	const normalizedClaimCode = normalizeClaimCode(input.claimCode);
+	if (normalizedClaimCode.length !== 8) {
+		return {
+			success: false,
+			error: "Claim code must be 8 characters",
+		};
+	}
+
+	try {
+		const claimHash = hashClaimCode(normalizedClaimCode);
+		const claimed = await db.transaction().execute(async (trx) => {
+			const pendingClaim = await trx
+				.deleteFrom("pending_device_claims")
+				.where("claim_hash", "=", claimHash)
+				.returningAll()
+				.executeTakeFirst();
+
+			if (!pendingClaim) {
+				throw new Error("Claim code was not found or has expired");
+			}
+
+			const existingDevice = await trx
+				.selectFrom("devices")
+				.selectAll()
+				.where("api_key", "=", pendingClaim.api_key)
+				.executeTakeFirst();
+
+			if (
+				existingDevice?.user_id &&
+				existingDevice.user_id !== userId &&
+				existingDevice.user_id !== BYOS_MONO_USER_ID
+			) {
+				throw new Error("This device has already been claimed");
+			}
+
+			const now = new Date();
+			const deviceName = input.name?.trim();
+			const macAddress =
+				pendingClaim.mac_address ??
+				generateMockMacAddress(pendingClaim.api_key);
+			const timestamp = now.toISOString().replace(/[-:Z]/g, "");
+
+			if (existingDevice) {
+				const friendlyId = existingDevice.friendly_id;
+				await trx
+					.updateTable("devices")
+					.set({
+						user_id: userId,
+						mac_address: macAddress,
+						name: deviceName || existingDevice.name,
+						screen: existingDevice.screen ?? DEFAULT_DEVICE_SCREEN,
+						model: pendingClaim.model ?? existingDevice.model,
+						updated_at: now.toISOString(),
+					})
+					.where("id", "=", existingDevice.id)
+					.execute();
+				return { friendlyId };
+			}
+
+			const friendlyId = generateFriendlyId(macAddress, timestamp);
+			await trx
+				.insertInto("devices")
+				.values({
+					mac_address: macAddress,
+					name: deviceName || `TRMNL Device ${friendlyId}`,
+					friendly_id: friendlyId,
+					api_key: pendingClaim.api_key,
+					user_id: userId,
+					refresh_schedule: serializeRefreshSchedule(
+						createDefaultRefreshSchedule(),
+					),
+					last_update_time: now.toISOString(),
+					next_expected_update: new Date(
+						now.getTime() + DEVICE_SLEEP_REFRESH_SECONDS * 1000,
+					).toISOString(),
+					timezone: DEFAULT_DEVICE_TIMEZONE,
+					screen: DEFAULT_DEVICE_SCREEN,
+					model: pendingClaim.model,
+				})
+				.execute();
+			return { friendlyId };
+		});
+
+		return { success: true, friendlyId: claimed.friendlyId };
+	} catch (error) {
+		console.error("Error claiming device:", error);
 		return {
 			success: false,
 			error: error instanceof Error ? error.message : String(error),

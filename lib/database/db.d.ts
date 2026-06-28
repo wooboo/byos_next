@@ -99,8 +99,6 @@ export interface Devices {
 	 */
 	rssi: number | null;
 	screen: string | null;
-	screen_id: string | null;
-	screen_type: Generated<string | null>;
 	/**
 	 * Screen height in pixels
 	 */
@@ -113,6 +111,26 @@ export interface Devices {
 	 * Screen width in pixels
 	 */
 	screen_width: Generated<number | null>;
+	/**
+	 * Quiet-hours end as minutes since midnight (TRMNL convention).
+	 */
+	sleep_end_time: number | null;
+	/**
+	 * Whether the device honors the configured quiet-hours window.
+	 */
+	sleep_mode_enabled: Generated<boolean>;
+	/**
+	 * Quiet-hours start as minutes since midnight (TRMNL convention).
+	 */
+	sleep_start_time: number | null;
+	/**
+	 * TRUE when the device sent the `temperature-profile: true` request header on its last /api/display call. NULL until the device has been seen.
+	 */
+	supports_temperature_profile: Generated<boolean | null>;
+	/**
+	 * Display tuning profile sent to the firmware in the /api/display response (default|a|b|c).
+	 */
+	temperature_profile: Generated<string>;
 	timezone: Generated<string>;
 	updated_at: Generated<Timestamp | null>;
 	user_id: string | null;
@@ -140,10 +158,19 @@ export interface MixupSlots {
 	mixup_id: string | null;
 	order_index: number;
 	recipe_id: string | null;
-	recipe_slug: string | null;
-	ref_id: string | null;
-	ref_type: Generated<string | null>;
 	slot_id: string;
+}
+
+export interface PendingDeviceClaims {
+	api_key: string;
+	api_key_suffix: string;
+	claim_hash: string;
+	first_seen_at: Generated<Timestamp>;
+	height: number | null;
+	last_seen_at: Generated<Timestamp>;
+	mac_address: string | null;
+	model: string | null;
+	width: number | null;
 }
 
 export interface PlaylistItems {
@@ -155,8 +182,25 @@ export interface PlaylistItems {
 	order_index: number;
 	playlist_id: string | null;
 	screen_id: string;
-	screen_type: Generated<string>;
 	start_time: string | null;
+}
+
+export interface PluginSettings {
+	created_at: Generated<Timestamp | null>;
+	fields: Generated<JsonObject>;
+	icon_content_type: string | null;
+	icon_url: string | null;
+	id: Generated<Int8>;
+	markup: Generated<JsonObject>;
+	merge_variables: Generated<JsonObject>;
+	name: string;
+	plugin_id: number;
+	read_only: Generated<boolean>;
+	settings_yaml: string | null;
+	strategy: string | null;
+	updated_at: Generated<Timestamp | null>;
+	user_id: string;
+	uuid: string;
 }
 
 export interface Playlists {
@@ -195,16 +239,6 @@ export interface Recipes {
 	version: string | null;
 	zip_entry_path: string | null;
 	zip_url: string | null;
-}
-
-export interface Screens {
-	created_at: Generated<Timestamp | null>;
-	id: Generated<string>;
-	name: string;
-	params: Generated<Json>;
-	recipe_id: string;
-	updated_at: Generated<Timestamp | null>;
-	user_id: string;
 }
 
 export interface ScreenConfigs {
@@ -270,12 +304,13 @@ export interface DB {
 	logs: Logs;
 	mixup_slots: MixupSlots;
 	mixups: Mixups;
+	pending_device_claims: PendingDeviceClaims;
 	playlist_items: PlaylistItems;
+	plugin_settings: PluginSettings;
 	playlists: Playlists;
 	recipe_files: RecipeFiles;
 	recipes: Recipes;
 	screen_configs: ScreenConfigs;
-	screens: Screens;
 	session: Session;
 	system_logs: SystemLogs;
 	user: User;

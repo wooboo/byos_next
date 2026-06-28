@@ -3,19 +3,15 @@
 import { Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { DeviceFrame } from "@/components/common/device-frame";
-import { PerforationMarks } from "@/components/playlists/perforation-marks";
-import { playlistFrameBmpUrl } from "@/lib/playlist-url";
 import {
 	DEFAULT_IMAGE_HEIGHT,
 	DEFAULT_IMAGE_WIDTH,
 } from "@/lib/recipes/constants";
 import { cn } from "@/lib/utils";
-import { formatPlaylistDuration } from "./duration-format";
 
 export interface FilmstripFrame {
 	id: string;
 	screen_id: string;
-	screen_type?: string;
 	duration: number;
 	label: string;
 }
@@ -28,44 +24,6 @@ interface PlaylistFilmstripProps {
 	onAdd: () => void;
 }
 
-export function getPlaylistFilmstripSummary(frames: FilmstripFrame[]) {
-	const totalSeconds = frames.reduce((sum, frame) => sum + frame.duration, 0);
-
-	return {
-		frameCountLabel: `${frames.length} ${frames.length === 1 ? "frame" : "frames"}`,
-		totalLabel: formatPlaylistDuration(totalSeconds),
-	};
-}
-
-export function getPlaylistFilmstripFrameClassName({
-	isActive,
-	isOver,
-	isDragging,
-}: {
-	isActive: boolean;
-	isOver: boolean;
-	isDragging: boolean;
-}) {
-	return cn(
-		"group relative shrink-0 cursor-grab active:cursor-grabbing",
-		"w-[180px] overflow-hidden rounded-xl border-2 bg-neutral-900 transition-all",
-		isActive
-			? "border-primary shadow-[0_0_0_3px] shadow-primary/20"
-			: "border-transparent hover:border-border",
-		isOver && "ring-2 ring-primary ring-offset-2 ring-offset-background",
-		isDragging && "opacity-40",
-	);
-}
-
-export function getPlaylistFilmstripFrameSrc(frame: FilmstripFrame) {
-	return playlistFrameBmpUrl(
-		frame.screen_id,
-		frame.screen_type,
-		DEFAULT_IMAGE_WIDTH,
-		DEFAULT_IMAGE_HEIGHT,
-	);
-}
-
 export function PlaylistFilmstrip({
 	frames,
 	activeIndex,
@@ -76,7 +34,9 @@ export function PlaylistFilmstrip({
 	const [dragIndex, setDragIndex] = useState<number | null>(null);
 	const [overIndex, setOverIndex] = useState<number | null>(null);
 	const scrollerRef = useRef<HTMLDivElement>(null);
-	const summary = getPlaylistFilmstripSummary(frames);
+
+	const totalSeconds = frames.reduce((sum, f) => sum + f.duration, 0);
+	const totalLabel = formatDuration(totalSeconds);
 
 	return (
 		<div className="rounded-2xl border bg-card">
@@ -84,7 +44,8 @@ export function PlaylistFilmstrip({
 				<div className="flex items-center gap-2 text-sm">
 					<span className="font-medium">Timeline</span>
 					<span className="text-muted-foreground">
-						{summary.frameCountLabel} · {summary.totalLabel} loop
+						{frames.length} {frames.length === 1 ? "frame" : "frames"} ·{" "}
+						{totalLabel} loop
 					</span>
 				</div>
 			</div>
@@ -130,19 +91,20 @@ export function PlaylistFilmstrip({
 								setDragIndex(null);
 								setOverIndex(null);
 							}}
-							className={getPlaylistFilmstripFrameClassName({
-								isActive,
-								isOver,
-								isDragging: dragIndex === index,
-							})}
+							className={cn(
+								"group relative shrink-0 cursor-grab active:cursor-grabbing",
+								"w-[180px] overflow-hidden rounded-xl border-2 bg-neutral-900 transition-all",
+								isActive
+									? "border-primary shadow-[0_0_0_3px] shadow-primary/20"
+									: "border-transparent hover:border-border",
+								isOver &&
+									"ring-2 ring-primary ring-offset-2 ring-offset-background",
+								dragIndex === index && "opacity-40",
+							)}
 							aria-label={`Frame ${index + 1}: ${frame.label}`}
 							aria-pressed={isActive}
 						>
-							<PerforationMarks
-								count={8}
-								containerClassName="flex h-3 items-center justify-around bg-neutral-950 px-1"
-								markClassName="h-1.5 w-2 rounded-[2px] bg-neutral-800"
-							/>
+							<FilmPerforations />
 
 							<div className="px-3 py-2">
 								<div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-neutral-300">
@@ -155,11 +117,11 @@ export function PlaylistFilmstrip({
 								<DeviceFrame size="sm" flat>
 									<picture>
 										<source
-											srcSet={getPlaylistFilmstripFrameSrc(frame)}
+											srcSet={`/api/bitmap/${frame.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
 											type="image/bmp"
 										/>
 										<img
-											src={getPlaylistFilmstripFrameSrc(frame)}
+											src={`/api/bitmap/${frame.screen_id}.bmp?width=${DEFAULT_IMAGE_WIDTH}&height=${DEFAULT_IMAGE_HEIGHT}`}
 											alt={frame.label}
 											width={DEFAULT_IMAGE_WIDTH}
 											height={DEFAULT_IMAGE_HEIGHT}
@@ -176,11 +138,7 @@ export function PlaylistFilmstrip({
 								</div>
 							</div>
 
-							<PerforationMarks
-								count={8}
-								containerClassName="flex h-3 items-center justify-around bg-neutral-950 px-1"
-								markClassName="h-1.5 w-2 rounded-[2px] bg-neutral-800"
-							/>
+							<FilmPerforations />
 						</button>
 					);
 				})}
@@ -201,4 +159,27 @@ export function PlaylistFilmstrip({
 			</div>
 		</div>
 	);
+}
+
+function FilmPerforations() {
+	return (
+		<div className="flex h-3 items-center justify-around bg-neutral-950 px-1">
+			{Array.from({ length: 8 }).map((_, i) => (
+				<span
+					key={i}
+					className="h-1.5 w-2 rounded-[2px] bg-neutral-800"
+					aria-hidden
+				/>
+			))}
+		</div>
+	);
+}
+
+function formatDuration(seconds: number): string {
+	if (seconds <= 0) return "0s";
+	const m = Math.floor(seconds / 60);
+	const s = seconds % 60;
+	if (m === 0) return `${s}s`;
+	if (s === 0) return `${m}m`;
+	return `${m}m ${s}s`;
 }

@@ -3,9 +3,6 @@
  */
 
 const TRMNL_API_BASE = "https://usetrmnl.com";
-const JSON_HEADERS = {
-	"Content-Type": "application/json",
-};
 
 export interface ProxyOptions {
 	/**
@@ -20,37 +17,6 @@ export interface ProxyOptions {
 	 * Request body (for POST/PATCH requests)
 	 */
 	body?: unknown;
-}
-
-function jsonResponse(data: unknown, status: number): Response {
-	return new Response(JSON.stringify(data), {
-		status,
-		headers: JSON_HEADERS,
-	});
-}
-
-function trmnlProxyError(error: unknown): Response {
-	return jsonResponse(
-		{
-			error: "Failed to proxy request to TRMNL API",
-			message: error instanceof Error ? error.message : "Unknown error",
-		},
-		502,
-	);
-}
-
-async function proxyJsonRequest(
-	url: string,
-	fetchOptions: RequestInit,
-): Promise<Response> {
-	try {
-		const response = await fetch(url, fetchOptions);
-		const data = await response.json();
-
-		return jsonResponse(data, response.status);
-	} catch (error) {
-		return trmnlProxyError(error);
-	}
 }
 
 /**
@@ -68,7 +34,7 @@ export async function proxyToTRMNL(
 	const url = `${TRMNL_API_BASE}${path}${queryString}`;
 
 	const headers: HeadersInit = {
-		...JSON_HEADERS,
+		"Content-Type": "application/json",
 		...options.headers,
 	};
 
@@ -99,7 +65,30 @@ export async function proxyToTRMNL(
 		fetchOptions.body = JSON.stringify(options.body);
 	}
 
-	return proxyJsonRequest(url, fetchOptions);
+	try {
+		const response = await fetch(url, fetchOptions);
+		const data = await response.json();
+
+		return new Response(JSON.stringify(data), {
+			status: response.status,
+			headers: {
+				"Content-Type": "application/json",
+			},
+		});
+	} catch (error) {
+		return new Response(
+			JSON.stringify({
+				error: "Failed to proxy request to TRMNL API",
+				message: error instanceof Error ? error.message : "Unknown error",
+			}),
+			{
+				status: 502,
+				headers: {
+					"Content-Type": "application/json",
+				},
+			},
+		);
+	}
 }
 
 /**
@@ -126,9 +115,33 @@ export async function proxyToTRMNLMultipart(
 	// Get the form data from the request
 	const formData = await request.formData();
 
-	return proxyJsonRequest(url, {
-		method: "POST",
-		headers,
-		body: formData,
-	});
+	try {
+		const response = await fetch(url, {
+			method: "POST",
+			headers,
+			body: formData,
+		});
+
+		const data = await response.json();
+
+		return new Response(JSON.stringify(data), {
+			status: response.status,
+			headers: {
+				"Content-Type": "application/json",
+			},
+		});
+	} catch (error) {
+		return new Response(
+			JSON.stringify({
+				error: "Failed to proxy request to TRMNL API",
+				message: error instanceof Error ? error.message : "Unknown error",
+			}),
+			{
+				status: 502,
+				headers: {
+					"Content-Type": "application/json",
+				},
+			},
+		);
+	}
 }
