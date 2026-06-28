@@ -57,6 +57,7 @@ type RenderRecipeArgs = {
 	model?: TrmnlModel | null;
 	palette?: TrmnlPalette | null;
 	paletteId?: string | null;
+	palettePreviewObserved?: boolean;
 };
 
 /**
@@ -73,6 +74,7 @@ export async function renderRecipeToImage({
 	model,
 	palette,
 	paletteId,
+	palettePreviewObserved,
 }: RenderRecipeArgs): Promise<RasterizeResults> {
 	// React path
 	const resolved = await resolveReactRecipe(slug, userId ?? undefined);
@@ -102,7 +104,9 @@ export async function renderRecipeToImage({
 			grayscale,
 			cookies,
 			model,
+			palette,
 			paletteId,
+			palettePreviewObserved,
 			userId,
 			renderSettings: definition.meta.renderSettings ?? null,
 		});
@@ -123,7 +127,9 @@ export async function renderRecipeToImage({
 			grayscale,
 			cookies,
 			model,
+			palette,
 			paletteId,
+			palettePreviewObserved,
 			renderSettings: null,
 		});
 	}

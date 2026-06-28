@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { BYOS_MONO_USER_ID, getCurrentUserId } from "@/lib/auth/get-user";
 import { db } from "@/lib/database/db";
 import { withUserScope } from "@/lib/database/scoped-db";
@@ -306,6 +307,26 @@ export async function updateDevice(
 			error: error instanceof Error ? error.message : String(error),
 		};
 	}
+}
+
+/**
+ * Delete a device owned by the current user.
+ */
+export async function deleteDevice(friendlyId: string): Promise<void> {
+	const { ready } = await checkDbConnection();
+
+	if (!ready) {
+		throw new Error("Database client not initialized");
+	}
+
+	await withUserScope((scopedDb) =>
+		scopedDb
+			.deleteFrom("devices")
+			.where("friendly_id", "=", friendlyId)
+			.execute(),
+	);
+
+	redirect("/");
 }
 
 /**

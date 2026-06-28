@@ -15,6 +15,7 @@ export type RecipeParamDefinition = {
 	description?: string;
 	default?: unknown;
 	placeholder?: string;
+	options?: { label: string; value: string }[];
 };
 
 export type RecipeParamDefinitions = Record<string, RecipeParamDefinition>;
@@ -25,7 +26,12 @@ type FieldMeta = {
 };
 
 type ZodInternals = {
-	def: { type: string; innerType?: z.ZodTypeAny };
+	def: {
+		type: string;
+		innerType?: z.ZodTypeAny;
+		options?: string[];
+		entries?: Record<string, string>;
+	};
 };
 
 const WRAPPER_TYPES = new Set([
@@ -63,9 +69,28 @@ function detectFieldType(schema: z.ZodTypeAny): RecipeParamType | null {
 	const internals = (base as unknown as { _zod?: ZodInternals })._zod;
 	const t = internals?.def.type;
 	if (t === "string") return "string";
+	if (t === "enum") return "string";
 	if (t === "number") return "number";
 	if (t === "boolean") return "boolean";
 	return null;
+}
+
+function readOptions(
+	schema: z.ZodTypeAny,
+): { label: string; value: string }[] | undefined {
+	const base = unwrapToBaseType(schema);
+	const internals = (base as unknown as { _zod?: ZodInternals })._zod;
+	if (internals?.def.type !== "enum") return undefined;
+
+	const values =
+		internals.def.options ??
+		(internals.def.entries ? Object.values(internals.def.entries) : []);
+	if (!values.length) return undefined;
+
+	return values.map((value) => ({
+		value,
+		label: humanizeKey(value),
+	}));
 }
 
 /**
@@ -134,6 +159,7 @@ export function zodObjectToParamDefinitions(
 		const meta = readMeta(fieldSchema);
 		const description = readDescription(fieldSchema);
 		const defaultValue = readDefault(fieldSchema);
+		const options = readOptions(fieldSchema);
 
 		definitions[key] = {
 			label: meta.title ?? humanizeKey(key),
@@ -143,6 +169,7 @@ export function zodObjectToParamDefinitions(
 			...(meta.placeholder !== undefined
 				? { placeholder: meta.placeholder }
 				: {}),
+			...(options !== undefined ? { options } : {}),
 		};
 	}
 

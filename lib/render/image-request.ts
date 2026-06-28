@@ -9,6 +9,7 @@ export type ParsedImageRequest = {
 	grayscaleLevels: number;
 	modelName: string | null;
 	paletteId: string | null;
+	palettePreviewObserved: boolean;
 };
 
 type ParseResult<T> =
@@ -93,6 +94,10 @@ export function parseImageRequest(
 		height: height.value,
 		grayscaleLevels: grayscale.value,
 		modelName: searchParams.get("model"),
-		paletteId: searchParams.get("palette_id"),
+		paletteId: searchParams.get("palette_id") ?? searchParams.get("palette"),
+		palettePreviewObserved:
+			searchParams.get("palette_preview") === "observed" ||
+			searchParams.get("palettePreview") === "observed" ||
+			searchParams.get("palette_mode") === "observed",
 	};
 }

@@ -190,6 +190,7 @@ export function RecipePreviewStage({
 					params.set("height", String(simHeight));
 					if (selectedModel.mime_type === "image/bmp") {
 						params.set("grayscale", "2");
+						params.set("palette_preview", "observed");
 					}
 					return `/api/bitmap/${slug}.${ext}?${params.toString()}`;
 				})()

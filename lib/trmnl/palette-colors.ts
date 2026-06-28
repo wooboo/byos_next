@@ -6,6 +6,12 @@ export type RGB = {
 	b: number;
 };
 
+export type PaletteColorProfile = {
+	colors: RGB[];
+	ditherColors: RGB[];
+	previewColors: RGB[];
+};
+
 const SPECTRA_6_FIRMWARE_COLORS = new Map<string, RGB>([
 	["000000", { r: 0x00, g: 0x00, b: 0x00 }],
 	["FFFFFF", { r: 0xc0, g: 0xc0, b: 0xc0 }],
@@ -54,6 +60,13 @@ function resolveDiscreteColors(palette: TrmnlPalette): RGB[] {
 	});
 }
 
+function resolveObservedColors(palette: TrmnlPalette, colors: RGB[]): RGB[] {
+	if (!palette.observed_colors?.length) return colors;
+
+	const observed = palette.observed_colors.map(parseHexColor);
+	return observed.length === colors.length ? observed : colors;
+}
+
 function resolveGrayscaleColors(grays: number): RGB[] {
 	return Array.from({ length: grays }, (_, index) => {
 		const value = Math.round((index * 255) / (grays - 1));
@@ -87,4 +100,25 @@ export function resolvePaletteColors(palette: TrmnlPalette): RGB[] | null {
 	}
 
 	return null;
+}
+
+/**
+ * Resolves both the native palette entries written to the device bitmap and
+ * the measured display appearance used for perceptual matching / previews.
+ */
+export function resolvePaletteColorProfile(
+	palette: TrmnlPalette,
+): PaletteColorProfile | null {
+	const colors = resolvePaletteColors(palette);
+	if (!colors) return null;
+
+	const observedColors = palette.colors?.length
+		? resolveObservedColors(palette, colors)
+		: colors;
+
+	return {
+		colors,
+		ditherColors: observedColors,
+		previewColors: observedColors,
+	};
 }

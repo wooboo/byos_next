@@ -306,7 +306,7 @@ export async function GET(request: Request) {
 		// Device exists by MAC address - check if we need to update the API key
 		let currentApiKey = device.api_key;
 		const canManageExistingDevice =
-			apiKey === device.api_key ||
+			(Boolean(apiKey) && apiKey === device.api_key) ||
 			(Boolean(currentUserId) && device.user_id === currentUserId);
 
 		if (!canManageExistingDevice) {
@@ -334,7 +334,41 @@ export async function GET(request: Request) {
 			);
 		}
 
-		if (apiKey && apiKey !== device.api_key) {
+		if (!currentApiKey) {
+			currentApiKey = generateApiKey(
+				macAddress,
+				new Date().toISOString().replace(/[-:Z]/g, ""),
+			);
+			try {
+				await withExplicitUserScope(currentUserId, (scopedDb) =>
+					scopedDb
+						.updateTable("devices")
+						.set({
+							api_key: currentApiKey,
+							updated_at: new Date().toISOString(),
+						})
+						.where("friendly_id", "=", device.friendly_id)
+						.execute(),
+				);
+				logInfo("Generated API key for existing device", {
+					source: "api/setup",
+					metadata: {
+						device_id: device.friendly_id,
+						mac_address: macAddress,
+					},
+				});
+			} catch (updateError) {
+				logError(new Error("Error generating API key for device"), {
+					source: "api/setup",
+					metadata: {
+						device_id: device.friendly_id,
+						mac_address: macAddress,
+						error: updateError,
+					},
+				});
+				currentApiKey = device.api_key;
+			}
+		} else if (apiKey && apiKey !== device.api_key) {
 			try {
 				await withExplicitUserScope(currentUserId, (scopedDb) =>
 					scopedDb
