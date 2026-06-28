@@ -21,6 +21,7 @@ import {
 	type ModelStorageResolution,
 	resolveModelForStorage,
 } from "@/lib/trmnl/model-storage";
+import { findPalette } from "@/lib/trmnl/registry";
 import type {
 	Device,
 	PlaylistItem,
@@ -46,6 +47,7 @@ export interface RequestHeaders {
 	width: number | null;
 	height: number | null;
 	model: string | null;
+	paletteId: string | null;
 	specialFunction: boolean;
 	base64: boolean;
 	supportsTemperatureProfile: boolean;
@@ -74,6 +76,7 @@ export const parseRequestHeaders = (request: Request): RequestHeaders => {
 		width: widthStr ? Number.parseInt(widthStr, 10) : null,
 		height: heightStr ? Number.parseInt(heightStr, 10) : null,
 		model: headers.get("Model")?.trim() || null,
+		paletteId: headers.get("Palette-Id")?.trim() || null,
 		specialFunction: headers.get("Special-Function") === "true",
 		base64: headers.get("BASE64") === "true",
 		supportsTemperatureProfile: headers.get("temperature-profile") === "true",
@@ -336,6 +339,25 @@ function logUnknownReportedModel(
 	});
 }
 
+async function resolvePaletteIdForStorage(
+	reportedPaletteId: string | null | undefined,
+	deviceId: string,
+): Promise<string | undefined> {
+	const paletteId = reportedPaletteId?.trim();
+	if (!paletteId) return undefined;
+
+	if (await findPalette(paletteId)) return paletteId;
+
+	logWarn("Device reported unknown TRMNL palette; ignoring palette id", {
+		source: "api/display",
+		metadata: {
+			deviceId,
+			reportedPaletteId: paletteId,
+		},
+	});
+	return undefined;
+}
+
 export const findOrCreateDevice = async (
 	headers: RequestHeaders,
 ): Promise<DeviceLookupResult> => {
@@ -383,6 +405,10 @@ export const findOrCreateDevice = async (
 					headers.model,
 					device.model,
 				);
+				const paletteId = await resolvePaletteIdForStorage(
+					headers.paletteId,
+					device.friendly_id,
+				);
 				logUnknownReportedModel(modelResolution, device.friendly_id);
 				if (macAddress && macAddress !== device.mac_address) {
 					patch.mac_address = macAddress;
@@ -392,6 +418,9 @@ export const findOrCreateDevice = async (
 					modelResolution.modelName !== device.model
 				) {
 					patch.model = modelResolution.modelName;
+				}
+				if (paletteId && paletteId !== device.palette_id) {
+					patch.palette_id = paletteId;
 				}
 				if (Object.keys(patch).length > 0) {
 					patch.updated_at = new Date().toISOString();
@@ -428,6 +457,10 @@ export const findOrCreateDevice = async (
 					headers.model,
 					device.model,
 				);
+				const paletteId = await resolvePaletteIdForStorage(
+					headers.paletteId,
+					device.friendly_id,
+				);
 				logUnknownReportedModel(modelResolution, device.friendly_id);
 				if (apiKey && apiKey !== device.api_key) {
 					if (device.user_id !== currentUserId) {
@@ -448,6 +481,9 @@ export const findOrCreateDevice = async (
 					modelResolution.modelName !== device.model
 				) {
 					patch.model = modelResolution.modelName;
+				}
+				if (paletteId && paletteId !== device.palette_id) {
+					patch.palette_id = paletteId;
 				}
 				if (Object.keys(patch).length > 0) {
 					patch.updated_at = new Date().toISOString();
@@ -478,6 +514,10 @@ export const findOrCreateDevice = async (
 					macAddress,
 					new Date().toISOString().replace(/[-:Z]/g, ""),
 				);
+				const paletteId = await resolvePaletteIdForStorage(
+					headers.paletteId,
+					friendly_id,
+				);
 				try {
 					const newDevice = await scopedDb
 						.insertInto("devices")
@@ -499,6 +539,7 @@ export const findOrCreateDevice = async (
 							timezone: DEFAULT_DEVICE_TIMEZONE,
 							screen: DEFAULT_DEVICE_SCREEN,
 							model: modelResolution.modelName ?? null,
+							palette_id: paletteId ?? null,
 							user_id: currentUserId,
 						})
 						.returningAll()
@@ -530,12 +571,36 @@ export const findOrCreateDevice = async (
 
 			if (existingMock) {
 				const device = existingMock as unknown as Device;
+				const patch: Partial<Device> = {};
+				const modelResolution = await resolveModelForStorage(
+					headers.model,
+					device.model,
+				);
+				const paletteId = await resolvePaletteIdForStorage(
+					headers.paletteId,
+					device.friendly_id,
+				);
+				logUnknownReportedModel(modelResolution, device.friendly_id);
 				if (macAddress) {
+					patch.mac_address = macAddress;
+				}
+				if (
+					modelResolution.modelName &&
+					modelResolution.modelName !== device.model
+				) {
+					patch.model = modelResolution.modelName;
+				}
+				if (paletteId && paletteId !== device.palette_id) {
+					patch.palette_id = paletteId;
+				}
+				if (Object.keys(patch).length > 0) {
+					patch.updated_at = new Date().toISOString();
 					await scopedDb
 						.updateTable("devices")
-						.set({ mac_address: macAddress })
+						.set(patch)
 						.where("id", "=", device.id.toString())
 						.execute();
+					Object.assign(device, patch);
 				}
 				logInfo("Using existing mock device", {
 					source: "api/display",
@@ -549,6 +614,10 @@ export const findOrCreateDevice = async (
 			const friendly_id = generateFriendlyId(
 				mockMacAddress,
 				new Date().toISOString().replace(/[-:Z]/g, ""),
+			);
+			const paletteId = await resolvePaletteIdForStorage(
+				headers.paletteId,
+				friendly_id,
 			);
 			const new_api_key = macAddress
 				? apiKey
@@ -575,6 +644,7 @@ export const findOrCreateDevice = async (
 						timezone: DEFAULT_DEVICE_TIMEZONE,
 						screen: DEFAULT_DEVICE_SCREEN,
 						model: modelResolution.modelName ?? null,
+						palette_id: paletteId ?? null,
 						user_id: currentUserId,
 					})
 					.returningAll()

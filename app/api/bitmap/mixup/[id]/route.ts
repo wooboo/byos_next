@@ -16,6 +16,12 @@ import { stripImageExtension } from "@/lib/render/device-image-url";
 import { renderErrorImage } from "@/lib/render/error-image";
 import { parseImageRequest } from "@/lib/render/image-request";
 import { getDeviceProfile } from "@/lib/trmnl/device-profile";
+import {
+	type RGB,
+	resolvePaletteColorProfile,
+} from "@/lib/trmnl/palette-colors";
+import type { TrmnlPalette } from "@/lib/trmnl/types";
+import type { RgbColor, RgbPalette } from "@/utils/image-processing";
 import { DitheringMethod, renderBmp } from "@/utils/render-bmp";
 
 export async function GET(
@@ -160,10 +166,14 @@ export async function GET(
 			profile.model.mime_type === "image/bmp"
 				? {
 						buffer: await renderBmp(compositedPng, {
-							ditheringMethod: DitheringMethod.ATKINSON,
+							ditheringMethod: DitheringMethod.JARVIS_JUDICE_NINKE,
 							width,
 							height,
 							grayscale: grayscaleLevels,
+							...resolveRenderBmpPaletteOptions(
+								profile.palette,
+								imageRequest.palettePreviewObserved,
+							),
 						}),
 						mime_type: "image/bmp",
 						size_limit_exceeded: false,
@@ -179,6 +189,29 @@ export async function GET(
 		});
 		return imageResponse(image, 500);
 	}
+}
+
+function toRgbColor(color: RGB): RgbColor {
+	return [color.r, color.g, color.b];
+}
+
+function toRgbPalette(colors: RGB[]): RgbPalette {
+	return colors.map(toRgbColor);
+}
+
+function resolveRenderBmpPaletteOptions(
+	palette: TrmnlPalette | null,
+	useObservedPreview: boolean,
+): { palette?: RgbPalette; ditherPalette?: RgbPalette } {
+	if (!palette) return {};
+	const profile = resolvePaletteColorProfile(palette);
+	if (!profile) return {};
+	return {
+		palette: toRgbPalette(
+			useObservedPreview ? profile.previewColors : profile.colors,
+		),
+		ditherPalette: toRgbPalette(profile.ditherColors),
+	};
 }
 
 function imageResponse(

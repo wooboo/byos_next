@@ -23,6 +23,58 @@ function parseCookies(
 	return cookies;
 }
 
+const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+function isLoopbackHost(hostname: string) {
+	return (
+		hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+	);
+}
+
+function buildForwardedCookies(cookieHeader: string, url: URL): CookieData[] {
+	const secure = url.protocol === "https:";
+	const isLocal = isLoopbackHost(url.hostname);
+	return parseCookies(cookieHeader)
+		.filter((cookie) => COOKIE_NAME_PATTERN.test(cookie.name))
+		.filter(
+			(cookie) => secure || isLocal || !cookie.name.startsWith("__Secure-"),
+		)
+		.filter((cookie) => secure || isLocal || !cookie.name.startsWith("__Host-"))
+		.map((cookie) => ({
+			name: cookie.name,
+			value: cookie.value,
+			domain: url.hostname,
+			path: "/",
+			...(cookie.name.startsWith("__Secure-") ||
+			cookie.name.startsWith("__Host-")
+				? { secure: true }
+				: {}),
+		}));
+}
+
+async function setForwardedCookies(
+	context: { setCookie?: (...cookies: CookieData[]) => Promise<void> },
+	cookies: CookieData[],
+) {
+	if (!context.setCookie || cookies.length === 0) return;
+
+	try {
+		await context.setCookie(...cookies);
+		return;
+	} catch {
+		// Some proxy/auth cookies are invalid for the internal render URL.
+		// Keep rendering by forwarding only the cookies Chrome accepts.
+	}
+
+	for (const cookie of cookies) {
+		try {
+			await context.setCookie(cookie);
+		} catch {
+			// Ignore individual cookies that Chrome refuses.
+		}
+	}
+}
+
 /**
  * Render a React recipe by navigating to its preview URL on this Next.js
  * server and capturing a PNG.
@@ -54,7 +106,11 @@ export async function renderWithBrowser(
 ): Promise<Buffer> {
 	const port = process.env.PORT || 3000;
 	const baseUrl =
-		process.env.NEXT_PUBLIC_BASE_URL ?? `http://127.0.0.1:${port}`;
+		process.env.BROWSER_RENDER_BASE_URL ??
+		process.env.NEXT_PUBLIC_BASE_URL ??
+		(process.env.NODE_ENV === "production"
+			? `http://localhost:${port}`
+			: `http://127.0.0.1:${port}`);
 	const params = new URLSearchParams({
 		width: String(width),
 		height: String(height),
@@ -65,6 +121,7 @@ export async function renderWithBrowser(
 		params.set("render_token", createBrowserRenderContext(options.userId));
 	}
 	const url = `${baseUrl}/recipes/${slug}/preview?${params.toString()}`;
+	const parsedUrl = new URL(url);
 	const captureWidth = options.captureWidth ?? width;
 	const captureHeight = options.captureHeight ?? height;
 
@@ -74,16 +131,9 @@ export async function renderWithBrowser(
 
 	try {
 		if (cookies) {
-			const parsed = parseCookies(cookies);
-			const domain = new URL(url).hostname;
-			const cookiesToSet: CookieData[] = parsed.map((c) => ({
-				name: c.name,
-				value: c.value,
-				domain,
-				path: "/",
-			}));
+			const cookiesToSet = buildForwardedCookies(cookies, parsedUrl);
 			// Cookies are set on the per-render context — they go away with it.
-			await context.setCookie(...cookiesToSet);
+			await setForwardedCookies(context, cookiesToSet);
 		}
 
 		// Force light mode — headless Chrome can default to dark, which breaks

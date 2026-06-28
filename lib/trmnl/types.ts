@@ -46,6 +46,12 @@ export type TrmnlPalette = {
 	 * for the continuous palettes color-12bit / color-24bit.
 	 */
 	colors?: string[];
+	/**
+	 * Optional measured/observed appearance of each discrete color on a real
+	 * device. Same order and length as `colors`; used for preview simulation
+	 * and perceptual palette matching while keeping BMP palette entries native.
+	 */
+	observed_colors?: string[];
 	grayscale_bit_depth?: number;
 	/**
 	 * Bits per RGB channel for continuous-color palettes (4 = RGB444 / 12-bit,

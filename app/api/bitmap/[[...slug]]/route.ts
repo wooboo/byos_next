@@ -121,6 +121,7 @@ export async function GET(
 			profile,
 			userId,
 			cookieHeader || undefined,
+			imageRequest.palettePreviewObserved,
 		);
 
 		if (
@@ -241,6 +242,7 @@ const renderRecipeBitmap = cache(
 		profile: DeviceProfile | null = null,
 		userId: string | null = null,
 		cookies?: string,
+		palettePreviewObserved = false,
 	) => {
 		const renders = await renderRecipeToImage({
 			slug: recipeId,
@@ -251,6 +253,7 @@ const renderRecipeBitmap = cache(
 			model: profile?.model ?? null,
 			palette: profile?.palette ?? null,
 			paletteId: profile?.palette?.id ?? null,
+			palettePreviewObserved,
 			userId,
 			cookies,
 		});

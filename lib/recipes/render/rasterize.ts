@@ -9,7 +9,12 @@ import {
 	getTrmnlModelClassName,
 	getTrmnlModelStyle,
 } from "@/lib/trmnl/model-css";
-import type { TrmnlModel } from "@/lib/trmnl/types";
+import {
+	type RGB,
+	resolvePaletteColorProfile,
+} from "@/lib/trmnl/palette-colors";
+import type { TrmnlModel, TrmnlPalette } from "@/lib/trmnl/types";
+import type { RgbColor, RgbPalette } from "@/utils/image-processing";
 import { DitheringMethod, renderBmp } from "@/utils/render-bmp";
 import type { RecipeRenderSettings } from "../types";
 
@@ -30,7 +35,9 @@ export type RasterizeOptions = {
 	grayscale?: number;
 	renderSettings?: RecipeRenderSettings | null;
 	model?: TrmnlModel | null;
+	palette?: TrmnlPalette | null;
 	paletteId?: string | null;
+	palettePreviewObserved?: boolean;
 	userId?: string | null;
 } & (
 	| {
@@ -141,7 +148,9 @@ export async function rasterize(
 		grayscale,
 		renderSettings,
 		model,
+		palette,
 		paletteId,
+		palettePreviewObserved,
 		userId,
 		cookies,
 	} = options;
@@ -236,12 +245,19 @@ export async function rasterize(
 
 	if (needsBitmap) {
 		try {
+			const paletteProfile = palette
+				? resolveBmpPaletteProfile(palette, palettePreviewObserved)
+				: null;
 			results.bitmap = await renderBmp(pngBuffer, {
-				ditheringMethod: DitheringMethod.FLOYD_STEINBERG,
+				ditheringMethod: DitheringMethod.JARVIS_JUDICE_NINKE,
 				width: imageWidth,
 				height: imageHeight,
 				applyEdgeSnap: renderSettings?.applyEdgeSnap ?? true,
 				...(grayscale !== undefined && { grayscale }),
+				...(paletteProfile?.palette && { palette: paletteProfile.palette }),
+				...(paletteProfile?.ditherPalette && {
+					ditherPalette: paletteProfile.ditherPalette,
+				}),
 			});
 		} catch (error) {
 			console.error(`[rasterize:${slug}] Error generating bitmap:`, error);
@@ -249,4 +265,27 @@ export async function rasterize(
 	}
 
 	return results;
+}
+
+function toRgbColor(color: RGB): RgbColor {
+	return [color.r, color.g, color.b];
+}
+
+function toRgbPalette(colors: RGB[]): RgbPalette {
+	return colors.map(toRgbColor);
+}
+
+function resolveBmpPaletteProfile(
+	palette: TrmnlPalette,
+	useObservedPreview = false,
+): { palette: RgbPalette; ditherPalette: RgbPalette } | null {
+	const profile = resolvePaletteColorProfile(palette);
+	if (!profile || profile.colors.length === 0) return null;
+
+	return {
+		palette: toRgbPalette(
+			useObservedPreview ? profile.previewColors : profile.colors,
+		),
+		ditherPalette: toRgbPalette(profile.ditherColors),
+	};
 }

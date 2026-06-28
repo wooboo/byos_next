@@ -826,6 +826,60 @@
       }
     },
     {
+      "name": "m5stack_papercolor",
+      "label": "M5Stack PaperColor",
+      "description": "M5Stack PaperColor",
+      "width": 600,
+      "height": 400,
+      "colors": 6,
+      "bit_depth": 4,
+      "scale_factor": 1,
+      "rotation": 0,
+      "mime_type": "image/bmp",
+      "offset_x": 0,
+      "offset_y": 0,
+      "kind": "byod",
+      "palette_ids": [
+        "m5papercolor-ed2208-m5gfx-v1"
+      ],
+      "preview_white_point": "limited",
+      "image_size_limit": 120078,
+      "image_upload_supported": true,
+      "css": {
+        "classes": {
+          "device": "screen--m5stack_papercolor",
+          "size": "screen--md",
+          "density": "screen--density-1x"
+        },
+        "variables": [
+          [
+            "--screen-w",
+            "600px"
+          ],
+          [
+            "--screen-h",
+            "400px"
+          ],
+          [
+            "--pixel-ratio",
+            "1.0"
+          ],
+          [
+            "--dither-pixel-ratio",
+            "1.0"
+          ],
+          [
+            "--ui-scale",
+            "1.0"
+          ],
+          [
+            "--gap-scale",
+            "1.0"
+          ]
+        ]
+      }
+    },
+    {
       "name": "amazon_kindle_scribe",
       "label": "Amazon Kindle Scribe",
       "description": "Amazon Kindle Scribe",

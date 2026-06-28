@@ -1,11 +1,19 @@
 "use client";
 
 import { AlertCircle, Check, Save } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { ChangeEvent } from "react";
 import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import type {
 	RecipeParamDefinition,
@@ -56,6 +64,26 @@ const renderField = (
 	value: unknown,
 	onChange: (key: string, value: unknown) => void,
 ) => {
+	if (definition.options?.length) {
+		return (
+			<Select
+				value={typeof value === "string" ? value : String(value ?? "")}
+				onValueChange={(nextValue) => onChange(key, nextValue)}
+			>
+				<SelectTrigger id={key} name={key}>
+					<SelectValue placeholder={definition.placeholder} />
+				</SelectTrigger>
+				<SelectContent>
+					{definition.options.map((option) => (
+						<SelectItem key={option.value} value={option.value}>
+							{option.label}
+						</SelectItem>
+					))}
+				</SelectContent>
+			</Select>
+		);
+	}
+
 	switch (definition.type) {
 		case "boolean":
 			return (
@@ -111,6 +139,7 @@ export function ScreenParamsForm({
 	initialValues,
 	updateAction,
 }: Props) {
+	const router = useRouter();
 	const [formStatus, setFormStatus] = useState<FormStatus>("idle");
 	const [statusMessage, setStatusMessage] = useState<string>("");
 	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -148,6 +177,7 @@ export function ScreenParamsForm({
 			}
 			setFormStatus("success");
 			setStatusMessage("Saved");
+			router.refresh();
 		});
 	};
 

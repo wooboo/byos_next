@@ -77,6 +77,29 @@
       "grayscale_bit_depth": 1
     },
     {
+      "id": "m5papercolor-ed2208-m5gfx-v1",
+      "name": "M5Stack PaperColor ED2208 (6 colors)",
+      "grays": 2,
+      "colors": [
+        "#000000",
+        "#FFFFFF",
+        "#FFF338",
+        "#BF0000",
+        "#6440FF",
+        "#438A1C"
+      ],
+      "observed_colors": [
+        "#46425F",
+        "#B2C1B8",
+        "#AF9900",
+        "#614148",
+        "#13509B",
+        "#246D28"
+      ],
+      "framework_class": "screen--m5papercolor-ed2208",
+      "grayscale_bit_depth": 1
+    },
+    {
       "id": "color-7a",
       "name": "Color (7 colors)",
       "grays": 2,
