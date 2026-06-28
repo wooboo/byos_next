@@ -55,8 +55,11 @@ history wholesale.
 
 - Dokploy deployment:
   - `docker-compose.dokploy.yml` is the production compose contract used by
-    Dokploy for the fork.
+    Dokploy for the fork's `byos_next` app service.
   - `dokploy.env.example` documents the required Dokploy environment variables.
+  - Postgres is a separate Dokploy service (`byos-next-postgres`), so the app
+    compose must not define a `postgres` service. It should receive
+    `DATABASE_URL` from Dokploy env instead.
   - Keep this overlay when syncing with upstream; upstream's local
     `docker-compose.yml` is not a replacement for the Dokploy stack.
 
@@ -86,8 +89,9 @@ history wholesale.
 7. Reapply authenticated browser preview cookie/base-URL handling without
    removing upstream's per-render browser context isolation.
 8. Reapply small UX overlays: device deletion and full timezone list.
-9. Reapply Dokploy deployment files and verify Dokploy still uses
-   `docker-compose.dokploy.yml`.
+9. Reapply Dokploy deployment files and verify the app service still uses
+   `docker-compose.dokploy.yml` with `DATABASE_URL` pointing at the separate
+   `byos-next-postgres` service.
 10. Re-run `pnpm typecheck`, targeted tests, then broader project gates.
 
 Avoid reintroducing these old fork structures:
