@@ -9,6 +9,7 @@ import {
 	renderRecipeOutputs,
 } from "@/lib/recipes/recipe-renderer";
 import type { RgbPalette } from "@/utils/image-processing";
+import type { DitheringMethod } from "@/utils/render-bmp";
 import {
 	parseRequestHeaders,
 	resolveUserIdFromApiKey,
@@ -30,8 +31,17 @@ export async function GET(
 		const { slug = ["not-found"] } = await params;
 		const bitmapPath = Array.isArray(slug) ? slug.join("/") : slug;
 		const targetRef = parseRenderPath(slug, "bmp");
-		const { width, height, grayscale, palette, ditherPalette } =
-			parsePositiveBitmapOptions(req);
+		const {
+			width,
+			height,
+			grayscale,
+			palette,
+			ditherPalette,
+			ditherAnchorPalette,
+			ditheringMethod,
+			bayerPatternSize,
+			colorSaturation,
+		} = parsePositiveBitmapOptions(req);
 
 		logger.info(
 			`Bitmap request for: ${bitmapPath} in ${width}x${height} with ${grayscale} gray levels`,
@@ -53,6 +63,10 @@ export async function GET(
 			grayscale,
 			palette,
 			ditherPalette,
+			ditherAnchorPalette,
+			ditheringMethod,
+			bayerPatternSize,
+			colorSaturation,
 			userId,
 			cookieHeader || undefined,
 			headers.hostUrl,
@@ -89,6 +103,10 @@ const renderRecipeBitmap = cache(
 		grayscale: number = 16,
 		palette: RgbPalette | undefined = undefined,
 		ditherPalette: RgbPalette | undefined = undefined,
+		ditherAnchorPalette: RgbPalette | undefined = undefined,
+		ditheringMethod: DitheringMethod | undefined = undefined,
+		bayerPatternSize: 2 | 4 | 8 | undefined = undefined,
+		colorSaturation: number | undefined = undefined,
 		userId: string | null = null,
 		cookies?: string,
 		previewBaseUrl?: string,
@@ -103,6 +121,10 @@ const renderRecipeBitmap = cache(
 			grayscale,
 			...(palette && { palette }),
 			...(ditherPalette && { ditherPalette }),
+			...(ditherAnchorPalette && { ditherAnchorPalette }),
+			...(ditheringMethod && { ditheringMethod }),
+			...(bayerPatternSize && { bayerPatternSize }),
+			...(colorSaturation !== undefined ? { colorSaturation } : {}),
 			userId,
 			cookies,
 			previewBaseUrl,

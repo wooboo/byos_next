@@ -12,6 +12,7 @@ function decodeJpegDataUrl(dataUrl: string) {
 describe("immich-favorites/getData", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
+		vi.resetModules();
 	});
 
 	afterEach(() => {
@@ -97,6 +98,169 @@ describe("immich-favorites/getData", () => {
 
 		assert.equal(data.assetId, "portrait-1");
 		assert.match(data.imageDataUrl, /^data:image\/jpeg;base64,/);
+	});
+
+	it("keeps the selected random favorite stable within the rotation window", async () => {
+		vi.spyOn(Date, "now").mockReturnValue(
+			new Date("2026-06-25T12:00:00Z").getTime(),
+		);
+		const pngBuffer = await sharp({
+			create: {
+				width: 2,
+				height: 2,
+				channels: 3,
+				background: { r: 0, g: 0, b: 255 },
+			},
+		})
+			.png()
+			.toBuffer();
+
+		global.fetch = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify([{ id: "asset-window-1" }]), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
+			)
+			.mockImplementation(
+				async () =>
+					new Response(new Uint8Array(pngBuffer), {
+						status: 200,
+						headers: { "Content-Type": "image/png" },
+					}),
+			);
+
+		const { default: getData } = await import("./getData");
+		const params = {
+			serverUrl: "https://photos.example.com",
+			apiKey: "secret",
+			rotationSeconds: 30 * 60,
+		};
+		const first = await getData(params);
+		const second = await getData(params);
+
+		assert.equal(first.assetId, "asset-window-1");
+		assert.equal(second.assetId, "asset-window-1");
+		const calls = vi.mocked(global.fetch).mock.calls;
+		assert.equal(
+			calls.filter(([url]) => String(url).includes("/api/search/random"))
+				.length,
+			1,
+		);
+	});
+
+	it("selects a new random favorite after the rotation window changes", async () => {
+		const nowSpy = vi
+			.spyOn(Date, "now")
+			.mockReturnValue(new Date("2026-06-25T12:00:00Z").getTime());
+		const pngBuffer = await sharp({
+			create: {
+				width: 2,
+				height: 2,
+				channels: 3,
+				background: { r: 255, g: 255, b: 0 },
+			},
+		})
+			.png()
+			.toBuffer();
+
+		global.fetch = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify([{ id: "asset-window-1" }]), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(new Uint8Array(pngBuffer), {
+					status: 200,
+					headers: { "Content-Type": "image/png" },
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify([{ id: "asset-window-2" }]), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(new Uint8Array(pngBuffer), {
+					status: 200,
+					headers: { "Content-Type": "image/png" },
+				}),
+			);
+
+		const { default: getData } = await import("./getData");
+		const params = {
+			serverUrl: "https://photos.example.com",
+			apiKey: "secret",
+			rotationSeconds: 15 * 60,
+		};
+		const first = await getData(params);
+		nowSpy.mockReturnValue(new Date("2026-06-25T12:16:00Z").getTime());
+		const second = await getData(params);
+
+		assert.equal(first.assetId, "asset-window-1");
+		assert.equal(second.assetId, "asset-window-2");
+		const calls = vi.mocked(global.fetch).mock.calls;
+		assert.equal(
+			calls.filter(([url]) => String(url).includes("/api/search/random"))
+				.length,
+			2,
+		);
+	});
+
+	it("ignores legacy rotationMinutes params", async () => {
+		const nowSpy = vi
+			.spyOn(Date, "now")
+			.mockReturnValue(new Date("2026-06-25T12:00:00Z").getTime());
+		const pngBuffer = await sharp({
+			create: {
+				width: 2,
+				height: 2,
+				channels: 3,
+				background: { r: 255, g: 0, b: 255 },
+			},
+		})
+			.png()
+			.toBuffer();
+
+		global.fetch = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify([{ id: "default-window-1" }]), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
+			)
+			.mockImplementation(
+				async () =>
+					new Response(new Uint8Array(pngBuffer), {
+						status: 200,
+						headers: { "Content-Type": "image/png" },
+					}),
+			);
+
+		const { default: getData } = await import("./getData");
+		const params = {
+			serverUrl: "https://photos.example.com",
+			apiKey: "secret",
+			rotationMinutes: 1,
+		};
+		const first = await getData(params);
+		nowSpy.mockReturnValue(new Date("2026-06-25T12:01:01Z").getTime());
+		const second = await getData(params);
+
+		assert.equal(first.assetId, "default-window-1");
+		assert.equal(second.assetId, "default-window-1");
+		const calls = vi.mocked(global.fetch).mock.calls;
+		assert.equal(
+			calls.filter(([url]) => String(url).includes("/api/search/random"))
+				.length,
+			1,
+		);
 	});
 
 	it("returns empty result when no favorite image matches orientation", async () => {

@@ -53,6 +53,244 @@ it("maps RGB pixels to the nearest configured palette colors", () => {
 	assert.deepEqual(Array.from(result), [0, 1, 2, 3, 4, 5]);
 });
 
+it("keeps calibrated display palettes anchored to nominal device colors", () => {
+	const paperColorPalette = [
+		[0, 0, 0],
+		[255, 255, 255],
+		[255, 243, 56],
+		[191, 0, 0],
+		[100, 64, 255],
+		[67, 138, 28],
+	] as const;
+	const observedPaperColorPalette = [
+		[87, 77, 80],
+		[187, 189, 177],
+		[178, 156, 55],
+		[74, 35, 36],
+		[38, 76, 137],
+		[60, 102, 49],
+	] as const;
+
+	const result = applyColorPaletteDithering(
+		DitheringMethod.NONE,
+		new Uint8Array([0, 0, 0, 191, 0, 0, 87, 77, 80, 74, 35, 36]),
+		{
+			palette: paperColorPalette,
+			displayPalette: observedPaperColorPalette,
+		},
+	);
+
+	assert.deepEqual(Array.from(result), [0, 3, 0, 3]);
+});
+
+it("does not diffuse observed display error into flat nominal color fields", () => {
+	const paperColorPalette = [
+		[0, 0, 0],
+		[255, 255, 255],
+		[255, 243, 56],
+		[191, 0, 0],
+		[100, 64, 255],
+		[67, 138, 28],
+	] as const;
+	const observedPaperColorPalette = [
+		[87, 77, 80],
+		[187, 189, 177],
+		[178, 156, 55],
+		[74, 35, 36],
+		[38, 76, 137],
+		[60, 102, 49],
+	] as const;
+	const rgb = new Uint8Array([
+		0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 243, 56, 255, 243, 56,
+		191, 0, 0, 191, 0, 0, 100, 64, 255, 100, 64, 255, 67, 138, 28, 67, 138, 28,
+	]);
+
+	const result = applyColorPaletteDithering(
+		DitheringMethod.JARVIS_JUDICE_NINKE,
+		rgb,
+		{
+			width: 6,
+			height: 2,
+			palette: paperColorPalette,
+			displayPalette: observedPaperColorPalette,
+			applyEdgeSnap: false,
+		},
+	);
+
+	assert.deepEqual(Array.from(result), [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
+});
+
+it("keeps large near-nominal color fields solid during color error diffusion", () => {
+	const paperColorPalette = [
+		[0, 0, 0],
+		[255, 255, 255],
+		[255, 243, 56],
+		[191, 0, 0],
+		[100, 64, 255],
+		[67, 138, 28],
+	] as const;
+	const observedPaperColorPalette = [
+		[87, 77, 80],
+		[187, 189, 177],
+		[178, 156, 55],
+		[74, 35, 36],
+		[38, 76, 137],
+		[60, 102, 49],
+	] as const;
+	const width = 300;
+	const height = 180;
+	const blockWidth = width / 3;
+	const blockHeight = height / 2;
+	const sourceColors = [
+		[0, 0, 0],
+		[255, 255, 255],
+		[254, 243, 55],
+		[190, 0, 0],
+		[100, 65, 255],
+		[66, 138, 28],
+	] as const;
+	const rgb = new Uint8Array(width * height * 3);
+
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const colorIndex = (y < blockHeight ? 0 : 3) + Math.floor(x / blockWidth);
+			const color = sourceColors[colorIndex];
+			const offset = (y * width + x) * 3;
+			rgb[offset] = color[0];
+			rgb[offset + 1] = color[1];
+			rgb[offset + 2] = color[2];
+		}
+	}
+
+	const result = applyColorPaletteDithering(
+		DitheringMethod.JARVIS_JUDICE_NINKE,
+		rgb,
+		{
+			width,
+			height,
+			palette: paperColorPalette,
+			displayPalette: observedPaperColorPalette,
+			applyEdgeSnap: false,
+		},
+	);
+
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const expectedIndex =
+				(y < blockHeight ? 0 : 3) + Math.floor(x / blockWidth);
+			assert.equal(result[y * width + x], expectedIndex);
+		}
+	}
+});
+
+it("preserves bright neutral highlights when using an observed color palette", () => {
+	const paperColorPalette = [
+		[0, 0, 0],
+		[255, 255, 255],
+		[255, 243, 56],
+		[191, 0, 0],
+		[100, 64, 255],
+		[67, 138, 28],
+	] as const;
+	const observedPaperColorPalette = [
+		[87, 77, 80],
+		[187, 189, 177],
+		[178, 156, 55],
+		[74, 35, 36],
+		[38, 76, 137],
+		[60, 102, 49],
+	] as const;
+	const width = 24;
+	const height = 24;
+	const rgb = new Uint8Array(width * height * 3);
+
+	for (let pixel = 0; pixel < width * height; pixel++) {
+		const offset = pixel * 3;
+		rgb[offset] = 225;
+		rgb[offset + 1] = 224;
+		rgb[offset + 2] = 211;
+	}
+
+	const result = applyColorPaletteDithering(DitheringMethod.ATKINSON, rgb, {
+		width,
+		height,
+		palette: paperColorPalette,
+		displayPalette: observedPaperColorPalette,
+		applyEdgeSnap: false,
+	});
+	const histogram = Array.from(result).reduce((counts, paletteIndex) => {
+		counts[paletteIndex] += 1;
+		return counts;
+	}, new Array(paperColorPalette.length).fill(0));
+
+	assert.equal(histogram[0], 0);
+	assert.equal(histogram[3], 0);
+	assert.equal(histogram[4], 0);
+	assert.equal(histogram[5], 0);
+	assert.ok(histogram[1] / result.length > 0.8);
+});
+
+it("can boost color saturation before calibrated Bayer palette matching", () => {
+	const paperColorPalette = [
+		[0, 0, 0],
+		[255, 255, 255],
+		[255, 243, 56],
+		[191, 0, 0],
+		[100, 64, 255],
+		[67, 138, 28],
+	] as const;
+	const observedPaperColorPalette = [
+		[87, 77, 80],
+		[187, 189, 177],
+		[178, 156, 55],
+		[74, 35, 36],
+		[38, 76, 137],
+		[60, 102, 49],
+	] as const;
+	const width = 256;
+	const height = 8;
+	const rgb = new Uint8Array(width * height * 3);
+
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const ratio = x / (width - 1);
+			const offset = (y * width + x) * 3;
+			rgb[offset] = 255;
+			rgb[offset + 1] = Math.round(255 + (243 - 255) * ratio);
+			rgb[offset + 2] = Math.round(255 + (56 - 255) * ratio);
+		}
+	}
+
+	const baseline = applyColorPaletteDithering(DitheringMethod.BAYER, rgb, {
+		width,
+		height,
+		palette: paperColorPalette,
+		displayPalette: observedPaperColorPalette,
+		bayerPatternSize: 8,
+		applyEdgeSnap: false,
+	});
+	const boosted = applyColorPaletteDithering(DitheringMethod.BAYER, rgb, {
+		width,
+		height,
+		palette: paperColorPalette,
+		displayPalette: observedPaperColorPalette,
+		bayerPatternSize: 8,
+		colorSaturation: 1.35,
+		applyEdgeSnap: false,
+	});
+	const histogram = (indices: Uint8Array) =>
+		Array.from(indices).reduce((counts, paletteIndex) => {
+			counts[paletteIndex] += 1;
+			return counts;
+		}, new Array(paperColorPalette.length).fill(0));
+
+	const baselineHistogram = histogram(baseline);
+	const boostedHistogram = histogram(boosted);
+
+	assert.ok(boostedHistogram[2] > baselineHistogram[2]);
+	assert.ok(boostedHistogram[1] < baselineHistogram[1]);
+});
+
 it("threshold dithering does not require image dimensions", () => {
 	const result = applyDithering(
 		DitheringMethod.THRESHOLD,

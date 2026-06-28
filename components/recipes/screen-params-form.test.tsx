@@ -27,9 +27,48 @@ vi.mock("@/components/ui/button", () => ({
 	),
 }));
 
+vi.mock("next/navigation", () => ({
+	useRouter: () => ({ refresh: vi.fn() }),
+}));
+
 vi.mock("@/components/ui/input", () => ({
 	Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
 		<input {...props} readOnly />
+	),
+}));
+
+vi.mock("@/components/ui/select", () => ({
+	Select: ({
+		children,
+		value,
+		onValueChange,
+	}: {
+		children: React.ReactNode;
+		value?: string;
+		onValueChange?: (value: string) => void;
+	}) => (
+		<div
+			data-select-value={value}
+			data-has-change-handler={String(Boolean(onValueChange))}
+		>
+			{children}
+		</div>
+	),
+	SelectContent: ({ children }: { children: React.ReactNode }) => (
+		<div>{children}</div>
+	),
+	SelectItem: ({
+		children,
+		value,
+	}: {
+		children: React.ReactNode;
+		value: string;
+	}) => <div data-select-item={value}>{children}</div>,
+	SelectTrigger: ({ children }: { children: React.ReactNode }) => (
+		<div>{children}</div>
+	),
+	SelectValue: ({ placeholder }: { placeholder?: string }) => (
+		<span>{placeholder}</span>
 	),
 }));
 
@@ -137,6 +176,42 @@ describe("ScreenParamsForm", () => {
 		]);
 	});
 
+	it("renders option-backed strings as selects and booleans as checkboxes", () => {
+		const changes: Array<[string, unknown]> = [];
+		const selectField = renderField(
+			"pattern",
+			{
+				type: "string",
+				label: "Pattern",
+				default: "overview",
+				placeholder: "Pick pattern",
+				options: [
+					{ label: "Overview", value: "overview" },
+					{ label: "Gradients", value: "gradients" },
+				],
+			},
+			"gradients",
+			(key, value) => changes.push([key, value]),
+		);
+		const checkboxField = renderField(
+			"showLabels",
+			{ type: "boolean", label: "Show labels", default: true },
+			true,
+			(key, value) => changes.push([key, value]),
+		);
+
+		assert.equal(selectField.props.value, "gradients");
+		selectField.props.onValueChange("overview");
+		assert.equal(checkboxField.props.type, "checkbox");
+		assert.equal(checkboxField.props.checked, true);
+		checkboxField.props.onChange({ target: { checked: false } });
+
+		assert.deepEqual(changes, [
+			["pattern", "overview"],
+			["showLabels", false],
+		]);
+	});
+
 	it("derives submit/reset state transitions and dirty checks", async () => {
 		assert.equal(
 			hasScreenParams({
@@ -208,6 +283,7 @@ describe("ScreenParamsForm", () => {
 
 		const submittedStatuses: string[] = [];
 		const submittedMessages: string[] = [];
+		const successCallbacks: string[] = [];
 		applySubmittedScreenParamsResult({
 			result: {
 				formStatus: "success",
@@ -215,9 +291,11 @@ describe("ScreenParamsForm", () => {
 			},
 			setFormStatus: (status) => submittedStatuses.push(status),
 			setStatusMessage: (message) => submittedMessages.push(message),
+			onSuccess: () => successCallbacks.push("success"),
 		});
 		assert.deepEqual(submittedStatuses, ["success"]);
 		assert.deepEqual(submittedMessages, ["Saved"]);
+		assert.deepEqual(successCallbacks, ["success"]);
 
 		const resetValues: Array<Record<string, unknown>> = [];
 		const resetStatuses: string[] = [];

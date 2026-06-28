@@ -76,6 +76,10 @@ const recipeComponentImporters: Record<
 				"@/app/(app)/recipes/screens/calibration-square/calibration-square"
 			),
 		),
+	"color-calibration": () =>
+		asRecipeComponentModule(
+			import("@/app/(app)/recipes/screens/color-calibration/color-calibration"),
+		),
 	"immich-favorites": () =>
 		asRecipeComponentModule(
 			import("@/app/(app)/recipes/screens/immich-favorites/immich-favorites"),
@@ -151,6 +155,9 @@ export type RecipeConfig = {
 	renderSettings?: {
 		doubleSizeForSharperText?: boolean;
 		applyEdgeSnap?: boolean;
+		ditheringMethod?: DitheringMethod;
+		bayerPatternSize?: 2 | 4 | 8;
+		colorSaturation?: number;
 		[key: string]: boolean | string | number | undefined;
 	};
 	[key: string]: unknown;
@@ -322,6 +329,67 @@ export const getRecipeImageOptions = (
 	};
 };
 
+const DITHERING_METHOD_PARAM_ALIASES: Record<string, DitheringMethod> = {
+	atkinson: DitheringMethod.ATKINSON,
+	bayer: DitheringMethod.BAYER,
+	"floyd-steinberg": DitheringMethod.FLOYD_STEINBERG,
+	floyd: DitheringMethod.FLOYD_STEINBERG,
+	fs: DitheringMethod.FLOYD_STEINBERG,
+	"jarvis-judice-ninke": DitheringMethod.JARVIS_JUDICE_NINKE,
+	jarvis: DitheringMethod.JARVIS_JUDICE_NINKE,
+	jjn: DitheringMethod.JARVIS_JUDICE_NINKE,
+	none: DitheringMethod.NONE,
+	random: DitheringMethod.RANDOM,
+	threshold: DitheringMethod.THRESHOLD,
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseNumberParam(value: unknown): number | undefined {
+	if (typeof value === "number")
+		return Number.isFinite(value) ? value : undefined;
+	if (typeof value !== "string") return undefined;
+	const parsed = Number.parseFloat(value);
+	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function resolveDitheringMethodParam(
+	params?: Record<string, unknown>,
+): DitheringMethod | undefined {
+	const value = params?.ditheringMethod ?? params?.dithering;
+	if (typeof value !== "string") return undefined;
+	return DITHERING_METHOD_PARAM_ALIASES[value.trim().toLowerCase()];
+}
+
+function resolveBayerPatternSizeParam(
+	params?: Record<string, unknown>,
+): 2 | 4 | 8 | undefined {
+	const value = parseNumberParam(params?.bayerPatternSize ?? params?.bayer);
+	return value === 2 || value === 4 || value === 8 ? value : undefined;
+}
+
+function resolveColorSaturationParam(
+	params?: Record<string, unknown>,
+): number | undefined {
+	const value = parseNumberParam(params?.colorSaturation ?? params?.saturation);
+	if (value === undefined || value < 0 || value > 4) return undefined;
+	return value;
+}
+
+function resolveBitmapRenderParams(params?: Record<string, unknown>) {
+	const ditheringMethod = resolveDitheringMethodParam(params);
+	const bayerPatternSize = resolveBayerPatternSizeParam(params);
+	const colorSaturation = resolveColorSaturationParam(params);
+
+	return {
+		...(ditheringMethod ? { ditheringMethod } : {}),
+		...(bayerPatternSize ? { bayerPatternSize } : {}),
+		...(colorSaturation !== undefined ? { colorSaturation } : {}),
+	};
+}
+
 type RenderFormats = Array<"bitmap" | "png">;
 
 type RenderOptions = {
@@ -335,6 +403,10 @@ type RenderOptions = {
 	grayscale?: number; // Number of gray levels: 2, 4, or 16
 	palette?: RgbPalette;
 	ditherPalette?: RgbPalette;
+	ditherAnchorPalette?: RgbPalette;
+	ditheringMethod?: DitheringMethod;
+	bayerPatternSize?: 2 | 4 | 8;
+	colorSaturation?: number;
 	html?: string; // When set, uses Puppeteer screenshot instead of Takumi/Satori
 	cookies?: string; // Cookie header to forward to browser renderer
 	previewPath?: string; // Browser renderer route to capture
@@ -363,6 +435,10 @@ export const renderRecipeOutputs = cache(
 		grayscale,
 		palette,
 		ditherPalette,
+		ditherAnchorPalette,
+		ditheringMethod,
+		bayerPatternSize,
+		colorSaturation,
 		html,
 		cookies,
 		previewPath,
@@ -435,15 +511,31 @@ export const renderRecipeOutputs = cache(
 		}
 
 		if (needsBitmap) {
+			const resolvedBayerPatternSize =
+				bayerPatternSize ?? config?.renderSettings?.bayerPatternSize;
+			const resolvedColorSaturation =
+				colorSaturation ?? config?.renderSettings?.colorSaturation;
 			try {
 				results.bitmap = await renderBmp(pngBuffer, {
-					ditheringMethod: DitheringMethod.JARVIS_JUDICE_NINKE,
+					ditheringMethod:
+						ditheringMethod ??
+						config?.renderSettings?.ditheringMethod ??
+						(palette
+							? DitheringMethod.ATKINSON
+							: DitheringMethod.JARVIS_JUDICE_NINKE),
 					width: imageWidth,
 					height: imageHeight,
 					applyEdgeSnap: config?.renderSettings?.applyEdgeSnap ?? true,
+					...(resolvedBayerPatternSize && {
+						bayerPatternSize: resolvedBayerPatternSize,
+					}),
+					...(resolvedColorSaturation !== undefined
+						? { colorSaturation: resolvedColorSaturation }
+						: {}),
 					...(grayscale !== undefined && { grayscale }),
 					...(palette && { palette }),
 					...(ditherPalette && { ditherPalette }),
+					...(ditherAnchorPalette && { ditherAnchorPalette }),
 				});
 			} catch (error) {
 				logger.error(`Error generating bitmap for ${slug}:`, error);
@@ -576,6 +668,11 @@ export async function renderRecipeToImage({
 	formats = ["bitmap", "png"],
 	grayscale,
 	palette,
+	ditherPalette,
+	ditherAnchorPalette,
+	ditheringMethod,
+	bayerPatternSize,
+	colorSaturation,
 	userId,
 	cookies,
 	paramsOverride,
@@ -588,6 +685,11 @@ export async function renderRecipeToImage({
 	formats?: RenderFormats;
 	grayscale?: number;
 	palette?: RgbPalette;
+	ditherPalette?: RgbPalette;
+	ditherAnchorPalette?: RgbPalette;
+	ditheringMethod?: DitheringMethod;
+	bayerPatternSize?: 2 | 4 | 8;
+	colorSaturation?: number;
 	userId?: string | null;
 	cookies?: string;
 	paramsOverride?: Record<string, unknown>;
@@ -595,6 +697,18 @@ export async function renderRecipeToImage({
 	previewBaseUrl?: string;
 }): Promise<RenderResults> {
 	const result = await buildRecipeElement({ slug, userId, paramsOverride });
+	const paramsFromProps = isRecord(result.props.params)
+		? result.props.params
+		: undefined;
+	const bitmapRenderParams = resolveBitmapRenderParams(
+		paramsOverride ?? paramsFromProps,
+	);
+	const resolvedDitheringMethod =
+		ditheringMethod ?? bitmapRenderParams.ditheringMethod;
+	const resolvedBayerPatternSize =
+		bayerPatternSize ?? bitmapRenderParams.bayerPatternSize;
+	const resolvedColorSaturation =
+		colorSaturation ?? bitmapRenderParams.colorSaturation;
 
 	if (result.html) {
 		return renderRecipeOutputs({
@@ -606,6 +720,11 @@ export async function renderRecipeToImage({
 			formats,
 			grayscale,
 			palette,
+			ditherPalette,
+			ditherAnchorPalette,
+			ditheringMethod: resolvedDitheringMethod,
+			bayerPatternSize: resolvedBayerPatternSize,
+			colorSaturation: resolvedColorSaturation,
 			cookies,
 			previewBaseUrl,
 		});
@@ -628,6 +747,11 @@ export async function renderRecipeToImage({
 		formats,
 		grayscale,
 		palette,
+		ditherPalette,
+		ditherAnchorPalette,
+		ditheringMethod: resolvedDitheringMethod,
+		bayerPatternSize: resolvedBayerPatternSize,
+		colorSaturation: resolvedColorSaturation,
 		cookies,
 		previewPath,
 		previewBaseUrl,

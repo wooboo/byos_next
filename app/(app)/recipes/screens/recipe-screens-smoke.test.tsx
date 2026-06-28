@@ -12,6 +12,7 @@ import BitmapPatterns from "./bitmap-patterns/bitmap-patterns.tsx";
 import CalendarDaily from "./calendar-daily/calendar-daily.tsx";
 import CalendarMonthly from "./calendar-monthly/calendar-monthly.tsx";
 import CalendarWeekly from "./calendar-weekly/calendar-weekly.tsx";
+import ColorCalibration from "./color-calibration/color-calibration.tsx";
 import SimpleText from "./simple-text/simple-text.tsx";
 import Weather from "./weather/weather.tsx";
 import Wikipedia from "./wikipedia/wikipedia.tsx";
@@ -43,11 +44,13 @@ describe("recipe screen components", () => {
 		const html = render(
 			<div>
 				<SimpleText width={400} height={240} />
+				<ColorCalibration width={400} height={240} />
 				{album}
 			</div>,
 		);
 
 		assert.match(html, /Hello World/);
+		assert.match(html, /Color calibration/);
 		assert.match(
 			html,
 			/\/api\/image-proxy\?url=https%3A%2F%2Fexample.com%2Falbum.png/,

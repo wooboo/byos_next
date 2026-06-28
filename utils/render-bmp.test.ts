@@ -311,14 +311,14 @@ describe("renderBmp", () => {
 			[67, 138, 28],
 		] as const;
 		const observedPaperColorPalette = [
-			[70, 66, 95],
-			[178, 193, 184],
-			[175, 153, 0],
-			[97, 65, 72],
-			[19, 80, 155],
-			[36, 109, 40],
+			[87, 77, 80],
+			[187, 189, 177],
+			[178, 156, 55],
+			[74, 35, 36],
+			[38, 76, 137],
+			[60, 102, 49],
 		] as const;
-		const png = await pngFromRgb(1, 1, [97, 65, 72]);
+		const png = await pngFromRgb(1, 1, [74, 35, 36]);
 
 		const bmp = await renderBmp(png, {
 			width: 1,
@@ -335,5 +335,42 @@ describe("renderBmp", () => {
 			[0x000000, 0xffffff, 0xfff338, 0xbf0000, 0x6440ff, 0x438a1c],
 		);
 		assert.equal(bmp[info.dataOffset], 0x30);
+	});
+
+	it("uses nominal anchors when preview BMP palette entries are observed colors", async () => {
+		const paperColorPalette = [
+			[0, 0, 0],
+			[255, 255, 255],
+			[255, 243, 56],
+			[191, 0, 0],
+			[100, 64, 255],
+			[67, 138, 28],
+		] as const;
+		const observedPaperColorPalette = [
+			[87, 77, 80],
+			[187, 189, 177],
+			[178, 156, 55],
+			[74, 35, 36],
+			[38, 76, 137],
+			[60, 102, 49],
+		] as const;
+		const png = await pngFromRgb(2, 1, [0, 0, 0, 191, 0, 0]);
+
+		const bmp = await renderBmp(png, {
+			width: 2,
+			height: 1,
+			palette: observedPaperColorPalette,
+			ditherPalette: observedPaperColorPalette,
+			ditherAnchorPalette: paperColorPalette,
+			ditheringMethod: DitheringMethod.NONE,
+			applyEdgeSnap: false,
+		});
+		const info = bmpInfo(bmp);
+
+		assert.deepEqual(
+			paletteEntries(bmp, 6),
+			[0x574d50, 0xbbbdb1, 0xb29c37, 0x4a2324, 0x264c89, 0x3c6631],
+		);
+		assert.equal(bmp[info.dataOffset], 0x03);
 	});
 });

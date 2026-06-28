@@ -15,6 +15,7 @@ import {
 	BmpPreview,
 	ImageEndpointPreview,
 } from "@/components/recipes/bmp-preview";
+import { SCREEN_PARAMS_SAVED_EVENT } from "@/components/recipes/preview-refresh-events";
 import { cn } from "@/lib/utils";
 
 interface RecipePreviewStageProps {
@@ -32,6 +33,24 @@ interface RecipePreviewStageProps {
 	reactPipeline?: ReactNode;
 	defaultFormat?: ScreenPreviewFormat;
 	reactLabel?: string;
+}
+
+export function appendPreviewRefreshParam(
+	url: string,
+	refreshRevision: number,
+) {
+	if (refreshRevision <= 0) return url;
+	const separator = url.includes("?") ? "&" : "?";
+	return `${url}${separator}preview_refresh=${refreshRevision}`;
+}
+
+function appendPreviewDimensions(url: string, width: number, height: number) {
+	const separator = url.includes("?") ? "&" : "?";
+	const params = new URLSearchParams({
+		width: String(width),
+		height: String(height),
+	});
+	return `${url}${separator}${params}`;
 }
 
 export function RecipePreviewStage({
@@ -55,6 +74,7 @@ export function RecipePreviewStage({
 	const [presetIdx, setPresetIdx] = useState(0);
 	const [paletteIdx, setPaletteIdx] = useState(2);
 	const [reactMode, setReactMode] = useState<"fit" | "scroll">("fit");
+	const [previewRefreshRevision, setPreviewRefreshRevision] = useState(0);
 
 	const preset =
 		SCREEN_PREVIEW_SIZE_PRESETS[presetIdx] || SCREEN_PREVIEW_SIZE_PRESETS[0];
@@ -62,10 +82,26 @@ export function RecipePreviewStage({
 		SCREEN_PREVIEW_PALETTES[paletteIdx] || SCREEN_PREVIEW_PALETTES[2];
 	const portraitW = isPortrait ? preset.height : preset.width;
 	const portraitH = isPortrait ? preset.width : preset.height;
+	const refreshedBitmapUrl = appendPreviewRefreshParam(
+		bitmapUrl ?? `/api/bitmap/${slug}/default.bmp`,
+		previewRefreshRevision,
+	);
+	const refreshedPngUrl = appendPreviewRefreshParam(
+		pngUrl ?? `/api/png/${slug}/default.png`,
+		previewRefreshRevision,
+	);
+	const refreshedReactPreviewSrc =
+		reactPreviewSrc !== undefined
+			? appendPreviewRefreshParam(reactPreviewSrc, previewRefreshRevision)
+			: undefined;
 	const resolvedReactNode =
-		reactPreviewSrc !== undefined ? (
+		refreshedReactPreviewSrc !== undefined ? (
 			<ScaledReactPreview
-				src={`${reactPreviewSrc}?width=${portraitW}&height=${portraitH}`}
+				src={appendPreviewDimensions(
+					refreshedReactPreviewSrc,
+					portraitW,
+					portraitH,
+				)}
 				title={`${slug} React preview`}
 				width={portraitW}
 				height={portraitH}
@@ -88,7 +124,7 @@ export function RecipePreviewStage({
 					width={portraitW}
 					height={portraitH}
 					bpp={palette.grayscale}
-					bitmapUrl={bitmapUrl}
+					bitmapUrl={refreshedBitmapUrl}
 					paletteId={"paletteId" in palette ? palette.paletteId : undefined}
 				/>
 			),
@@ -99,7 +135,11 @@ export function RecipePreviewStage({
 			node: pngNode ?? (
 				<ImageEndpointPreview
 					alt="PNG preview"
-					requestUrl={`${pngUrl ?? `/api/png/${slug}/default.png`}?width=${portraitW}&height=${portraitH}`}
+					requestUrl={appendPreviewDimensions(
+						refreshedPngUrl,
+						portraitW,
+						portraitH,
+					)}
 					width={portraitW}
 					height={portraitH}
 				/>
@@ -115,6 +155,15 @@ export function RecipePreviewStage({
 	useEffect(() => {
 		if (active && active.key !== format) setFormat(active.key);
 	}, [active, format]);
+
+	useEffect(() => {
+		const refreshPreview = () => {
+			setPreviewRefreshRevision((revision) => revision + 1);
+		};
+		window.addEventListener(SCREEN_PARAMS_SAVED_EVENT, refreshPreview);
+		return () =>
+			window.removeEventListener(SCREEN_PARAMS_SAVED_EVENT, refreshPreview);
+	}, []);
 
 	const handleOrientationChange = (nextPortrait: boolean) => {
 		if (nextPortrait === isPortrait) return;

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import sharp from "sharp";
 
 type ImmichAsset = {
@@ -10,6 +11,17 @@ type ImmichAsset = {
 };
 
 type OrientationFilter = "any" | "portrait" | "landscape";
+
+const DEFAULT_ROTATION_SECONDS = 15 * 60;
+const MIN_ROTATION_SECONDS = 1;
+const MAX_ROTATION_SECONDS = 24 * 60 * 60;
+
+type CachedAssetSelection = {
+	windowId: number;
+	asset: ImmichAsset;
+};
+
+const selectedAssetCache = new Map<string, CachedAssetSelection>();
 
 function getOrientation(asset: ImmichAsset): OrientationFilter | null {
 	const width = asset.width ?? asset.originalWidth;
@@ -35,8 +47,106 @@ function getAssetByOrientation(
 	return undefined;
 }
 
+function normalizeRotationSeconds(value: unknown): number {
+	const parsedSeconds =
+		typeof value === "number"
+			? value
+			: typeof value === "string" && value.trim() !== ""
+				? Number(value)
+				: DEFAULT_ROTATION_SECONDS;
+
+	if (!Number.isFinite(parsedSeconds)) return DEFAULT_ROTATION_SECONDS;
+	return Math.min(
+		MAX_ROTATION_SECONDS,
+		Math.max(MIN_ROTATION_SECONDS, Math.round(parsedSeconds)),
+	);
+}
+
+function getRotationWindowId(rotationSeconds: number, now = Date.now()) {
+	return Math.floor(now / (rotationSeconds * 1000));
+}
+
+function getApiKeySignature(apiKey: string) {
+	return createHash("sha256").update(apiKey).digest("hex").slice(0, 16);
+}
+
+function getSelectionCacheKey({
+	serverUrl,
+	apiKey,
+	orientationFilter,
+	rotationSeconds,
+}: {
+	serverUrl: string;
+	apiKey: string;
+	orientationFilter: OrientationFilter;
+	rotationSeconds: number;
+}) {
+	return [
+		serverUrl,
+		getApiKeySignature(apiKey),
+		orientationFilter,
+		rotationSeconds,
+	].join("|");
+}
+
+async function selectFavoriteAsset({
+	serverUrl,
+	headers,
+	apiKey,
+	orientationFilter,
+	rotationSeconds,
+}: {
+	serverUrl: string;
+	headers: HeadersInit;
+	apiKey: string;
+	orientationFilter: OrientationFilter;
+	rotationSeconds: number;
+}): Promise<ImmichAsset | undefined> {
+	const windowId = getRotationWindowId(rotationSeconds);
+	const cacheKey = getSelectionCacheKey({
+		serverUrl,
+		apiKey,
+		orientationFilter,
+		rotationSeconds,
+	});
+	const cached = selectedAssetCache.get(cacheKey);
+	if (cached?.windowId === windowId) return cached.asset;
+
+	const searchRes = await fetch(`${serverUrl}/api/search/random`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			isFavorite: true,
+			size: 50,
+			type: "IMAGE",
+		}),
+	});
+
+	if (!searchRes.ok) {
+		console.error(`Immich search failed: ${searchRes.status}`);
+		return undefined;
+	}
+
+	const assets = (await searchRes.json()) as ImmichAsset[];
+	if (!assets?.length) {
+		console.warn("No favorite photos in Immich");
+		return undefined;
+	}
+
+	const selectedAsset = getAssetByOrientation(assets, orientationFilter);
+	if (!selectedAsset?.id) {
+		console.warn(
+			`No favorite photos matching orientation filter: ${orientationFilter}`,
+		);
+		return undefined;
+	}
+
+	selectedAssetCache.set(cacheKey, { windowId, asset: selectedAsset });
+	return selectedAsset;
+}
+
 /**
- * Fetches a random favorite photo from Immich and returns it as a base64 JPEG.
+ * Fetches a favorite photo from Immich and returns it as a base64 JPEG.
  * The component handles centering/scaling — no pre-compositing needed.
  */
 export default async function getData(
@@ -48,6 +158,7 @@ export default async function getData(
 	const apiKey = params?.apiKey as string;
 	const orientationFilter =
 		(params?.orientationFilter as OrientationFilter) || "any";
+	const rotationSeconds = normalizeRotationSeconds(params?.rotationSeconds);
 
 	if (!apiKey) {
 		return { imageDataUrl: "", assetId: "" };
@@ -60,32 +171,14 @@ export default async function getData(
 	};
 
 	try {
-		const searchRes = await fetch(`${serverUrl}/api/search/random`, {
-			method: "POST",
+		const selectedAsset = await selectFavoriteAsset({
+			serverUrl,
 			headers,
-			body: JSON.stringify({
-				isFavorite: true,
-				size: 50,
-				type: "IMAGE",
-			}),
+			apiKey,
+			orientationFilter,
+			rotationSeconds,
 		});
-
-		if (!searchRes.ok) {
-			console.error(`Immich search failed: ${searchRes.status}`);
-			return { imageDataUrl: "", assetId: "" };
-		}
-
-		const assets = (await searchRes.json()) as ImmichAsset[];
-		if (!assets?.length) {
-			console.warn("No favorite photos in Immich");
-			return { imageDataUrl: "", assetId: "" };
-		}
-
-		const selectedAsset = getAssetByOrientation(assets, orientationFilter);
 		if (!selectedAsset?.id) {
-			console.warn(
-				`No favorite photos matching orientation filter: ${orientationFilter}`,
-			);
 			return { imageDataUrl: "", assetId: "" };
 		}
 

@@ -11,12 +11,14 @@ import {
 } from "@/lib/recipes/recipe-renderer";
 import { resolveRenderableRef } from "@/lib/screens/render-target";
 import type { RgbPalette } from "@/utils/image-processing";
+import type { DitheringMethod } from "@/utils/render-bmp";
 import {
 	parseRequestHeaders,
 	resolveUserIdFromApiKey,
 } from "../../../display/utils";
 import {
 	binaryImageResponse,
+	parsePreviewDithering,
 	parsePreviewGrayscale,
 	parsePreviewPalette,
 	parsePreviewSize,
@@ -33,7 +35,10 @@ export async function GET(
 		const screenId = id.replace(".bmp", "");
 		const { width, height } = parsePreviewSize(req);
 		const grayscale = parsePreviewGrayscale(req);
-		const { palette, ditherPalette } = parsePreviewPalette(req);
+		const { palette, ditherPalette, ditherAnchorPalette } =
+			parsePreviewPalette(req);
+		const { ditheringMethod, bayerPatternSize, colorSaturation } =
+			parsePreviewDithering(req);
 		const userId = headers.apiKey
 			? await resolveUserIdFromApiKey(headers.apiKey)
 			: await getCurrentUserId();
@@ -46,6 +51,10 @@ export async function GET(
 			grayscale,
 			palette,
 			ditherPalette,
+			ditherAnchorPalette,
+			ditheringMethod,
+			bayerPatternSize,
+			colorSaturation,
 			userId,
 			cookieHeader,
 			headers.hostUrl,
@@ -68,6 +77,10 @@ const renderScreenBitmap = cache(
 		grayscale: number,
 		palette: RgbPalette | undefined,
 		ditherPalette: RgbPalette | undefined,
+		ditherAnchorPalette: RgbPalette | undefined,
+		ditheringMethod: DitheringMethod | undefined,
+		bayerPatternSize: 2 | 4 | 8 | undefined,
+		colorSaturation: number | undefined,
 		userId: string | null,
 		cookies?: string,
 		previewBaseUrl?: string,
@@ -87,6 +100,10 @@ const renderScreenBitmap = cache(
 			grayscale,
 			...(palette && { palette }),
 			...(ditherPalette && { ditherPalette }),
+			...(ditherAnchorPalette && { ditherAnchorPalette }),
+			...(ditheringMethod && { ditheringMethod }),
+			...(bayerPatternSize && { bayerPatternSize }),
+			...(colorSaturation !== undefined ? { colorSaturation } : {}),
 			userId,
 			cookies,
 			paramsOverride: target.params,

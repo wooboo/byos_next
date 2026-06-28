@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, vi } from "vitest";
-import { RecipePreviewStage } from "./recipe-preview-stage";
+import {
+	appendPreviewRefreshParam,
+	RecipePreviewStage,
+} from "./recipe-preview-stage";
 
 vi.mock("next/navigation", () => ({
 	useRouter: () => ({ push: () => undefined }),
@@ -104,6 +107,21 @@ vi.mock("@/components/preview/screen-preview-controls", () => ({
 }));
 
 describe("RecipePreviewStage", () => {
+	it("appends refresh revisions to preview URLs", () => {
+		assert.equal(
+			appendPreviewRefreshParam("/api/bitmap/weather.bmp", 2),
+			"/api/bitmap/weather.bmp?preview_refresh=2",
+		);
+		assert.equal(
+			appendPreviewRefreshParam("/api/bitmap/weather.bmp?width=800", 3),
+			"/api/bitmap/weather.bmp?width=800&preview_refresh=3",
+		);
+		assert.equal(
+			appendPreviewRefreshParam("/api/bitmap/weather.bmp", 0),
+			"/api/bitmap/weather.bmp",
+		);
+	});
+
 	it("resolves the react preview URL with portrait dimensions", () => {
 		const html = renderToStaticMarkup(
 			<RecipePreviewStage

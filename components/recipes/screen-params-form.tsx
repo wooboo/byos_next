@@ -1,8 +1,10 @@
 "use client";
 
 import { AlertCircle, Check, Save } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { ChangeEvent } from "react";
 import { useMemo, useState, useTransition } from "react";
+import { SCREEN_PARAMS_SAVED_EVENT } from "@/components/recipes/preview-refresh-events";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +61,14 @@ export function coerceFieldValue(
 	return Number.isNaN(Number(value)) ? "" : Number(value);
 }
 
+function normalizeParamOptions(options: RecipeParamDefinition["options"]) {
+	return (
+		options?.map((option) =>
+			typeof option === "string" ? { label: option, value: option } : option,
+		) ?? []
+	);
+}
+
 export function hasScreenParams(paramsSchema: RecipeParamDefinitions) {
 	return Object.keys(paramsSchema || {}).length > 0;
 }
@@ -104,13 +114,16 @@ export function applySubmittedScreenParamsResult({
 	result,
 	setFormStatus,
 	setStatusMessage,
+	onSuccess,
 }: {
 	result: Awaited<ReturnType<typeof submitScreenParams>>;
 	setFormStatus: (status: FormStatus) => void;
 	setStatusMessage: (message: string) => void;
+	onSuccess?: () => void;
 }) {
 	setFormStatus(result.formStatus);
 	setStatusMessage(result.statusMessage);
+	if (result.formStatus === "success") onSuccess?.();
 }
 
 export function applyResetScreenParamsForm({
@@ -144,22 +157,43 @@ export const renderField = (
 	value: unknown,
 	onChange: (key: string, value: unknown) => void,
 ) => {
-	if (key === "orientationFilter") {
-		const normalizedValue = typeof value === "string" ? value : "any";
+	const options = normalizeParamOptions(definition.options);
+	if (options.length > 0) {
+		const normalizedValue =
+			typeof value === "string"
+				? value
+				: typeof definition.default === "string"
+					? definition.default
+					: options[0]?.value;
 		return (
 			<Select
 				value={normalizedValue}
 				onValueChange={(nextValue) => onChange(key, nextValue)}
 			>
 				<SelectTrigger className="h-9 w-full">
-					<SelectValue placeholder="any" />
+					<SelectValue placeholder={definition.placeholder} />
 				</SelectTrigger>
 				<SelectContent>
-					<SelectItem value="any">Any</SelectItem>
-					<SelectItem value="portrait">Portrait</SelectItem>
-					<SelectItem value="landscape">Landscape</SelectItem>
+					{options.map((option) => (
+						<SelectItem key={option.value} value={option.value}>
+							{option.label}
+						</SelectItem>
+					))}
 				</SelectContent>
 			</Select>
+		);
+	}
+
+	if (definition.type === "boolean") {
+		return (
+			<input
+				id={key}
+				name={key}
+				type="checkbox"
+				checked={value === true || value === "true"}
+				onChange={(event) => onChange(key, event.target.checked)}
+				className="h-4 w-4 rounded border border-input accent-primary"
+			/>
 		);
 	}
 
@@ -188,13 +222,14 @@ export function ScreenParamsForm({
 	initialValues,
 	updateAction,
 }: Props) {
+	const router = useRouter();
 	const [formStatus, setFormStatus] = useState<FormStatus>("idle");
 	const [statusMessage, setStatusMessage] = useState<string>("");
 	const [isPending, startTransition] = useTransition();
 	const [values, setValues] = useState<Record<string, unknown>>(() =>
 		buildInitialState(paramsSchema, initialValues),
 	);
-	const [initial] = useState(() =>
+	const [initial, setInitial] = useState(() =>
 		buildInitialState(paramsSchema, initialValues),
 	);
 
@@ -224,6 +259,11 @@ export function ScreenParamsForm({
 				result,
 				setFormStatus,
 				setStatusMessage,
+				onSuccess: () => {
+					setInitial(values);
+					router.refresh();
+					window.dispatchEvent(new CustomEvent(SCREEN_PARAMS_SAVED_EVENT));
+				},
 			});
 		});
 	};

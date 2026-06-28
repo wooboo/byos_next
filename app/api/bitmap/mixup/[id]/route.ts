@@ -37,8 +37,17 @@ export async function GET(
 		const { searchParams } = new URL(req.url);
 		const accessToken =
 			searchParams.get("access_token") ?? req.headers.get("Access-Token");
-		const { width, height, grayscale, palette, ditherPalette } =
-			parseBitmapOptions(req);
+		const {
+			width,
+			height,
+			grayscale,
+			palette,
+			ditherPalette,
+			ditherAnchorPalette,
+			ditheringMethod,
+			bayerPatternSize,
+			colorSaturation,
+		} = parseBitmapOptions(req);
 
 		const { ready } = await checkDbConnection();
 		if (!ready) {
@@ -82,6 +91,10 @@ export async function GET(
 			grayscale,
 			palette,
 			ditherPalette,
+			ditherAnchorPalette,
+			ditheringMethod,
+			bayerPatternSize,
+			colorSaturation,
 			userIdOrResponse,
 		);
 
@@ -263,6 +276,10 @@ async function renderMixupComposite(
 	grayscaleLevels: number,
 	palette: RgbPalette | undefined,
 	ditherPalette: RgbPalette | undefined,
+	ditherAnchorPalette: RgbPalette | undefined,
+	ditheringMethod: DitheringMethod | undefined,
+	bayerPatternSize: 2 | 4 | 8 | undefined,
+	colorSaturation: number | undefined,
 	userId: string,
 ): Promise<Buffer> {
 	// Render all slots in parallel
@@ -315,12 +332,15 @@ async function renderMixupComposite(
 
 	// Convert to BMP with dithering
 	const bmpBuffer = await renderBmp(compositedPng, {
-		ditheringMethod: DitheringMethod.ATKINSON,
+		ditheringMethod: ditheringMethod ?? DitheringMethod.ATKINSON,
 		width,
 		height,
 		grayscale: grayscaleLevels,
+		...(bayerPatternSize && { bayerPatternSize }),
 		...(palette && { palette }),
 		...(ditherPalette && { ditherPalette }),
+		...(ditherAnchorPalette && { ditherAnchorPalette }),
+		...(colorSaturation !== undefined ? { colorSaturation } : {}),
 	});
 
 	return bmpBuffer;

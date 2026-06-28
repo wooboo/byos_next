@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
+import { DitheringMethod } from "@/utils/render-bmp";
 import { parseBitmapOptions } from "./render-utils";
 
 function requestFor(url: string) {
@@ -28,14 +29,32 @@ describe("bitmap render utils", () => {
 			[67, 138, 28],
 		]);
 		assert.deepEqual(deviceOptions.ditherPalette, [
-			[70, 66, 95],
-			[178, 193, 184],
-			[175, 153, 0],
-			[97, 65, 72],
-			[19, 80, 155],
-			[36, 109, 40],
+			[87, 77, 80],
+			[187, 189, 177],
+			[178, 156, 55],
+			[74, 35, 36],
+			[38, 76, 137],
+			[60, 102, 49],
 		]);
+		assert.deepEqual(deviceOptions.ditherAnchorPalette, deviceOptions.palette);
 		assert.deepEqual(previewOptions.palette, deviceOptions.ditherPalette);
 		assert.deepEqual(previewOptions.ditherPalette, deviceOptions.ditherPalette);
+		assert.deepEqual(previewOptions.ditherAnchorPalette, deviceOptions.palette);
+	});
+
+	it("parses bitmap dithering controls from query params", () => {
+		const options = parseBitmapOptions(
+			requestFor(
+				"https://example.test/api/bitmap/test.bmp?dithering=bayer&bayer=8&saturation=1.35",
+			),
+		);
+		const aliasOptions = parseBitmapOptions(
+			requestFor("https://example.test/api/bitmap/test.bmp?dithering=fs"),
+		);
+
+		assert.equal(options.ditheringMethod, DitheringMethod.BAYER);
+		assert.equal(options.bayerPatternSize, 8);
+		assert.equal(options.colorSaturation, 1.35);
+		assert.equal(aliasOptions.ditheringMethod, DitheringMethod.FLOYD_STEINBERG);
 	});
 });

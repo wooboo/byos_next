@@ -192,6 +192,82 @@
 		"version": "0.1.0",
 		"category": "display-components"
 	},
+	"color-calibration": {
+		"title": "Kalibracja — Kolory",
+		"published": true,
+		"createdAt": "2026-06-25T00:00:00Z",
+		"updatedAt": "2026-06-25T00:00:00Z",
+		"description": "Plansze do kalibracji natywnej 6-kolorowej palety PaperColor, highlightów, gradientów i mieszanek ditheringu.",
+		"componentPath": "./screens/color-calibration",
+		"hasDataFetch": false,
+		"props": {},
+		"params": {
+			"pattern": {
+				"type": "string",
+				"label": "Pattern",
+				"description": "Calibration pattern: overview, palette, highlights, gradients, or mixes.",
+				"default": "overview",
+				"placeholder": "overview",
+				"options": [
+					{ "label": "Overview", "value": "overview" },
+					{ "label": "Native palette", "value": "palette" },
+					{ "label": "Highlights", "value": "highlights" },
+					{ "label": "Gradients", "value": "gradients" },
+					{ "label": "Mixes", "value": "mixes" }
+				]
+			},
+			"showLabels": {
+				"type": "boolean",
+				"label": "Show labels",
+				"description": "Show color names, indices, and source hex values.",
+				"default": true
+			},
+			"ditheringMethod": {
+				"type": "string",
+				"label": "Dithering",
+				"description": "Bitmap dithering method used when rendering this recipe.",
+				"default": "bayer",
+				"options": [
+					{ "label": "Bayer", "value": "bayer" },
+					{ "label": "Atkinson", "value": "atkinson" },
+					{ "label": "Floyd-Steinberg", "value": "floyd-steinberg" },
+					{ "label": "Jarvis-Judice-Ninke", "value": "jarvis-judice-ninke" },
+					{ "label": "None", "value": "none" }
+				]
+			},
+			"bayerPatternSize": {
+				"type": "string",
+				"label": "Bayer size",
+				"description": "Ordered dithering matrix size used when Dithering is Bayer.",
+				"default": "8",
+				"options": [
+					{ "label": "2 x 2", "value": "2" },
+					{ "label": "4 x 4", "value": "4" },
+					{ "label": "8 x 8", "value": "8" }
+				]
+			},
+			"colorSaturation": {
+				"type": "number",
+				"label": "Color saturation",
+				"description": "Chroma multiplier applied before mapping to the fixed color palette.",
+				"default": 1.35,
+				"placeholder": "1.35"
+			}
+		},
+		"tags": ["calibration", "color", "papercolor", "utility"],
+		"author": {
+			"name": "wooboo",
+			"github": ""
+		},
+		"renderSettings": {
+			"applyEdgeSnap": false,
+			"ditheringMethod": "bayer",
+			"bayerPatternSize": 8,
+			"colorSaturation": 1.35
+		},
+		"version": "0.1.0",
+		"category": "display-components"
+	},
 	"calendar-monthly": {
 		"title": "Kalendarz — Miesiąc",
 		"published": true,
@@ -294,7 +370,19 @@
 				"label": "Orientation filter",
 				"description": "Limit random favorites by orientation: any, portrait, or landscape.",
 				"default": "any",
-				"placeholder": "any"
+				"placeholder": "any",
+				"options": [
+					{ "label": "Any", "value": "any" },
+					{ "label": "Portrait", "value": "portrait" },
+					{ "label": "Landscape", "value": "landscape" }
+				]
+			},
+			"rotationSeconds": {
+				"type": "number",
+				"label": "Photo rotation",
+				"description": "Seconds before selecting another random favorite photo.",
+				"default": 900,
+				"placeholder": "900"
 			},
 			"serverUrl": {
 				"type": "string",
@@ -308,6 +396,37 @@
 				"label": "Immich API Key",
 				"description": "API key used to fetch favorite photos.",
 				"placeholder": "Immich API key"
+			},
+			"ditheringMethod": {
+				"type": "string",
+				"label": "Dithering",
+				"description": "Bitmap dithering method used when rendering this recipe.",
+				"default": "atkinson",
+				"options": [
+					{ "label": "Atkinson", "value": "atkinson" },
+					{ "label": "Bayer", "value": "bayer" },
+					{ "label": "Floyd-Steinberg", "value": "floyd-steinberg" },
+					{ "label": "Jarvis-Judice-Ninke", "value": "jarvis-judice-ninke" },
+					{ "label": "None", "value": "none" }
+				]
+			},
+			"bayerPatternSize": {
+				"type": "string",
+				"label": "Bayer size",
+				"description": "Ordered dithering matrix size used when Dithering is Bayer.",
+				"default": "8",
+				"options": [
+					{ "label": "2 x 2", "value": "2" },
+					{ "label": "4 x 4", "value": "4" },
+					{ "label": "8 x 8", "value": "8" }
+				]
+			},
+			"colorSaturation": {
+				"type": "number",
+				"label": "Color saturation",
+				"description": "Chroma multiplier applied before mapping to the fixed color palette.",
+				"default": 1.35,
+				"placeholder": "1.35"
 			}
 		},
 		"tags": ["photos", "immich", "api", "configurable"],

@@ -61,14 +61,6 @@ export const NAMED_COLOR_PALETTE_PROFILES: Record<string, ColorPaletteProfile> =
 			}),
 	);
 
-export const NAMED_COLOR_PALETTES: Record<string, RgbPalette> =
-	Object.fromEntries(
-		Object.entries(NAMED_COLOR_PALETTE_PROFILES).map(([id, profile]) => [
-			id,
-			profile.colors,
-		]),
-	);
-
 export function resolveColorPaletteProfile(
 	value?: string | null,
 ): ColorPaletteProfile | undefined {

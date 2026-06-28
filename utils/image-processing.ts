@@ -18,22 +18,71 @@ export const quantize = (grayscale: Uint8Array, levels = 2): Uint8Array => {
 
 export type RgbColor = readonly [red: number, green: number, blue: number];
 export type RgbPalette = readonly RgbColor[];
+type LinearRgbColor = readonly [red: number, green: number, blue: number];
+type OklabColor = readonly [
+	lightness: number,
+	greenRed: number,
+	blueYellow: number,
+];
+
+type PaletteColorProfile = {
+	linear: LinearRgbColor;
+	oklab: OklabColor;
+};
+
+type PaletteMatchProfile = {
+	nominal: PaletteColorProfile[];
+	display: PaletteColorProfile[];
+	usesDisplayCalibration: boolean;
+};
+
+const DISPLAY_PALETTE_DISTANCE_WEIGHT = 0.8;
+const NOMINAL_PALETTE_DISTANCE_WEIGHT = 0.2;
+const OKLAB_CHROMA_DISTANCE_WEIGHT = 2;
+const NOMINAL_COLOR_SNAP_TOLERANCE = 2;
+const HIGHLIGHT_LUMINANCE_THRESHOLD = 218;
+const HIGHLIGHT_NEUTRAL_CHROMA_LIMIT = 42;
+const HIGHLIGHT_WHITE_MIN_LUMINANCE = 245;
+const HIGHLIGHT_WHITE_MAX_CHROMA = 8;
 
 const clampByte = (value: number): number =>
 	Math.min(255, Math.max(0, Math.round(value)));
 
-const colorDistance = (first: RgbColor, second: RgbColor): number => {
-	const redMean = (first[0] + second[0]) / 2;
-	const redDelta = first[0] - second[0];
-	const greenDelta = first[1] - second[1];
-	const blueDelta = first[2] - second[2];
+const clampUnit = (value: number): number => Math.min(1, Math.max(0, value));
 
-	return (
-		(2 + redMean / 256) * redDelta * redDelta +
-		4 * greenDelta * greenDelta +
-		(2 + (255 - redMean) / 256) * blueDelta * blueDelta
-	);
+const srgbChannelToLinear = (channel: number): number => {
+	const value = clampByte(channel) / 255;
+	return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
 };
+
+const rgbToLinear = (color: RgbColor): LinearRgbColor => [
+	srgbChannelToLinear(color[0]),
+	srgbChannelToLinear(color[1]),
+	srgbChannelToLinear(color[2]),
+];
+
+const linearRgbToOklab = (color: LinearRgbColor): OklabColor => {
+	const red = clampUnit(color[0]);
+	const green = clampUnit(color[1]);
+	const blue = clampUnit(color[2]);
+
+	const l = 0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue;
+	const m = 0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue;
+	const s = 0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue;
+
+	const lRoot = Math.cbrt(l);
+	const mRoot = Math.cbrt(m);
+	const sRoot = Math.cbrt(s);
+
+	return [
+		0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot,
+		1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot,
+		0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot,
+	];
+};
+
+const rgbToOklab = (color: RgbColor): OklabColor =>
+	linearRgbToOklab(rgbToLinear(color));
 
 const bufferColorAt = (buffer: ArrayLike<number>, offset: number): RgbColor => [
 	clampByte(buffer[offset] ?? 0),
@@ -41,19 +90,176 @@ const bufferColorAt = (buffer: ArrayLike<number>, offset: number): RgbColor => [
 	clampByte(buffer[offset + 2] ?? 0),
 ];
 
-export const findNearestPaletteColorIndex = (
+const rgbLuminance = (color: RgbColor): number =>
+	0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2];
+
+const rgbChroma = (color: RgbColor): number =>
+	Math.max(...color) - Math.min(...color);
+
+const adjustColorSaturation = (
 	color: RgbColor,
+	colorSaturation = 1,
+): RgbColor => {
+	if (colorSaturation === 1) return color;
+
+	const luminance = rgbLuminance(color);
+	const safeSaturation = Math.max(0, colorSaturation);
+	return [
+		clampByte(luminance + (color[0] - luminance) * safeSaturation),
+		clampByte(luminance + (color[1] - luminance) * safeSaturation),
+		clampByte(luminance + (color[2] - luminance) * safeSaturation),
+	];
+};
+
+const linearBufferColorAt = (
+	buffer: ArrayLike<number>,
+	offset: number,
+): LinearRgbColor => [
+	clampUnit(buffer[offset] ?? 0),
+	clampUnit(buffer[offset + 1] ?? 0),
+	clampUnit(buffer[offset + 2] ?? 0),
+];
+
+const findHighlightPaletteColor = (
 	palette: RgbPalette,
-): number => {
-	if (palette.length === 0) {
-		throw new Error("palette must include at least one color");
+): RgbColor | undefined => {
+	let highlightColor: RgbColor | undefined;
+	let highlightLuminance = Number.NEGATIVE_INFINITY;
+
+	for (const color of palette) {
+		const luminance = rgbLuminance(color);
+		if (
+			luminance >= HIGHLIGHT_WHITE_MIN_LUMINANCE &&
+			rgbChroma(color) <= HIGHLIGHT_WHITE_MAX_CHROMA &&
+			luminance > highlightLuminance
+		) {
+			highlightColor = color;
+			highlightLuminance = luminance;
+		}
 	}
 
+	return highlightColor;
+};
+
+const prepareColorDitheringSourcePixel = (
+	color: RgbColor,
+	palette: RgbPalette,
+	displayPalette?: RgbPalette,
+	colorSaturation = 1,
+): RgbColor => {
+	if (
+		findNearDevicePaletteColorIndex(color, palette, displayPalette) !==
+		undefined
+	) {
+		return color;
+	}
+
+	if (displayPalette) {
+		const highlightColor = findHighlightPaletteColor(palette);
+		if (
+			highlightColor &&
+			rgbLuminance(color) >= HIGHLIGHT_LUMINANCE_THRESHOLD &&
+			rgbChroma(color) <= HIGHLIGHT_NEUTRAL_CHROMA_LIMIT
+		) {
+			return highlightColor;
+		}
+	}
+
+	return adjustColorSaturation(color, colorSaturation);
+};
+
+const copyRgbToLinearBuffer = (
+	rgb: Uint8Array,
+	palette?: RgbPalette,
+	displayPalette?: RgbPalette,
+	colorSaturation = 1,
+): Float32Array => {
+	const buffer = new Float32Array(rgb.length);
+	for (let offset = 0; offset < rgb.length; offset += 3) {
+		const color = palette
+			? prepareColorDitheringSourcePixel(
+					bufferColorAt(rgb, offset),
+					palette,
+					displayPalette,
+					colorSaturation,
+				)
+			: adjustColorSaturation(bufferColorAt(rgb, offset), colorSaturation);
+		buffer[offset] = srgbChannelToLinear(color[0]);
+		buffer[offset + 1] = srgbChannelToLinear(color[1]);
+		buffer[offset + 2] = srgbChannelToLinear(color[2]);
+	}
+	return buffer;
+};
+
+const createPaletteColorProfiles = (
+	palette: RgbPalette,
+): PaletteColorProfile[] =>
+	palette.map((color) => {
+		const linear = rgbToLinear(color);
+		return {
+			linear,
+			oklab: linearRgbToOklab(linear),
+		};
+	});
+
+const createPaletteMatchProfile = (
+	palette: RgbPalette,
+	displayPalette?: RgbPalette,
+): PaletteMatchProfile => {
+	if (displayPalette && displayPalette.length !== palette.length) {
+		throw new Error("displayPalette must match palette size");
+	}
+
+	return {
+		nominal: createPaletteColorProfiles(palette),
+		display: createPaletteColorProfiles(displayPalette ?? palette),
+		usesDisplayCalibration:
+			displayPalette !== undefined && displayPalette !== palette,
+	};
+};
+
+const oklabDistance = (first: OklabColor, second: OklabColor): number => {
+	const lightnessDelta = first[0] - second[0];
+	const greenRedDelta = first[1] - second[1];
+	const blueYellowDelta = first[2] - second[2];
+
+	return (
+		lightnessDelta * lightnessDelta +
+		OKLAB_CHROMA_DISTANCE_WEIGHT *
+			(greenRedDelta * greenRedDelta + blueYellowDelta * blueYellowDelta)
+	);
+};
+
+const calibratedPaletteDistance = (
+	color: OklabColor,
+	paletteIndex: number,
+	profile: PaletteMatchProfile,
+): number => {
+	const displayDistance = oklabDistance(
+		color,
+		profile.display[paletteIndex].oklab,
+	);
+	if (!profile.usesDisplayCalibration) return displayDistance;
+
+	const nominalDistance = oklabDistance(
+		color,
+		profile.nominal[paletteIndex].oklab,
+	);
+	return (
+		DISPLAY_PALETTE_DISTANCE_WEIGHT * displayDistance +
+		NOMINAL_PALETTE_DISTANCE_WEIGHT * nominalDistance
+	);
+};
+
+const findNearestPaletteColorIndexForProfile = (
+	color: OklabColor,
+	profile: PaletteMatchProfile,
+): number => {
 	let nearestIndex = 0;
 	let nearestDistance = Number.POSITIVE_INFINITY;
 
-	for (let index = 0; index < palette.length; index++) {
-		const distance = colorDistance(color, palette[index]);
+	for (let index = 0; index < profile.display.length; index++) {
+		const distance = calibratedPaletteDistance(color, index, profile);
 		if (distance < nearestDistance) {
 			nearestDistance = distance;
 			nearestIndex = index;
@@ -63,15 +269,85 @@ export const findNearestPaletteColorIndex = (
 	return nearestIndex;
 };
 
+const findNearPaletteColorIndex = (
+	color: RgbColor,
+	palette: RgbPalette,
+): number | undefined => {
+	for (let index = 0; index < palette.length; index++) {
+		const paletteColor = palette[index];
+		if (
+			Math.abs(color[0] - paletteColor[0]) <= NOMINAL_COLOR_SNAP_TOLERANCE &&
+			Math.abs(color[1] - paletteColor[1]) <= NOMINAL_COLOR_SNAP_TOLERANCE &&
+			Math.abs(color[2] - paletteColor[2]) <= NOMINAL_COLOR_SNAP_TOLERANCE
+		) {
+			return index;
+		}
+	}
+
+	return undefined;
+};
+
+const findNearDevicePaletteColorIndex = (
+	color: RgbColor,
+	palette: RgbPalette,
+	displayPalette?: RgbPalette,
+): number | undefined =>
+	findNearPaletteColorIndex(color, palette) ??
+	(displayPalette
+		? findNearPaletteColorIndex(color, displayPalette)
+		: undefined);
+
+export const findNearestPaletteColorIndex = (
+	color: RgbColor,
+	palette: RgbPalette,
+	displayPalette?: RgbPalette,
+): number => {
+	if (palette.length === 0) {
+		throw new Error("palette must include at least one color");
+	}
+
+	const snappedPaletteIndex = findNearDevicePaletteColorIndex(
+		color,
+		palette,
+		displayPalette,
+	);
+	if (snappedPaletteIndex !== undefined) return snappedPaletteIndex;
+
+	return findNearestPaletteColorIndexForProfile(
+		rgbToOklab(color),
+		createPaletteMatchProfile(palette, displayPalette),
+	);
+};
+
 export const quantizeRgbToPaletteIndices = (
 	rgb: Uint8Array,
 	palette: RgbPalette,
+	displayPalette?: RgbPalette,
+	colorSaturation = 1,
 ): Uint8Array => {
+	const profile = createPaletteMatchProfile(palette, displayPalette);
 	const result = new Uint8Array(rgb.length / 3);
 	for (let pixel = 0; pixel < result.length; pixel++) {
-		result[pixel] = findNearestPaletteColorIndex(
-			bufferColorAt(rgb, pixel * 3),
+		const sourcePixel = bufferColorAt(rgb, pixel * 3);
+		const snappedPaletteIndex = findNearDevicePaletteColorIndex(
+			sourcePixel,
 			palette,
+			displayPalette,
+		);
+		if (snappedPaletteIndex !== undefined) {
+			result[pixel] = snappedPaletteIndex;
+			continue;
+		}
+
+		const preparedSourcePixel = prepareColorDitheringSourcePixel(
+			sourcePixel,
+			palette,
+			displayPalette,
+			colorSaturation,
+		);
+		result[pixel] = findNearestPaletteColorIndexForProfile(
+			rgbToOklab(preparedSourcePixel),
+			profile,
 		);
 	}
 	return result;
@@ -206,19 +482,40 @@ const ditherColorErrorDiffusion = (
 	width: number,
 	height: number,
 	palette: RgbPalette,
+	displayPalette: RgbPalette | undefined,
+	colorSaturation: number | undefined,
 	kernel: readonly ErrorDiffusionOffset[],
 	divisor: number,
 ): Uint8Array => {
 	const result = new Uint8Array(width * height);
-	const buffer = copyToFloatBuffer(rgb);
+	const buffer = copyRgbToLinearBuffer(
+		rgb,
+		palette,
+		displayPalette,
+		colorSaturation,
+	);
+	const profile = createPaletteMatchProfile(palette, displayPalette);
 
 	for (let y = 0; y < height; y++) {
 		for (let x = 0; x < width; x++) {
 			const pixel = y * width + x;
 			const offset = pixel * 3;
-			const oldPixel = bufferColorAt(buffer, offset);
-			const paletteIndex = findNearestPaletteColorIndex(oldPixel, palette);
-			const newPixel = palette[paletteIndex];
+			const snappedPaletteIndex = findNearDevicePaletteColorIndex(
+				bufferColorAt(rgb, offset),
+				palette,
+				displayPalette,
+			);
+			if (snappedPaletteIndex !== undefined) {
+				result[pixel] = snappedPaletteIndex;
+				continue;
+			}
+
+			const oldPixel = linearBufferColorAt(buffer, offset);
+			const paletteIndex = findNearestPaletteColorIndexForProfile(
+				linearRgbToOklab(oldPixel),
+				profile,
+			);
+			const newPixel = profile.nominal[paletteIndex].linear;
 			result[pixel] = paletteIndex;
 			spreadColorError(
 				buffer,
@@ -372,9 +669,12 @@ const ditherRgbBayer = (
 	width: number,
 	height: number,
 	palette: RgbPalette,
+	displayPalette?: RgbPalette,
+	colorSaturation?: number,
 	patternSize = 8,
 ): Uint8Array => {
 	const result = new Uint8Array(width * height);
+	const profile = createPaletteMatchProfile(palette, displayPalette);
 	const matrixSize = resolveBayerMatrixSize(patternSize);
 	const matrix = BAYER_MATRICES[matrixSize];
 	const matrixLength = matrix.length;
@@ -386,13 +686,19 @@ const ditherRgbBayer = (
 			const offset = pixel * 3;
 			const threshold =
 				normalizedMatrix[y % matrixLength][x % matrixLength] - 128;
-			result[pixel] = findNearestPaletteColorIndex(
-				[
-					clampByte(rgb[offset] + threshold),
-					clampByte(rgb[offset + 1] + threshold),
-					clampByte(rgb[offset + 2] + threshold),
-				],
+			const sourcePixel = prepareColorDitheringSourcePixel(
+				bufferColorAt(rgb, offset),
 				palette,
+				displayPalette,
+				colorSaturation,
+			);
+			result[pixel] = findNearestPaletteColorIndexForProfile(
+				rgbToOklab([
+					clampByte(sourcePixel[0] + threshold),
+					clampByte(sourcePixel[1] + threshold),
+					clampByte(sourcePixel[2] + threshold),
+				]),
+				profile,
 			);
 		}
 	}
@@ -400,18 +706,30 @@ const ditherRgbBayer = (
 	return result;
 };
 
-const ditherRgbRandom = (rgb: Uint8Array, palette: RgbPalette): Uint8Array => {
+const ditherRgbRandom = (
+	rgb: Uint8Array,
+	palette: RgbPalette,
+	displayPalette?: RgbPalette,
+	colorSaturation?: number,
+): Uint8Array => {
 	const result = new Uint8Array(rgb.length / 3);
+	const profile = createPaletteMatchProfile(palette, displayPalette);
 
 	for (let pixel = 0; pixel < result.length; pixel++) {
 		const offset = pixel * 3;
-		result[pixel] = findNearestPaletteColorIndex(
-			[
-				clampByte(rgb[offset] + (Math.random() * 255 - 128)),
-				clampByte(rgb[offset + 1] + (Math.random() * 255 - 128)),
-				clampByte(rgb[offset + 2] + (Math.random() * 255 - 128)),
-			],
+		const sourcePixel = prepareColorDitheringSourcePixel(
+			bufferColorAt(rgb, offset),
 			palette,
+			displayPalette,
+			colorSaturation,
+		);
+		result[pixel] = findNearestPaletteColorIndexForProfile(
+			rgbToOklab([
+				clampByte(sourcePixel[0] + (Math.random() * 255 - 128)),
+				clampByte(sourcePixel[1] + (Math.random() * 255 - 128)),
+				clampByte(sourcePixel[2] + (Math.random() * 255 - 128)),
+			]),
+			profile,
 		);
 	}
 
@@ -434,9 +752,16 @@ const applyColorEdgeSnap = (
 	dithered: Uint8Array,
 	edges: Uint8Array,
 	palette: RgbPalette,
+	displayPalette?: RgbPalette,
+	colorSaturation?: number,
 ): Uint8Array => {
 	const result = new Uint8Array(dithered);
-	const quantized = quantizeRgbToPaletteIndices(rgb, palette);
+	const quantized = quantizeRgbToPaletteIndices(
+		rgb,
+		palette,
+		displayPalette,
+		colorSaturation,
+	);
 	for (let i = 0; i < result.length; i++) {
 		if (edges[i]) result[i] = quantized[i];
 	}
@@ -610,6 +935,8 @@ const DITHERING_STRATEGIES: Record<DitheringMethod, DitheringStrategy> = {
 export interface ColorDitheringOptions
 	extends Omit<DitheringOptions, "levels" | "threshold"> {
 	palette: RgbPalette;
+	displayPalette?: RgbPalette;
+	colorSaturation?: number;
 }
 
 const COLOR_DITHERING_STRATEGIES: Record<
@@ -624,6 +951,8 @@ const COLOR_DITHERING_STRATEGIES: Record<
 			dimensions.width,
 			dimensions.height,
 			options.palette,
+			options.displayPalette,
+			options.colorSaturation,
 			FLOYD_STEINBERG_KERNEL,
 			16,
 		),
@@ -633,6 +962,8 @@ const COLOR_DITHERING_STRATEGIES: Record<
 			dimensions.width,
 			dimensions.height,
 			options.palette,
+			options.displayPalette,
+			options.colorSaturation,
 			ATKINSON_KERNEL,
 			8,
 		),
@@ -642,21 +973,35 @@ const COLOR_DITHERING_STRATEGIES: Record<
 			dimensions.width,
 			dimensions.height,
 			options.palette,
+			options.displayPalette,
+			options.colorSaturation,
 			options.bayerPatternSize,
 		),
 	[DitheringMethod.RANDOM]: (rgb, options) =>
-		ditherRgbRandom(rgb, options.palette),
+		ditherRgbRandom(
+			rgb,
+			options.palette,
+			options.displayPalette,
+			options.colorSaturation,
+		),
 	[DitheringMethod.JARVIS_JUDICE_NINKE]: (rgb, options, dimensions) =>
 		ditherColorErrorDiffusion(
 			rgb,
 			dimensions.width,
 			dimensions.height,
 			options.palette,
+			options.displayPalette,
+			options.colorSaturation,
 			JARVIS_JUDICE_NINKE_KERNEL,
 			48,
 		),
 	[DitheringMethod.NONE]: (rgb, options) =>
-		quantizeRgbToPaletteIndices(rgb, options.palette),
+		quantizeRgbToPaletteIndices(
+			rgb,
+			options.palette,
+			options.displayPalette,
+			options.colorSaturation,
+		),
 };
 
 const assertValidBayerPatternSize = (bayerPatternSize?: number) => {
@@ -733,7 +1078,14 @@ export function applyColorPaletteDithering(
 			dimensions.height,
 			options.edgeDetectionFuzziness,
 		);
-		return applyColorEdgeSnap(rgb, result, edges, options.palette);
+		return applyColorEdgeSnap(
+			rgb,
+			result,
+			edges,
+			options.palette,
+			options.displayPalette,
+			options.colorSaturation,
+		);
 	}
 
 	return result;

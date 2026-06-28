@@ -16,7 +16,10 @@ export interface RenderBmpOptions {
 	grayscale?: number; // 2, 4, 16 gray levels, or 256 indexed colors
 	palette?: RgbPalette;
 	ditherPalette?: RgbPalette;
+	ditherAnchorPalette?: RgbPalette;
 	applyEdgeSnap?: boolean;
+	bayerPatternSize?: 2 | 4 | 8;
+	colorSaturation?: number;
 }
 
 const createGrayscalePaletteEntries = (grayscale: number): number[] => {
@@ -263,7 +266,10 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 		grayscale = 2,
 		palette,
 		ditherPalette,
+		ditherAnchorPalette,
 		applyEdgeSnap = true,
+		bayerPatternSize,
+		colorSaturation,
 	} = options;
 
 	// Validate grayscale levels / color modes
@@ -296,12 +302,22 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 	const colorDitherPalette = isColorPalette
 		? (ditherPalette ?? palette)
 		: undefined;
+	const colorAnchorPalette = isColorPalette
+		? (ditherAnchorPalette ?? palette)
+		: undefined;
 	if (
 		isColorPalette &&
 		colorDitherPalette &&
 		colorDitherPalette.length !== palette.length
 	) {
 		throw new Error("ditherPalette must match palette size");
+	}
+	if (
+		isColorPalette &&
+		colorAnchorPalette &&
+		colorAnchorPalette.length !== palette.length
+	) {
+		throw new Error("ditherAnchorPalette must match palette size");
 	}
 
 	if (!isColorPalette && grayscale === 256) {
@@ -361,14 +377,18 @@ export async function renderBmp(png: Buffer, options: RenderBmpOptions = {}) {
 		? applyColorPaletteDithering(ditheringMethod, pixelData, {
 				width: targetWidth,
 				height: targetHeight,
-				palette: colorDitherPalette ?? palette,
+				palette: colorAnchorPalette ?? palette,
+				displayPalette: colorDitherPalette,
 				applyEdgeSnap,
+				bayerPatternSize,
+				colorSaturation,
 			})
 		: applyDithering(ditheringMethod, pixelData, {
 				width: targetWidth,
 				height: targetHeight,
 				levels: grayscale,
 				applyEdgeSnap,
+				bayerPatternSize,
 			});
 
 	const numColors = isColorPalette ? palette.length : grayscale;

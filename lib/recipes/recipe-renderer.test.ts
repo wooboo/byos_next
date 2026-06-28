@@ -132,7 +132,15 @@ async function loadModule(options?: {
 	}));
 	vi.doMock("@/lib/recipes/logger", () => ({ logger }));
 	vi.doMock("@/utils/render-bmp", () => ({
-		DitheringMethod: { JARVIS_JUDICE_NINKE: "JJN" },
+		DitheringMethod: {
+			ATKINSON: "ATKINSON",
+			BAYER: "BAYER",
+			FLOYD_STEINBERG: "FLOYD_STEINBERG",
+			JARVIS_JUDICE_NINKE: "JJN",
+			NONE: "NONE",
+			RANDOM: "RANDOM",
+			THRESHOLD: "THRESHOLD",
+		},
 		renderBmp: renderBmpMock,
 	}));
 	vi.doMock("./renderers/satori", () => ({
@@ -606,6 +614,92 @@ describe("renderRecipeOutputs and renderRecipeToImage", () => {
 		expect(result).toEqual({
 			png: Buffer.from("resized-png"),
 			bitmap: Buffer.from("bitmap"),
+		});
+	});
+
+	it("passes recipe bitmap dithering settings to renderBmp", async () => {
+		const { renderRecipeOutputs, renderBmpMock } = await loadModule();
+
+		await renderRecipeOutputs({
+			slug: "color-calibration",
+			html: "<main>calibration</main>",
+			config: {
+				title: "Color calibration",
+				renderSettings: {
+					ditheringMethod: "BAYER" as never,
+					bayerPatternSize: 8,
+					colorSaturation: 1.35,
+					applyEdgeSnap: false,
+				},
+			},
+			imageWidth: 800,
+			imageHeight: 480,
+			formats: ["bitmap"],
+		});
+
+		expect(renderBmpMock).toHaveBeenCalledWith(Buffer.from("html-png"), {
+			ditheringMethod: "BAYER",
+			width: 800,
+			height: 480,
+			applyEdgeSnap: false,
+			bayerPatternSize: 8,
+			colorSaturation: 1.35,
+		});
+	});
+
+	it("uses bitmap render controls from recipe params", async () => {
+		const { renderRecipeToImage, renderBmpMock } = await loadModule({
+			recipeMetadata: {
+				metadata: JSON.stringify({
+					title: "Weather",
+					published: true,
+					hasDataFetch: false,
+					params: {
+						ditheringMethod: {
+							type: "string",
+							label: "Dithering",
+							default: "atkinson",
+						},
+						bayerPatternSize: {
+							type: "string",
+							label: "Bayer size",
+							default: "8",
+						},
+						colorSaturation: {
+							type: "number",
+							label: "Color saturation",
+							default: 1,
+						},
+					},
+					renderSettings: {
+						applyEdgeSnap: false,
+						ditheringMethod: "ATKINSON",
+						bayerPatternSize: 8,
+						colorSaturation: 1,
+					},
+				}),
+			},
+		});
+
+		await renderRecipeToImage({
+			slug: "weather",
+			imageWidth: 800,
+			imageHeight: 480,
+			formats: ["bitmap"],
+			paramsOverride: {
+				ditheringMethod: "bayer",
+				bayerPatternSize: "4",
+				colorSaturation: 1.6,
+			},
+		});
+
+		expect(renderBmpMock).toHaveBeenCalledWith(Buffer.from("takumi-png"), {
+			ditheringMethod: "BAYER",
+			width: 800,
+			height: 480,
+			applyEdgeSnap: false,
+			bayerPatternSize: 4,
+			colorSaturation: 1.6,
 		});
 	});
 
